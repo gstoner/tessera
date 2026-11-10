@@ -17016,6 +17016,42 @@ The Apple GPU normalization VJP gained an exact-device packet, and the `apple_gp
 
 `EffectLattice.infer` now scans call sites resolved by identity (`compiler/effect_scan.py`) instead of lowering the function through `_OpExtractor`. `@jit(deterministic=True)` refuses unresolved calls and host I/O at decoration, even with a `seed`. `_establish_tracer_authority` keeps an unresolved call at `top` instead of reading the AST body's effect. `copy` is registered `memory`. No target code changed. What changes for this backend is which programs reach the tracer-authored Graph IR, and so which native route they take. **sm_120 A/B on The-Super-Bear (RTX 5070), `main` edf94f1e5 against the branch at 15552599e and c57c2e8fa, shared `build-nvidia-cuda`.** `tests/unit` gave the same failing node IDs on both trees at both heads. `tests/device/nvidia`: `main` finished with 938 failed and 5563 passed. The branch's first two full passes segfaulted in a GC finalizer, `tessera_nvidia_matmul_close` on a `PreparedLhsCall` handle. `test_bounded_lhs_jit.py::test_bounded_public_owner_is_context_scoped` registers that handle and destroys its temporary CUDA context. The handle outlives `close_native_storage()` on both trees, and GC closes it later. `main` reaches that close in a test that survives it, and the branch reaches it earlier, in one that does not. That is a latent bug on `main`, exposed by GC timing. With that one test deselected on both trees, the branch has 20 node IDs that differ from `main`. 18 were `nvidia-smi` setup timeouts, caused by a concurrent device run on the box. The other 2 were `test_source_attention_reverse` parametrizations, and 3 others in the same family flipped the other way. All 20 pass on both trees when re-run alone (20 passed each). No new failure is attributable to the branch. **Follow-up (not this PR):** the leaked `PreparedLhsCall` handle and its CUDA context. (PR #1055.)
 
+## `NVIDIA-DEAD-CONTEXT-CLOSE-2026-11-08`: closes the `E2E-REAL-6F-effect-scan-2026-11-07` follow-up (sm_120, The-Super-Bear)
+
+A prepared NVIDIA owner whose CUDA context was destroyed used to segfault the process. `test_bounded_lhs_jit.py::test_bounded_public_owner_is_context_scoped` registers a `PreparedLhsCall`, then destroys its temporary context, and the handle outlived `close_native_storage()`. When GC later ran the `weakref.finalize`, `tessera_nvidia_matmul_close` pushed the dead context. On `main` that reproduces as a segfault at 2% of a full `tests/device/nvidia` pass with nothing deselected. The fix has three parts:
+
+- **Owners record the context they were built in.** `PreparedMatmulCall`, the scalar matmul owner and the resident tensor owner each record `cuCtxGetId`. Their finalizers go through `prepared_nvidia_matmul.close_in_live_context`, which closes only if that identity is still among the live contexts.
+- **Otherwise the handle is deferred, and forgotten only at exit.** Liveness can only be proven for the current context and active primaries, so a context that is not provable may be dead, or alive but not current. Forgetting immediately would leak a live context's memory for good (review on PR #1057), so the handle is deferred with a `ResourceWarning`.
+  - `close_deferred()` closes it once its context is live again. Every later live close also runs `close_deferred()`.
+  - At interpreter exit, an atexit hook forgets whatever is still deferred, through the new native `tessera_nvidia_matmul_forget`. That releases the owner from the native registry without running `~Owner`, so the registry's static destructor no longer pushes a dead context. Before this, the branch completed every test and still exited 139 after the summary.
+- **Forked children never touch the driver.** The finalizer takes the creating PID and returns before probing contexts in a forked child (review on PR #1057).
+- **The test fixture no longer corrupts the context stack.** The two context tests restored the context with `cuCtxSetCurrent(original)`, which left `original` on the stack twice. They now pop the temporary context (`_pop_and_destroy`), which fixes `test_bounded_source_reverse_owner[different-False-*]` failing only after them. `test_owner_of_destroyed_context_is_forgotten_not_closed` forces `gc.collect()`, asserts the handle is deferred and not closed, then runs the exit settle and asserts no native owner is left. `test_owner_of_live_noncurrent_context_is_deferred_then_closed` asserts a live non-current context's owner is closed natively once that context is current again. `tests/unit/test_prepared_nvidia_context_close.py` covers the fork guard and the deferral states with the driver faked.
+
+**Paired A/B on the RTX 5070.** Run on The-Super-Bear (driver 610.88, CUDA 13.4), with `main` at edf94f1e5 and the branch on separate worktrees. Each tree used its own `libtessera_nvidia_ptx_launch.so`, built from that tree with the `build-nvidia-cuda` compile line.
+
+| Tree | Deselected | Tests run | Failed / errors | Exit |
+|---|---|---|---|---|
+| `main` | none | — | segfault in a GC weakref finalizer at 2% | segfault |
+| `main` | context test | 6559 | 945 / 21 | 1 |
+| branch | none | 6561 | 938 / 18 | 1 |
+
+- **Branch run:** both context tests pass and 33 handles were forgotten. The exit was 1, not 139.
+- **Failing-ID diff:** 18 node IDs fail only on the branch and 28 only on `main`. All 46 pass when re-run alone, on each tree with its own library (46 passed each).
+- **Conclusion:** no new failure is attributable to this change.
+- **After the review fix (deferral and fork guard):** only the context-test files were re-run, not the full device suite. `test_bounded_lhs_jit.py`, `test_bounded_source_reverse_owner.py` and the new unit test show 24 failed, the same 24 node IDs as `main`. All three context tests pass, and the run exits 0.
+- **Deploying:** rebuild `build-nvidia-cuda`, because a launch library without `tessera_nvidia_matmul_forget` keeps the Python half of the fix but leaks the registry entry. The new test asserts the symbol is present.
+
+The evidence is the RTX 5070 only. **Sibling backends:** not applicable, since the change is in the NVIDIA prepared-owner runtime and its Python owners. The ROCm prepared owners have no destroyed-context path exercised by a test.
+
+**Follow-ups (not this change):**
+
+- `PreparedNativeTensorFrame` keys are not context-scoped.
+- Its `__del__` raises `TypeError` at interpreter shutdown (`_quarantine` is `None`) on both trees.
+- Native `~Owner` should not push a context it cannot prove is live.
+- On `main`, `test_public_program_and_native_owner_eviction_retire_together` fails with "shape frame requires checked capacity".
+
+Evidence: tests/device/nvidia/test_bounded_lhs_jit.py.
+
 ## `E2E-REAL-6F-executed-plan-2026-11-08`: sibling outcome — not applicable
 
 When a `@jit` call establishes tracer authority, the CPU plan, the tessera_jit lane and the Apple CPU/GPU fast paths now execute the plan compiled from the traced module (`JitFn._traced_plan_for`, one compile per specialization) instead of the plan compiled at decoration from the AST module. Inputs bind positionally to the traced parameter names. Every other call restores the decoration plan, and `executed_plan_frontend` / `executed_plan_fallback_reason` record which ran. `_traced_plan_for` returns no traced plan unless the decoration plan targets `cpu`, `apple_cpu` or `apple_gpu`, so this backend's native routes and its `cpu_plan.ops` dispatch checks see the decoration plan as before. Each call now starts by restoring that plan, so a native route can no longer see a previous call's traced specialization. The Princess-Luna unit A/B (gfx1151 host) gave identical failing nodes. No device suite was re-run.

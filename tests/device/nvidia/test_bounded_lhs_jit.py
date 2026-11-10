@@ -235,32 +235,164 @@ def test_public_program_and_native_owner_eviction_retire_together():
         function.close_native_storage()
 
 
+def _cuda_driver():
+    import ctypes as ct
+    cuda=ct.CDLL("libcuda.so.1")
+    cuda.cuCtxGetCurrent.argtypes=[ct.POINTER(ct.c_void_p)]
+    cuda.cuCtxCreate_v2.argtypes=[ct.POINTER(ct.c_void_p),ct.c_uint,ct.c_int]
+    cuda.cuCtxPopCurrent_v2.argtypes=[ct.POINTER(ct.c_void_p)]
+    cuda.cuCtxDestroy_v2.argtypes=[ct.c_void_p]
+    return cuda
+
+
+def _pop_and_destroy(cuda,original,other):
+    # cuCtxCreate pushed `other`; pop it rather than replace the stack top with
+    # cuCtxSetCurrent, which leaves `original` on the stack twice and lets a
+    # later cuCtxSetCurrent(NULL) reveal it instead of unbinding the thread.
+    import ctypes as ct
+    popped,current=ct.c_void_p(),ct.c_void_p()
+    assert cuda.cuCtxPopCurrent_v2(ct.byref(popped))==0 and popped.value==other.value
+    assert cuda.cuCtxGetCurrent(ct.byref(current))==0 and current.value==original.value
+    assert cuda.cuCtxDestroy_v2(other)==0
+
+
 def test_bounded_public_owner_is_context_scoped():
     import ctypes as ct
+    import gc
+    from tessera.compiler.prepared_nvidia_matmul import current_context_identity
     function=ts.jit(target="nvidia_sm120",shape_bounds={"M":17,"N":19,"K":35})(bounded_rms._fn)
     source=np.ones((17,35),np.float16)
     rhs=np.ones((35,19),np.float16)
     function(source,rhs)
-    cuda=ct.CDLL("libcuda.so.1")
-    cuda.cuCtxGetCurrent.argtypes=[ct.POINTER(ct.c_void_p)]
-    cuda.cuCtxCreate_v2.argtypes=[ct.POINTER(ct.c_void_p),ct.c_uint,ct.c_int]
-    cuda.cuCtxSetCurrent.argtypes=[ct.c_void_p]
-    cuda.cuCtxDestroy_v2.argtypes=[ct.c_void_p]
+    cuda=_cuda_driver()
+    original,other=ct.c_void_p(),ct.c_void_p()
+    assert cuda.cuCtxGetCurrent(ct.byref(original))==0
+    original_identity=current_context_identity()
+    assert cuda.cuCtxCreate_v2(ct.byref(other),0,0)==0
+    try:
+        other_identity=current_context_identity()
+        assert other_identity!=original_identity
+        actual=function(source[:3,:11],rhs[:11,:7])
+        np.testing.assert_allclose(actual,_oracle(source[:3,:11],rhs[:11,:7],"rmsnorm"),rtol=.015,atol=.015)
+        assert len(function._bounded_lhs.programs)==1
+        # A native shape frame owns the first call since 2026-10-21, so the
+        # prepared owner created here is the only one; its key carries the
+        # context it was prepared in.
+        calls=function._nvidia_lhs_prepared_calls
+        assert {key[-1] for key in calls}=={other_identity}
+        assert all(key[-1]==call.context_identity for key,call in calls.items())
+    finally:
+        # Close while `other` is alive, even when an assertion failed: a
+        # failed test's traceback would otherwise keep these owners past the
+        # context's destruction.
+        function.close_native_storage()
+        _pop_and_destroy(cuda,original,other)
+    try:
+        actual=function(source[:1,:1],rhs[:1,:1])
+        np.testing.assert_allclose(actual,_oracle(source[:1,:1],rhs[:1,:1],"rmsnorm"),rtol=.015,atol=.015)
+        assert other_identity not in {key[-1] for key in function._nvidia_lhs_prepared_calls}
+    finally:
+        function.close_native_storage()
+    gc.collect()
+
+
+def test_owner_of_destroyed_context_is_forgotten_not_closed(monkeypatch):
+    import ctypes as ct
+    import gc
+    from tessera.compiler import prepared_nvidia_matmul as prepared
+    lib=rt._load_nvidia_ptx_launch()
+    assert hasattr(lib,"tessera_nvidia_matmul_forget"), "matching NVIDIA launch library required"
+    native_close=lib.tessera_nvidia_matmul_close
+    closed=[]
+    def recording_close(handle):
+        closed.append(handle)
+        return native_close(handle)
+    monkeypatch.setattr(lib,"tessera_nvidia_matmul_close",recording_close)
+    source=np.ones((17,35),np.float16)
+    rhs=np.ones((35,19),np.float16)
+    kept=ts.jit(target="nvidia_sm120",shape_bounds={"M":17,"N":19,"K":35})(bounded_rms._fn)
+    leaked=ts.jit(target="nvidia_sm120",shape_bounds={"M":17,"N":19,"K":35})(bounded_rms._fn)
+    kept(source,rhs)
+    leaked(source,rhs)
+    cuda=_cuda_driver()
     original,other=ct.c_void_p(),ct.c_void_p()
     assert cuda.cuCtxGetCurrent(ct.byref(original))==0
     assert cuda.cuCtxCreate_v2(ct.byref(other),0,0)==0
     try:
-        actual=function(source[:3,:11],rhs[:11,:7])
-        np.testing.assert_allclose(actual,_oracle(source[:3,:11],rhs[:11,:7],"rmsnorm"),rtol=.015,atol=.015)
-        assert len(function._bounded_lhs.programs)==1
-        assert len(function._nvidia_lhs_prepared_calls)==2
-        assert len({key[-1] for key in function._nvidia_lhs_prepared_calls})==2
-        function.close_native_storage()
+        identity=prepared.current_context_identity()
+        for function in (kept,leaked):
+            function(source[:3,:11],rhs[:11,:7])
+        kept_handles={call.handle for call in kept._nvidia_lhs_prepared_calls.values()}
+        leaked_handles={call.handle for key,call in leaked._nvidia_lhs_prepared_calls.items()
+                        if key[-1]==identity}
+        assert kept_handles and leaked_handles
+        # A live context still closes natively.
+        kept.close_native_storage()
+        assert kept_handles<=set(closed)
     finally:
-        assert cuda.cuCtxSetCurrent(original)==0
-        assert cuda.cuCtxDestroy_v2(other)==0
+        _pop_and_destroy(cuda,original,other)
+    # `leaked` outlived its context, as a failed test's traceback would keep it.
+    with pytest.warns(ResourceWarning,match="not provably live"):
+        del leaked,function
+        gc.collect()
+    assert not leaked_handles&set(closed)
+    pending={(handle,identity) for handle in leaked_handles}
+    assert pending<=set(prepared.deferred_handles())
+    # A dead context never becomes live again: a later settle keeps them.
+    prepared.close_deferred()
+    assert pending<=set(prepared.deferred_handles()) and not leaked_handles&set(closed)
+    # What interpreter exit runs: forget them, natively too, so no ~Owner
+    # pushes the dead context when the registry is destroyed.
+    prepared.close_deferred(final=True)
+    assert not pending&set(prepared.deferred_handles())
+    assert pending<=set(prepared.forgotten_handles())
+    assert all(native_close(handle)!=0 for handle in leaked_handles)
+    kept.close_native_storage()
+
+
+def test_owner_of_live_noncurrent_context_is_deferred_then_closed(monkeypatch):
+    import ctypes as ct
+    import gc
+    from tessera.compiler import prepared_nvidia_matmul as prepared
+    lib=rt._load_nvidia_ptx_launch()
+    native_close=lib.tessera_nvidia_matmul_close
+    closed=[]
+    def recording_close(handle):
+        closed.append(handle)
+        return native_close(handle)
+    monkeypatch.setattr(lib,"tessera_nvidia_matmul_close",recording_close)
+    source=np.ones((17,35),np.float16)
+    rhs=np.ones((35,19),np.float16)
+    function=ts.jit(target="nvidia_sm120",shape_bounds={"M":17,"N":19,"K":35})(bounded_rms._fn)
+    function(source,rhs)
+    cuda=_cuda_driver()
+    cuda.cuCtxPushCurrent_v2.argtypes=[ct.c_void_p]
+    original,other,popped=ct.c_void_p(),ct.c_void_p(),ct.c_void_p()
+    assert cuda.cuCtxGetCurrent(ct.byref(original))==0
+    assert cuda.cuCtxCreate_v2(ct.byref(other),0,0)==0
+    pushed=True
     try:
-        function(source[:1,:1],rhs[:1,:1])
-        assert len(function._bounded_lhs.programs)==len(function._nvidia_lhs_prepared_calls)==1
+        identity=prepared.current_context_identity()
+        function(source[:3,:11],rhs[:11,:7])
+        handles={call.handle for key,call in function._nvidia_lhs_prepared_calls.items()
+                 if key[-1]==identity}
+        assert handles
+        # `other` stays alive but is no longer current when the owner dies.
+        assert cuda.cuCtxPopCurrent_v2(ct.byref(popped))==0 and popped.value==other.value
+        pushed=False
+        with pytest.warns(ResourceWarning,match="not provably live"):
+            del function
+            gc.collect()
+        assert not handles&set(closed)
+        assert {(handle,identity) for handle in handles}<=set(prepared.deferred_handles())
+        assert cuda.cuCtxPushCurrent_v2(other)==0
+        pushed=True
+        prepared.close_deferred()
+        assert handles<=set(closed)
+        assert not {(handle,identity) for handle in handles}&set(prepared.deferred_handles())
+        assert not {(handle,identity) for handle in handles}&set(prepared.forgotten_handles())
     finally:
-        function.close_native_storage()
+        if pushed:
+            _pop_and_destroy(cuda,original,other)
+        else:
+            assert cuda.cuCtxDestroy_v2(other)==0

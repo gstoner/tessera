@@ -5,7 +5,7 @@ import ctypes as ct
 import os
 import weakref
 import numpy as np
-from .prepared_nvidia_matmul import HostView
+from .prepared_nvidia_matmul import HostView, close_in_live_context, current_context_identity
 
 
 def resident_views(values,stream,*,writable_from):
@@ -143,7 +143,13 @@ class ResidentTensorCall:
             int(provenance["b_layout"] == "row_major"),
             int(output.dtype == "fp16"), ct.byref(handle)))
         self.handle = handle.value
-        self._finalizer = weakref.finalize(self, lib.tessera_nvidia_matmul_close, self.handle)
+        try:
+            self.context_identity = current_context_identity()
+        except Exception:
+            lib.tessera_nvidia_matmul_close(self.handle)
+            raise
+        self._finalizer = weakref.finalize(self, close_in_live_context, lib, self.handle,
+                                           self.context_identity, self.pid)
         try:
             axes = int(program.dynamic_m) | (int(program.dynamic_n) << 1) | (int(program.dynamic_k) << 2)
             if axes:

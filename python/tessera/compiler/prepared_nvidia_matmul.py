@@ -1,10 +1,14 @@
 """Synchronous native ownership of verified SM120 matmul packages."""
 from __future__ import annotations
+import atexit
 import copy
 import ctypes as ct
 import os
+import threading
 import time
+import warnings
 import weakref
+from typing import Any
 import numpy as np
 
 
@@ -12,6 +16,163 @@ class HostView(ct.Structure):
     _fields_ = [("data", ct.c_void_p), ("bytes", ct.c_size_t),
                 ("dtype", ct.c_int32), ("rank", ct.c_int32),
                 ("shape", ct.c_int64 * 2), ("strides", ct.c_int64 * 2)]
+
+
+_DRIVER = None
+# (handle, context identity) of owners whose close was refused because the
+# context they were prepared in could not be proven live. Native memory in a
+# destroyed context was already released by the driver with that context.
+_forgotten_handles: list[tuple[int, int]] = []
+# handle -> (lib, context identity, pid) of owners released while their
+# context was not provably live. That context may be alive but not current, so
+# they wait for a later close in it and are forgotten only at interpreter exit.
+_deferred: dict[int, tuple[Any, int, int]] = {}
+_deferred_lock = threading.Lock()
+_exiting = False
+
+
+def _driver():
+    global _DRIVER
+    if _DRIVER is None:
+        driver = ct.CDLL("libcuda.so.1")
+        driver.cuCtxGetCurrent.argtypes = [ct.POINTER(ct.c_void_p)]
+        driver.cuCtxGetId.argtypes = [ct.c_void_p, ct.POINTER(ct.c_ulonglong)]
+        driver.cuDeviceGetCount.argtypes = [ct.POINTER(ct.c_int)]
+        driver.cuDeviceGet.argtypes = [ct.POINTER(ct.c_int), ct.c_int]
+        driver.cuDevicePrimaryCtxGetState.argtypes = [ct.c_int, ct.POINTER(ct.c_uint), ct.POINTER(ct.c_int)]
+        driver.cuDevicePrimaryCtxRetain.argtypes = [ct.POINTER(ct.c_void_p), ct.c_int]
+        driver.cuDevicePrimaryCtxRelease_v2.argtypes = [ct.c_int]
+        _DRIVER = driver
+    return _DRIVER
+
+
+def current_context_identity():
+    """Identity (cuCtxGetId) of the calling thread's current CUDA context."""
+    driver = _driver()
+    context, identity = ct.c_void_p(), ct.c_ulonglong()
+    if driver.cuCtxGetCurrent(ct.byref(context)) or not context.value:
+        raise RuntimeError("prepared NVIDIA owner has no current CUDA context")
+    if driver.cuCtxGetId(context, ct.byref(identity)):
+        raise RuntimeError("prepared NVIDIA owner cannot read its CUDA context identity")
+    return identity.value
+
+
+def _live_context_identities():
+    """Identities of contexts provably alive: the current one and active primaries.
+
+    A destroyed context's handle cannot be probed safely (the driver
+    dereferences it), so liveness is established only from handles the driver
+    hands out now. Identities are unique for the life of the process.
+    """
+    driver = _driver()
+    live = set()
+    context, identity = ct.c_void_p(), ct.c_ulonglong()
+    if (not driver.cuCtxGetCurrent(ct.byref(context)) and context.value
+            and not driver.cuCtxGetId(context, ct.byref(identity))):
+        live.add(identity.value)
+    count = ct.c_int()
+    if driver.cuDeviceGetCount(ct.byref(count)):
+        return live
+    for ordinal in range(count.value):
+        device, flags, active = ct.c_int(), ct.c_uint(), ct.c_int()
+        if (driver.cuDeviceGet(ct.byref(device), ordinal)
+                or driver.cuDevicePrimaryCtxGetState(device, ct.byref(flags), ct.byref(active))
+                or not active.value):
+            continue
+        # Retaining an active primary context only bumps its refcount.
+        primary = ct.c_void_p()
+        if driver.cuDevicePrimaryCtxRetain(ct.byref(primary), device):
+            continue
+        try:
+            if not driver.cuCtxGetId(primary, ct.byref(identity)):
+                live.add(identity.value)
+        finally:
+            driver.cuDevicePrimaryCtxRelease_v2(device)
+    return live
+
+
+def _forget(lib, handle, identity):
+    _forgotten_handles.append((handle, identity))
+    forget = getattr(lib, "tessera_nvidia_matmul_forget", None)
+    if forget is not None:
+        forget.argtypes = [ct.c_uint64]
+        forget.restype = ct.c_int
+        forget(handle)
+
+
+def close_in_live_context(lib, handle, identity, pid):
+    """Close a native owner only inside a context that is provably alive.
+
+    Native close pushes the owner's context to free its modules and memory;
+    against a destroyed context that push/pop segfaults inside the driver.
+    Liveness is only provable for the current context and active primaries, so
+    an owner of any other context is deferred, not forgotten: a live but
+    non-current context still holds its memory. ``close_deferred`` closes it
+    once that context is current again, and at interpreter exit any owner
+    still deferred is forgotten -- recorded in ``_forgotten_handles`` and
+    removed from the native registry without running its destructor, which
+    would otherwise push a possibly dead context when the registry is
+    destroyed. A forked child never touches the driver: the owner belongs to
+    its parent.
+    """
+    if os.getpid() != pid:
+        return 0
+    try:
+        live = identity in _live_context_identities()
+    except Exception:
+        live = False
+    if live:
+        status = lib.tessera_nvidia_matmul_close(handle)
+        close_deferred()
+        return status
+    with _deferred_lock:
+        if _exiting:
+            _forget(lib, handle, identity)
+        else:
+            _deferred[handle] = (lib, identity, pid)
+    warnings.warn(f"prepared NVIDIA owner {handle} not closed: CUDA context {identity} "
+                  "is not provably live; deferred until a close in that context or exit",
+                  ResourceWarning, stacklevel=2)
+    return 0
+
+
+def close_deferred(*, final=False):
+    """Close deferred owners whose context is live now; with ``final``, forget the rest."""
+    with _deferred_lock:
+        pending = {handle: entry for handle, entry in _deferred.items()
+                   if entry[2] == os.getpid()}
+        if not pending:
+            return
+        try:
+            live = _live_context_identities()
+        except Exception:
+            live = set()
+        for handle, (lib, identity, _) in pending.items():
+            if identity in live:
+                del _deferred[handle]
+                lib.tessera_nvidia_matmul_close(handle)
+            elif final:
+                del _deferred[handle]
+                _forget(lib, handle, identity)
+
+
+def deferred_handles():
+    with _deferred_lock:
+        return tuple((handle, entry[1]) for handle, entry in _deferred.items())
+
+
+@atexit.register
+def _close_deferred_at_exit():
+    # Finalizers that run after this (weakref.finalize's own exit hook may be
+    # registered either side of it) forget directly instead of deferring.
+    global _exiting
+    with _deferred_lock:
+        _exiting = True
+    close_deferred(final=True)
+
+
+def forgotten_handles():
+    return tuple(_forgotten_handles)
 
 
 class PreparedMatmulCall:
@@ -150,8 +311,14 @@ class PreparedMatmulCall:
             except Exception:
                 lib.tessera_nvidia_matmul_close(self.handle)
                 raise
+        try:
+            self.context_identity = current_context_identity()
+        except Exception:
+            lib.tessera_nvidia_matmul_close(self.handle)
+            raise
         self.pid = os.getpid()
-        self._finalizer = weakref.finalize(self, lib.tessera_nvidia_matmul_close, self.handle)
+        self._finalizer = weakref.finalize(self, close_in_live_context, lib, self.handle,
+                                           self.context_identity, self.pid)
         self.frontend_snapshot = copy.deepcopy(frontend_graph)
         self.descriptor_snapshot = copy.deepcopy(descriptor)
         self.artifact = artifact

@@ -12,7 +12,7 @@ import threading
 import weakref
 from typing import TYPE_CHECKING, Any
 
-from .prepared_nvidia_matmul import HostView
+from .prepared_nvidia_matmul import HostView, close_in_live_context, current_context_identity
 
 if TYPE_CHECKING:
     from tessera.runtime import RuntimeArtifact
@@ -108,8 +108,14 @@ class PreparedScalarMatmulCall:
             encoded, len(image.payload), descriptor.entry_symbol.encode(), dims, codes,
             *map(int, orientations), ct.byref(handle)))
         self.handle, self.pid = handle.value, os.getpid()
+        try:
+            self.context_identity = current_context_identity()
+        except Exception:
+            lib.tessera_nvidia_matmul_close(self.handle)
+            raise
         self.lock = threading.RLock()
-        self.finalizer = weakref.finalize(self, lib.tessera_nvidia_matmul_close, self.handle)
+        self.finalizer = weakref.finalize(self, close_in_live_context, lib, self.handle,
+                                          self.context_identity, self.pid)
 
     def _check(self, status):
         if status:

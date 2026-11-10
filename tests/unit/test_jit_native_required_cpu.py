@@ -52,6 +52,13 @@ class _StubJit:
             __name__ = self._fn_name
         return _F()
 
+    def _plan_arg_names(self):
+        # No traced plan is selected, so the plan binds the ABI names.
+        return list(self.arg_names)
+
+    def _executed_plan_inputs(self, args, kwargs):
+        return args, kwargs
+
     def runtime_artifact(self):
         class _A:
             metadata = {}

@@ -17059,3 +17059,8 @@ When a `@jit` call establishes tracer authority, the CPU plan, the tessera_jit l
 ## `E2E-REAL-6F-dropped-call-scan-2026-11-09`: sibling outcome — not re-run (follow-up not required)
 
 The native-target unlowered-op refusal reads the effect scan's resolved `tessera.ops` calls (invocation-aware) instead of the AST front end's dropped-call list, and the dropped-call guard applies only when the AST plan executes. NVIDIA targets get no traced plan, so the dropped-call guard is unchanged for them. The decoration-time refusal now reads the effect scan; on the 7,959-decoration Mac census its decisions match the AST-based refusal except for nested helpers the body never invokes, which are no longer refused. No sm_120 suite was run for this change; nothing here is sm_120 evidence. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-09--e2e-real-6f-the-unlowered-op-refusal-reads-the-effect-scan-and-the-dropped-call-guard-protects-only-the-ast-plan))
+
+
+## `E2E-REAL-6F-lazy-ast-module-2026-11-10`: sibling outcome — not applicable (NVIDIA keeps eager emission)
+
+On the `cpu` reference target, `@jit` now defers the decoration-time AST Graph IR emission until something reads it, so a tracer-authority call never builds the module. NVIDIA targets keep decoration-time emission, because target legality runs on the module. No sm_120 lane changed, so nothing was re-run on The-Super-Bear. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-10--e2e-real-6f-the-cpu-target-builds-the-ast-module-only-when-something-reads-it))

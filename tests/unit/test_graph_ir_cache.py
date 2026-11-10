@@ -112,14 +112,15 @@ class TestJitIntegration:
             def f(x, y):
                 return tessera.ops.add(x, y)
         """
-        # First decoration — miss + store.
-        tessera.from_text(source)
+        # First decoration — miss + store. ``graph_ir`` is read because the
+        # cpu target emits the AST module on first read (E2E-REAL-6F).
+        _ = tessera.from_text(source).graph_ir
         stats_after_first = graph_ir_cache_stats()
         assert stats_after_first["misses"] >= 1
         assert stats_after_first["size"] >= 1
 
         # Second decoration of the same source — hit.
-        tessera.from_text(source)
+        _ = tessera.from_text(source).graph_ir
         stats_after_second = graph_ir_cache_stats()
         assert stats_after_second["hits"] >= 1
         # Cache size shouldn't grow.
@@ -128,8 +129,8 @@ class TestJitIntegration:
     def test_different_function_does_not_hit(self) -> None:
         source_a = "def f(x): return tessera.ops.relu(x)"
         source_b = "def f(x): return tessera.ops.gelu(x)"
-        tessera.from_text(source_a)
-        tessera.from_text(source_b)
+        _ = tessera.from_text(source_a).graph_ir
+        _ = tessera.from_text(source_b).graph_ir
         stats = graph_ir_cache_stats()
         # Two distinct sources → two distinct cache entries.
         assert stats["size"] >= 2

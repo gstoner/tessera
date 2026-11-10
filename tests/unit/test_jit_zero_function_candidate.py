@@ -11,14 +11,18 @@ The reachable producer is an unlowerable intermediate statement. ``_OpExtractor`
 drops a statement it cannot emit (``visit_Assign`` falls through to
 ``generic_visit`` when ``_emit_expr`` returns ``None``), which leaves a later op
 referencing a dangling operand; the function then fails verification with
-``GRAPH_IR_UNDEFINED_OPERAND``. Non-apple_gpu targets re-raise that as a
-``TesseraJitError`` at decoration; ``apple_gpu`` defers to the tracer and keeps
-an empty module.
+``GRAPH_IR_UNDEFINED_OPERAND``. Native targets other than ``apple_gpu``
+re-raise that as a ``TesseraJitError`` at decoration; ``apple_gpu`` defers to
+the tracer and keeps an empty module; the ``cpu`` reference target defers the
+AST emission itself (E2E-REAL-6F), so the error is raised by the first call
+that needs the AST plan, and a tensor call the tracer captures never builds it.
 
 What is pinned here, per target:
 
 * No target ever surfaces a raw ``IndexError`` (the regression).
-* Non-apple_gpu targets raise ``TesseraJitError`` at decoration time.
+* Native targets raise ``TesseraJitError`` at decoration time; ``cpu`` raises
+  it from a call that needs the AST plan, and runs a tensor call through the
+  tracer.
 * ``apple_gpu`` decorates and routes to the tracer. The tracer runs the body,
   so a construct the AST front end could not lower may well execute correctly
   there -- and when it cannot, the failure is a stable Tessera diagnostic
@@ -44,8 +48,12 @@ from tessera.compiler.trace import TesseraTraceError
 
 gpu = pytest.mark.hardware_apple_gpu
 
-# Targets that depend on the AST Graph IR and therefore hard-fail decoration.
+# Targets that depend on the AST Graph IR. Native targets emit it at
+# decoration and hard-fail there; ``cpu`` (target None) defers the emission to
+# the first reader of the AST plan.
 _IR_DEPENDENT_TARGETS = [None, "apple_cpu", "rocm"]
+_DECORATION_EMITTING_TARGETS = ["apple_cpu", "rocm"]
+_DEFERRED_TARGETS = [None, "cpu"]
 
 
 def _not_a_graph_op(v):
@@ -85,12 +93,31 @@ def test_zero_function_candidate_does_not_raise_indexerror():
     assert fn.frontend_authority.startswith("legacy_candidate")
 
 
-@pytest.mark.parametrize("target", _IR_DEPENDENT_TARGETS)
+@pytest.mark.parametrize("target", _DECORATION_EMITTING_TARGETS)
 def test_ir_dependent_targets_raise_tessera_jit_error_at_decoration(target):
     """Never ``IndexError`` -- a Tessera diagnostic naming the failure."""
     with pytest.raises(TesseraJitError) as excinfo:
         _decorate(target, _unlowerable_intermediate)
     assert "GRAPH_IR_UNDEFINED_OPERAND" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("target", _DEFERRED_TARGETS)
+def test_deferred_targets_raise_the_same_error_where_the_ast_is_needed(target):
+    fn = _decorate(target, _unlowerable_intermediate)
+    assert fn.ast_emission_pending
+    # A non-tensor signature is a legacy candidate: it needs the AST plan.
+    for _ in range(2):  # every reader gets the error, not a half-built JitFn
+        with pytest.raises(TesseraJitError) as excinfo:
+            fn([1.0, -2.0, 4.0])
+        assert "GRAPH_IR_UNDEFINED_OPERAND" in str(excinfo.value)
+
+
+def test_a_deferred_tensor_call_runs_the_traced_program():
+    fn = _decorate(None, _unlowerable_intermediate)
+    x = np.array([1.0, -2.0, 4.0], np.float32)
+    np.testing.assert_array_equal(fn(x), np.maximum(x, 0.0))
+    assert fn.executed_plan_frontend == "tracer"
+    assert fn.ast_emission_pending
 
 
 @pytest.mark.parametrize("target", _IR_DEPENDENT_TARGETS + ["apple_gpu"])

@@ -16433,3 +16433,8 @@ When a `@jit` call establishes tracer authority, the CPU plan, the tessera_jit l
 ## `E2E-REAL-6F-dropped-call-scan-2026-11-09`: sibling outcome — parity validated on the Mac
 
 The native-target unlowered-op refusal reads the effect scan's resolved `tessera.ops` calls (invocation-aware) instead of the AST front end's dropped-call list, and the dropped-call guard applies only when the AST plan executes. The Mac `tests/unit -m "not slow"` A/B against `main` b516894ed gives identical failing node IDs (M1 Max, macOS 27.2, unsandboxed); the first head failed the Apple inline-skip inventory gate and was fixed. On `apple_gpu` a truncated AST program no longer reaches the `.mtlpackage` route; a tracer-authority call runs the traced plan on the fast paths even when the AST module compiled to no plan. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-09--e2e-real-6f-the-unlowered-op-refusal-reads-the-effect-scan-and-the-dropped-call-guard-protects-only-the-ast-plan))
+
+
+## `E2E-REAL-6F-lazy-ast-module-2026-11-10`: sibling outcome — not applicable (Apple targets keep eager emission)
+
+On the `cpu` reference target, `@jit` now defers the decoration-time AST Graph IR emission until something reads it, so a tracer-authority call never builds the module. `apple_cpu` and `apple_gpu` keep decoration-time emission: the tracer gate, the `.mtlpackage` recognizer and the AST-vs-traced executable comparison read the module there. The Mac `tests/unit -m "not slow"` A/B against `main` f07af00b6 gives identical failing node IDs (M1 Max, macOS 27.2, unsandboxed); that sweep is also the evidence for the `cpu` lane. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-10--e2e-real-6f-the-cpu-target-builds-the-ast-module-only-when-something-reads-it))

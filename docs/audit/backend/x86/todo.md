@@ -12671,3 +12671,8 @@ When a `@jit` call establishes tracer authority, the CPU plan, the tessera_jit l
 ## `E2E-REAL-6F-dropped-call-scan-2026-11-09`: sibling outcome — parity validated on Princess-Luna (Zen 5, AVX-512)
 
 The native-target unlowered-op refusal reads the effect scan's resolved `tessera.ops` calls (invocation-aware) instead of the AST front end's dropped-call list, and the dropped-call guard applies only when the AST plan executes. The `cpu` target's lanes now run the traced plan for a tracer-authority body whose helper call the AST dropped, instead of the original function. Princess-Luna `tests/unit -m "not slow" -n 16` A/B against `main` b516894ed: identical failing IDs apart from the inventory test fixed in the follow-up commit and a timing-scaling test that passes alone on the fixed head. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-09--e2e-real-6f-the-unlowered-op-refusal-reads-the-effect-scan-and-the-dropped-call-guard-protects-only-the-ast-plan))
+
+
+## `E2E-REAL-6F-lazy-ast-module-2026-11-10`: sibling outcome — not applicable (x86 keeps eager emission)
+
+On the `cpu` reference target, `@jit` now defers the decoration-time AST Graph IR emission until something reads it, so a tracer-authority call never builds the module. The `x86` target keeps decoration-time emission, because target legality runs on the module. No x86 lane changed, so nothing was re-run on Princess-Luna or Tajasarus. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-10--e2e-real-6f-the-cpu-target-builds-the-ast-module-only-when-something-reads-it))

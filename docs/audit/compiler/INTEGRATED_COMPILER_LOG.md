@@ -14903,3 +14903,26 @@ ROCm: parity validated on gfx1151 (device and unit). x86: parity validated on Pr
 Remaining: the AST module is still built at decoration for every unannotated program, because the decoration plan (legacy candidates), the guard on that plan and the `.mtlpackage` recognizer read it. Neither check needs it for a tracer-authority call now, so the next slice is to build it lazily, only when a legacy-candidate call or the package recognizer needs it.
 Evidence: python/tessera/compiler/jit.py; python/tessera/compiler/effect_scan.py; tests/unit/test_dropped_call_scan.py
 <!-- entry-fields:end -->
+
+### 2026-11-10 — E2E-REAL-6F: the cpu target builds the AST module only when something reads it
+
+Owner: [E2E-REAL-6F](INTEGRATED_COMPILER_PLAN.md#e2e-real-6f)
+PRs: branch `claude/e2e6f-lazy-ast-module`; sync E2E-REAL-6F-lazy-ast-module-2026-11-10.
+Outcome: on the `cpu` reference target (`target=None` or `"cpu"`), `@jit` no longer emits Graph IR through `_OpExtractor` at decoration. It binds the emission to a thunk; `graph_ir`, `cpu_plan`, `compile_bundle`, `compile_result`, `lowering_diagnostics`, the legacy module, the dropped-call list and the decoration plan are properties that run it on first read. A field a call already set keeps its value: tracer authority's `graph_ir`, a traced plan's `cpu_plan`. A tracer-authority call never reads the AST module, so it never builds one. A legacy-candidate call, or any explicit read, builds it, and gets the same objects as an eager decoration.
+
+Where deferral applies, and why only there:
+- **Kept eager: every native target.** Compiling the module is where target legality refuses an op the target lacks (`LEGALITY_TARGET_CAPABILITY`, fail-closed at decoration, Decision #21). The first draft deferred `rocm` too, and the gfx1151 standalone-member refusal tests caught it. The Apple targets also read the module at decoration: the control-flow tracer gate, the `.mtlpackage` recognizer, and the AST-vs-traced executable comparison.
+- **Kept eager: a differentiation request** (its intent is written into the module), `shape_bounds` (the bounded LHS dispatcher), and source-less decorations.
+- **Never built for a tracer-authority call.** Three readers changed for this: the trace capture now takes the function name and qualname hash from the function itself, the plan reset leaves the decoration plan unbuilt, and a traced plan's artifact reports the traced bundle's diagnostics. `_traced_plan_for` accepts an executable traced plan without building the AST plan. A non-executable one builds it and gets the existing comparison.
+
+Contract change: on `cpu`, a body the AST front end cannot lower no longer fails at decoration. A tensor call the tracer captures runs it, for example `y = helper(x); return relu(y)` now returns `relu(x)`. A call that needs the AST plan raises the same `TesseraJitError` (`GRAPH_IR_UNDEFINED_OPERAND`), and so does every later reader. `apple_gpu` already deferred emission failures to the tracer; native targets still raise at decoration. Four tests that pinned decoration-time failure on `cpu` now pin this split.
+
+Measured:
+- **Mac M1 Max (macOS 27.2, unsandboxed, shared `build/`)**, `tests/unit -m "not slow" -n 8`, `main` f07af00b6 against the branch: identical failing node IDs, 345 failed and 413 errors on both. The branch's 13 extra passes are the new and updated tests. A first run with `rocm` also deferred showed 5 new failures, and they drove the narrowing above. Two were test artifacts (a patched compiler now also broke the deferred emission; the cache tests decorated without reading). The gfx1151 legality refusals were real.
+- **Census** (same sweep, plugin on `JitFn`): 451 of the suite's 11,823 `JitFn`s are deferred `cpu` decorations. 190 never built the AST module; 259 of the 261 builds came from test code reading `graph_ir`, `cpu_plan` or `compile_bundle` directly. The suite is dominated by native and Apple targets, so this slice removes a small share of the AST route. It does not retire it.
+- `tests/unit/test_lazy_ast_emission.py` (10 tests). `mypy python/tessera/` clean (696 files), ruff clean.
+
+Apple, ROCm, NVIDIA, x86: not applicable. Their targets keep decoration-time emission, so nothing changes for them; the Mac sweep covers the `cpu` lane, which no device owns. Sibling notes are under the sync key.
+Remaining: the AST route now serves native targets and Apple at decoration, mainly so target legality runs on a module, plus legacy-candidate calls everywhere. Next: run target legality on the effect scan's resolved op list, so native decorations can defer too. A second option is a traced module where the signature is static. Not measured: decoration-time cost; the census counts builds, not seconds.
+Evidence: python/tessera/compiler/jit.py; tests/unit/test_lazy_ast_emission.py; tests/unit/test_jit_zero_function_candidate.py
+<!-- entry-fields:end -->

@@ -75,11 +75,16 @@ def test_a_truncated_ast_program_never_reaches_the_package_route(monkeypatch):
         lambda *_a, **_k: pytest.fail("the AST package route ran"))
     monkeypatch.setattr(
         fn, "_apple_gpu_fast_call", lambda *_a, **_k: "fast path")
-    result = fn(_x())
-    if fn.executed_plan_frontend != "tracer":
-        pytest.skip(f"no executable apple_gpu traced plan on this host: "
-                    f"{fn.executed_plan_fallback_reason}")
-    assert result == "fast path"
+    x = _x()
+    result = fn(x)
+    # Either the traced plan reaches the fast path, or (no executable traced
+    # plan on this host) the truncated AST program is replaced by the
+    # function. The package route runs in neither case.
+    if fn.executed_plan_frontend == "tracer":
+        assert result == "fast path"
+    else:
+        np.testing.assert_allclose(np.asarray(result), _expected(x), rtol=1e-6)
+        assert fn.last_fallback_reason == FallbackReason.FRONTEND_UNLOWERED_CALL
 
 
 # ── The refusal reads the scan, not the AST drops ────────────────────────────

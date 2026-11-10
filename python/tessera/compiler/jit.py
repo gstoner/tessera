@@ -1861,7 +1861,17 @@ class JitFn:
             self.executed_plan_fallback_reason = "traced module compiled to no plan for this target"
             return None
         decoration_executable = bool(decoration_bundle is not None and decoration_bundle.executable)
-        if decoration_plan is not None and bundle.executable != decoration_executable:
+        if decoration_plan is None:
+            # Nothing to compare with: the AST module compiled to no plan, and
+            # selecting a traced plan lifts the dropped-call guard. Only a plan
+            # a lane will run may do that; the Apple lanes run an executable
+            # bundle only, so an artifact-only one keeps the guard's
+            # fallback/refusal instead of ending in a silent eager run.
+            if target_kind != "cpu" and not bundle.executable:
+                self.executed_plan_fallback_reason = (
+                    "traced plan is artifact-only and the AST module compiled to no plan")
+                return None
+        elif bundle.executable != decoration_executable:
             self.executed_plan_fallback_reason = (
                 f"traced plan executable={bundle.executable} but the decoration "
                 f"plan executable={decoration_executable}")

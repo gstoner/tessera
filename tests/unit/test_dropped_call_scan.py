@@ -87,6 +87,40 @@ def test_a_truncated_ast_program_never_reaches_the_package_route(monkeypatch):
         assert fn.last_fallback_reason == FallbackReason.FRONTEND_UNLOWERED_CALL
 
 
+def _det_helper(x):
+    return tessera.ops.det(x)
+
+
+def _calls_an_artifact_only_helper(x):
+    return _det_helper(tessera.ops.add(x, x))
+
+
+def _square() -> np.ndarray:
+    return np.eye(3, dtype=np.float32) + 0.1
+
+
+def test_an_artifact_only_traced_plan_keeps_the_guard():
+    # ``det`` traces to a catalogued plan outside the Apple GPU runtime
+    # envelope. With no decoration plan, that plan must not lift the guard:
+    # no lane would run it, and the call would end in a silent eager run.
+    fn = tessera.jit(target="apple_gpu")(_calls_an_artifact_only_helper)
+    x = _square()
+    np.testing.assert_allclose(fn(x), np.linalg.det(x + x), rtol=1e-5)
+    assert fn.executed_plan_frontend is None
+    assert fn.last_fallback_reason == FallbackReason.FRONTEND_UNLOWERED_CALL
+    assert fn.executed_plan_fallback_reason == (
+        "traced plan is artifact-only and the AST module compiled to no plan")
+
+
+def test_native_required_still_refuses_an_artifact_only_traced_plan():
+    from tessera.compiler.fallback import TesseraNativeRequiredError
+
+    fn = tessera.jit(target="apple_gpu", native_required=True)(
+        _calls_an_artifact_only_helper)
+    with pytest.raises(TesseraNativeRequiredError):
+        fn(_square())
+
+
 # ── The refusal reads the scan, not the AST drops ────────────────────────────
 
 def _invokes_shadowed_helper(a):

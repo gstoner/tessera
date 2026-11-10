@@ -14879,3 +14879,27 @@ NVIDIA and ROCm: not applicable (no traced plan for their targets); x86: parity 
 Remaining: decoration still builds Graph IR through `_OpExtractor` for every unannotated program, because the decoration plan, the dropped-call guard (`frontend_unlowered_calls`) and the native-target unlowered-op refusal read it. With execution now tracer-authored, the next slice is to source those two from the effect scan, so a tracer-eligible program needs no AST module at decoration. The `.mtlpackage` recognizer is the other AST consumer. No performance claim; first calls of a new signature now pay one extra `compile_graph_module`.
 Evidence: python/tessera/compiler/jit.py; tests/unit/test_traced_plan_execution.py; tests/unit/test_jit_native_required_cpu.py
 <!-- entry-fields:end -->
+
+### 2026-11-09 — E2E-REAL-6F: the unlowered-op refusal reads the effect scan, and the dropped-call guard protects only the AST plan
+
+Owner: [E2E-REAL-6F](INTEGRATED_COMPILER_PLAN.md#e2e-real-6f)
+PRs: branch `claude/e2e6f-dropped-call-scan`; sync E2E-REAL-6F-dropped-call-scan-2026-11-09.
+Outcome: the two decoration consumers of the AST front end's dropped-call list (`GraphIRModule.frontend_unlowered_calls`) were the native-target unlowered-op refusal and the call-time dropped-call guard. A census of both against the effect scan, over the 7,959 decorations of the Mac `tests/unit -m "not slow"` sweep, showed the two lists answer different questions, so the guard could not simply switch sources:
+- **The lists disagree on 74 decorations, 37 each way.** The AST drops a call to a user helper built from `tessera.ops` (`mlp`, `source`, `_pure_helper`), and its graph really is truncated; the scan sees through the helper. The scan leaves unresolved calls the AST plan handles or ignores (`control.scan`, `fori_loop`, `x.sum`, `agpu.*`, a policy helper in a keyword argument). Feeding the scan's list to the guard would send working programs to eager Python and miss truncated AST graphs.
+- **For the refusal the two agree except on nested helpers the body never invokes**, which the scan counted.
+
+What changed:
+- **Refusal.** `_refuse_unlowered_ops_for_native_target` reads `CallScan.ops`: every resolved `tessera.ops` call the body can execute, by object identity. The scan is now invocation-aware for this list: an op inside a nested `def` or a named lambda counts only if the body reaches that helper, a local definition shadows an enclosing one, a name bound twice may call either body, and an anonymous lambda counts where it appears. `effect` still joins every scope. An op without an `op_catalog` OpSpec is refused at decoration, with no AST module read. The old second reason, "catalogued, but the Graph IR front end does not resolve that spelling", is gone: under the AST plan such a drop reaches the guard below, which runs the original function or raises under `native_required`.
+- **Guard.** The guard applies only when the AST plan executes. Tracer authority requires a scan with no unresolved call, so whatever the AST dropped under it is a helper the trace ran through, and the traced plan is the whole program. A truncated AST program also never reaches the `.mtlpackage` route, which executes the decoration module's package.
+- **Traced plan target.** `_traced_plan_for` takes the target from the decorator, not the decoration plan. A body like `return helper(x)` leaves the AST module empty, so it compiles to no plan; the call now runs the traced plan (`add`, `relu`) instead of the original function.
+
+Measured:
+- **Mac M1 Max (macOS 27.2, unsandboxed, shared `build/`)**, `tests/unit -m "not slow" -n 8`, `main` b516894ed against the branch: identical failing node IDs after the follow-up commit (the first head also failed the Apple inline-skip inventory gate, fixed by asserting both outcomes instead of skipping); the branch's extra passes are the new tests.
+- **Princess-Luna (gfx1151, Zen 5)**, ROCm env sourced, separate worktrees over the shared `build/`: `tests/device/rocm -n 4` 93 failed / 201 passed on both, identical IDs. `tests/unit -n 16`: the same inventory failure, fixed in the follow-up commit, and `test_pointwise_exit_scan_scales_linearly_with_graph_size`, a timing-scaling test that passes alone on the fixed head (23 of 23 for the three affected files).
+- **Tests.** `test_dropped_call_scan.py` (8 tests; 6 fail on `main`. The AST-plan test and the package-route test pass on both, since `main` already sends that truncated program to the original function before the package route.)
+- `mypy` on the two changed modules: clean. Generated docs: 33 in sync.
+
+ROCm: parity validated on gfx1151 (device and unit). x86: parity validated on Princess-Luna. Apple: parity on the Mac. NVIDIA: not re-run, recorded as such in its queue: the guard is unchanged for its targets (no traced plan), and its refusal decisions match the AST's on the census. gfx1201 and sm_120 are not evaluated.
+Remaining: the AST module is still built at decoration for every unannotated program, because the decoration plan (legacy candidates), the guard on that plan and the `.mtlpackage` recognizer read it. Neither check needs it for a tracer-authority call now, so the next slice is to build it lazily, only when a legacy-candidate call or the package recognizer needs it.
+Evidence: python/tessera/compiler/jit.py; python/tessera/compiler/effect_scan.py; tests/unit/test_dropped_call_scan.py
+<!-- entry-fields:end -->

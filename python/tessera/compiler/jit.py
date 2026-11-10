@@ -1210,8 +1210,12 @@ class JitFn:
             # AST front end dropped cannot truncate them; checking before them
             # sent native gfx1201 NVFP4 bodies with a policy helper in a
             # keyword argument to eager Python (review of #1004 on Tajasarus).
+            # A traced plan is the whole program: tracer authority requires an
+            # effect scan with no unresolved call, so what the AST dropped is a
+            # helper the trace ran through. Only the AST plan is truncated by
+            # those drops, and only it is replaced by the original function.
             dropped_calls = self._dropped_calls_for_this_call()
-            if dropped_calls:
+            if dropped_calls and self._executed_traced_plan is None:
                 return self._eager_for_dropped_calls(args, kwargs, dropped_calls)
             plan_frontend = "tracer" if self._executed_traced_plan is not None else "ast"
             if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
@@ -1241,9 +1245,11 @@ class JitFn:
             # couldn't be routed (non-fp32 / unrecognized shape / runtime
             # down), so we drop through to the normal apple_gpu lane. The
             # package is recognized from the decoration module, so a call it
-            # serves executes the AST's program whoever holds authority.
+            # serves executes the AST's program whoever holds authority; a
+            # truncated AST program never reaches it.
             if (
                 self.dispatch_via_package
+                and not dropped_calls
                 and self.recognized_package is not None
                 and self.cpu_plan is not None
                 and self.cpu_plan.target_kind == "apple_gpu"
@@ -1815,7 +1821,12 @@ class JitFn:
         is specialized to one signature, so the compile is cached on it.
         """
         decoration_plan, decoration_bundle, _ = self._decoration_compile
-        if decoration_plan is None or decoration_plan.target_kind not in self._TRACED_PLAN_TARGETS:
+        # The target comes from the decorator, not the decoration plan: an AST
+        # module truncated by a dropped call (``return helper(x)``) compiles
+        # to no plan, and the trace that ran through the helper still does.
+        target_kind = str(normalize_target_kind(self.target))
+        if target_kind not in self._TRACED_PLAN_TARGETS or (
+                decoration_plan is not None and decoration_plan.target_kind != target_kind):
             return None
         # A batched or differentiated trace is projected for its own consumers
         # (native vmap, the AD owners); it is not the program these lanes run.
@@ -1833,7 +1844,7 @@ class JitFn:
             bundle = compile_graph_module(
                 traced_module,
                 source_origin=self.source_origin,
-                target=decoration_plan.target_kind,
+                target=target_kind,
                 cpu_tile=(self.cpu_tile[0], self.cpu_tile[1], self.cpu_tile[2]),
                 options={
                     "cpu_tile": list(self.cpu_tile),
@@ -1846,11 +1857,21 @@ class JitFn:
                 f"traced module did not compile: {type(exc).__name__}: {exc}")
             return None
         plan = bundle.cpu_plan
-        if plan is None or plan.target_kind != decoration_plan.target_kind:
+        if plan is None or plan.target_kind != target_kind:
             self.executed_plan_fallback_reason = "traced module compiled to no plan for this target"
             return None
         decoration_executable = bool(decoration_bundle is not None and decoration_bundle.executable)
-        if bundle.executable != decoration_executable:
+        if decoration_plan is None:
+            # Nothing to compare with: the AST module compiled to no plan, and
+            # selecting a traced plan lifts the dropped-call guard. Only a plan
+            # a lane will run may do that; the Apple lanes run an executable
+            # bundle only, so an artifact-only one keeps the guard's
+            # fallback/refusal instead of ending in a silent eager run.
+            if target_kind != "cpu" and not bundle.executable:
+                self.executed_plan_fallback_reason = (
+                    "traced plan is artifact-only and the AST module compiled to no plan")
+                return None
+        elif bundle.executable != decoration_executable:
             self.executed_plan_fallback_reason = (
                 f"traced plan executable={bundle.executable} but the decoration "
                 f"plan executable={decoration_executable}")
@@ -5489,43 +5510,39 @@ def _jit_analyze_frontend(
     return _FrontendAnalysis(solver=solver, inferred_effect=inferred_effect)
 
 
-def _resolve_tessera_ops_callee(fn: Callable, dotted: str) -> Optional[str]:
-    """Return the ``tessera.ops`` public name a dropped call resolves to."""
-    from .effect_scan import resolve_tessera_ops_callee
-
-    return resolve_tessera_ops_callee(fn, dotted)
-
-
 def _refuse_unlowered_ops_for_native_target(
-    fn: Callable, target: Any, unlowered_calls: Sequence[str],
+    fn: Callable, target: Any, source_text: Optional[str],
 ) -> None:
-    """Raise ``JIT_UNLOWERED_OP_NATIVE_TARGET`` for dropped ``tessera.ops`` calls."""
+    """Raise ``JIT_UNLOWERED_OP_NATIVE_TARGET`` for uncatalogued ``tessera.ops`` calls.
+
+    The calls come from the effect scan (``effect_scan.scan_call_effects``),
+    resolved by object identity, so every spelling counts and no AST Graph IR
+    module is needed: a ``tessera.ops`` callable with no ``op_catalog``
+    OpSpec has no Graph op in any front end. Calls inside a nested helper
+    count only when the body invokes it.
+    """
+    from .effect_scan import scan_call_effects
     from .op_catalog import get_op_spec
 
     dropped: Dict[str, str] = {}
-    for dotted in unlowered_calls:
-        name = _resolve_tessera_ops_callee(fn, dotted)
-        if name is not None and name not in dropped:
+    for name, dotted in scan_call_effects(fn, source_text).ops:
+        if get_op_spec(name) is None and name not in dropped:
             dropped[name] = dotted
     if not dropped:
         return
-    reasons = []
-    for name, dotted in dropped.items():
-        if get_op_spec(name) is None:
-            reasons.append(f"tessera.ops.{name} (called as {dotted!r}) has no op_catalog OpSpec")
-        else:
-            reasons.append(
-                f"tessera.ops.{name} (called as {dotted!r}) is catalogued, but the "
-                f"Graph IR front end does not resolve that spelling")
+    reasons = [
+        f"tessera.ops.{name} (called as {dotted!r}) has no op_catalog OpSpec"
+        for name, dotted in dropped.items()
+    ]
     raise TesseraJitError(
         f"[{JitDiagnosticCode.UNLOWERED_OP_NATIVE_TARGET.value}] "
-        f"@jit(target={target!r}) was requested for {fn.__name__!r}, but the "
-        f"Graph IR front end could not lower: {'; '.join(reasons)}. The call "
-        f"is absent from Graph IR, so nothing would compile for this target "
-        f"and the function would silently run as eager Python -- giving the "
-        f"appearance of a compiled run. Register the op in op_catalog with a "
-        f"lowering for this target, express it with catalogued tessera.ops "
-        f"calls, or drop target= to run on the reference lane."
+        f"@jit(target={target!r}) was requested for {fn.__name__!r}, but no "
+        f"Graph op exists for: {'; '.join(reasons)}. The call cannot reach "
+        f"Graph IR, so nothing would compile for this target and the function "
+        f"would silently run as eager Python -- giving the appearance of a "
+        f"compiled run. Register the op in op_catalog with a lowering for this "
+        f"target, express it with catalogued tessera.ops calls, or drop "
+        f"target= to run on the reference lane."
     )
 
 
@@ -5590,9 +5607,6 @@ def _jit_emit_graph_ir(
     # construct the AST front end could not lower, and the verifier error that
     # actually raises names only the dangling operand it left behind.
     frontend_diagnostics: list[JitDiagnostic] = []
-    # Calls the front end dropped, read off the module (cache hits included)
-    # so a verifier failure they caused is reported as the dropped op.
-    unlowered_calls: list[str] = []
     # Hoisted out of the try so the trace-defer handler can re-lower with the
     # same inputs rather than recomputing them. Safe to move: both are total
     # over an already-validated ``target`` (``normalize_target_kind`` ran and
@@ -5644,7 +5658,6 @@ def _jit_emit_graph_ir(
                 source_location=source_location,
                 constant_environment=constant_environment,
             )
-        unlowered_calls = list(module.frontend_unlowered_calls)
         diagnostics: list[JitDiagnostic] = list(frontend_diagnostics)
         if source_text is None:
             diagnostics.append(JitDiagnostic(
@@ -5727,7 +5740,7 @@ def _jit_emit_graph_ir(
             if target is not None and target_kind != "cpu":
                 try:
                     _refuse_unlowered_ops_for_native_target(
-                        fn, target, unlowered_calls)
+                        fn, target, source_text)
                 except TesseraJitError as refusal:
                     raise refusal from exc
             raise TesseraJitError(
@@ -5972,7 +5985,7 @@ def jit(
                 _tracer_routed = _trace_deferred or function_needs_tracer(module, fn)
             if not _tracer_routed:
                 _refuse_unlowered_ops_for_native_target(
-                    fn, target, module.frontend_unlowered_calls)
+                    fn, target, source_text)
 
         # PK8a wiring (2026-06-02) — recognize whether this module's compute
         # region is an authorable Apple-GPU packaged kernel (matmul / a single

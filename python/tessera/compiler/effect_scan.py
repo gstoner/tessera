@@ -42,6 +42,9 @@ _PURE_BUILTINS = frozenset({
 })
 
 
+# Owner id of the scanned function's own scope.
+_ROOT = 0
+
 # How deep the scan follows plain Python helpers before treating a call as
 # unresolved.
 _MAX_HELPER_DEPTH = 8
@@ -60,21 +63,11 @@ class CallScan:
     # Dotted spellings of unresolved calls, in source order.
     unresolved: Tuple[str, ...]
     source_available: bool
-
-
-def resolve_tessera_ops_callee(fn: Callable, dotted: str) -> Optional[str]:
-    """Return the ``tessera.ops`` public name a dotted call resolves to.
-
-    Resolution is by object identity against ``fn``'s globals and closure, so
-    every spelling counts (``ts.ops.x``, ``import tessera as T``,
-    ``from tessera.ops import x as y``). Only module attributes are traversed
-    (and ``SimpleNamespace``, which is what ``tessera.ops`` is) between the
-    root and the leaf: a dotted name through a user object is
-    never evaluated, since an attribute read there may run arbitrary code.
-    Returns ``None`` when the name does not resolve to a ``tessera.ops``
-    callable (a local, a numpy call, a user helper).
-    """
-    return _ops_name(_resolve_dotted(_function_scope(fn), dotted), dotted)
+    # (canonical op name, dotted spelling) of every resolved ``tessera.ops``
+    # call the body can execute, in source order: helpers it calls are
+    # included, while a nested ``def`` or named lambda the body never invokes
+    # contributes nothing (``effect`` still joins it, conservatively).
+    ops: Tuple[Tuple[str, str], ...] = ()
 
 
 def _ops_name(obj: Any, dotted: str) -> Optional[str]:
@@ -101,6 +94,9 @@ def _function_scope(fn: Callable) -> Dict[str, Any]:
 
 
 def _resolve_dotted(scope: Dict[str, Any], dotted: str) -> Any:
+    """Resolve a dotted name through module (and ``SimpleNamespace``)
+    attributes only: an attribute read on a user object may run arbitrary
+    code, so such a name is never evaluated and resolves to ``None``."""
     parts = dotted.split(".")
     if parts[0] not in scope:
         return None
@@ -311,12 +307,12 @@ def scan_call_effects(
 
     node = _function_node(fn, source_text)
     if node is None:
-        return CallScan(Effect.top, (), ("<source-unavailable>",), False)
+        return CallScan(Effect.top, (), ("<source-unavailable>",), False, ())
     state = _ScanState(fn, _active)
-    state.scan_scope(node, {})
+    state.scan_scope(node, {}, _ROOT)
     unresolved = tuple(state.unresolved)
     effect = Effect.top if unresolved else state.effect
-    return CallScan(effect, tuple(state.effectful), unresolved, True)
+    return CallScan(effect, tuple(state.effectful), unresolved, True, state.reachable_ops())
 
 
 class _ScanState:
@@ -329,6 +325,23 @@ class _ScanState:
         self.effect = Effect.pure
         self.effectful: list[str] = []
         self.unresolved: list[str] = []
+        # (owning scope, op name, dotted spelling); ``reachable_ops`` keeps
+        # the ones whose scope the body invokes.
+        self.ops: list[Tuple[int, str, str]] = []
+        # owning scope -> nested scopes it calls by name.
+        self.invokes: Dict[int, set] = {}
+        self.scope_names: Dict[int, Dict[str, list]] = {}
+        self.current = _ROOT
+
+    def reachable_ops(self) -> Tuple[Tuple[str, str], ...]:
+        reached = {_ROOT}
+        frontier = [_ROOT]
+        while frontier:
+            for callee in self.invokes.get(frontier.pop(), ()):
+                if callee not in reached:
+                    reached.add(callee)
+                    frontier.append(callee)
+        return tuple((op, dotted) for owner, op, dotted in self.ops if owner in reached)
 
     def join(self, op: str, op_effect: Any) -> None:
         from .effects import Effect
@@ -337,11 +350,33 @@ class _ScanState:
             self.effectful.append(op)
         self.effect = self.effect.join(op_effect)
 
-    def scan_scope(self, node: ast.AST, enclosing: Dict[str, Any]) -> None:
+    def scan_scope(self, node: ast.AST, enclosing: Dict[str, Any], owner: int,
+                   visible: Optional[Dict[str, list]] = None) -> None:
         from .effects import registered_op_effect
 
         own, nested = _scope_nodes(node)
         bindings = {**enclosing, **_scope_bindings(node, own)}
+        # Helpers this scope defines, by the name a call uses. An anonymous
+        # lambda (an argument, an immediately-called literal) has no name a
+        # later call could use, so it is treated as invoked here.
+        lambda_names = {
+            id(child.value): target.id
+            for child in own
+            if isinstance(child, ast.Assign) and isinstance(child.value, ast.Lambda)
+            for target in child.targets if isinstance(target, ast.Name)}
+        local: Dict[str, list] = {}
+        for inner in nested:
+            name = (inner.name if not isinstance(inner, ast.Lambda)
+                    else lambda_names.get(id(inner)))
+            if name is None:
+                self.invokes.setdefault(owner, set()).add(id(inner))
+            else:
+                # A name bound twice in one scope may call either body.
+                local.setdefault(name, []).append(id(inner))
+        # A local definition shadows an enclosing one of the same name.
+        names = {**(visible or {}), **local}
+        self.scope_names[owner] = names
+        self.current = owner
         for child in own:
             if isinstance(child, (ast.Global, ast.Nonlocal)):
                 self.unresolved.append(f"<{type(child).__name__.lower()}>")
@@ -358,7 +393,7 @@ class _ScanState:
             elif isinstance(child, ast.Call):
                 self.scan_call(child, bindings)
         for inner in nested:
-            self.scan_scope(inner, bindings)
+            self.scan_scope(inner, bindings, id(inner), names)
 
     def scan_call(self, call: ast.Call, bindings: Dict[str, Any]) -> None:
         from .effects import registered_op_effect
@@ -375,7 +410,10 @@ class _ScanState:
         root = dotted.split(".")[0]
         local = bindings.get(root)
         if local == _HELPER and "." not in dotted:
-            return  # its body is scanned as a nested scope
+            # Its body is scanned as a nested scope; record the invocation.
+            for helper in self.scope_names.get(self.current, {}).get(root, ()):
+                self.invokes.setdefault(self.current, set()).add(helper)
+            return
         if isinstance(local, str):
             self.unresolved.append(dotted)  # a method on a value, or a rebound name
             return
@@ -393,6 +431,7 @@ class _ScanState:
             return
         op = _ops_name(obj, dotted)
         if op is not None:
+            self.ops.append((self.current, op, dotted))
             self.join(op, registered_op_effect(op))
             return
         if (_is_user_function(obj) and obj not in self.active
@@ -400,6 +439,7 @@ class _ScanState:
             inner = scan_call_effects(obj, _active=(*self.active, self.fn))
             self.effect = self.effect.join(inner.effect)
             self.effectful.extend(inner.effectful_ops)
+            self.ops.extend((self.current, op, spelling) for op, spelling in inner.ops)
             self.unresolved.extend(f"{dotted}->{name}" for name in inner.unresolved)
             return
         self.unresolved.append(dotted)

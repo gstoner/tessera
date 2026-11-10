@@ -17051,3 +17051,7 @@ The evidence is the RTX 5070 only. **Sibling backends:** not applicable, since t
 - On `main`, `test_public_program_and_native_owner_eviction_retire_together` fails with "shape frame requires checked capacity".
 
 Evidence: tests/device/nvidia/test_bounded_lhs_jit.py.
+
+## `E2E-REAL-6F-executed-plan-2026-11-08`: sibling outcome — not applicable
+
+When a `@jit` call establishes tracer authority, the CPU plan, the tessera_jit lane and the Apple CPU/GPU fast paths now execute the plan compiled from the traced module (`JitFn._traced_plan_for`, one compile per specialization) instead of the plan compiled at decoration from the AST module. Inputs bind positionally to the traced parameter names. Every other call restores the decoration plan, and `executed_plan_frontend` / `executed_plan_fallback_reason` record which ran. `_traced_plan_for` returns no traced plan unless the decoration plan targets `cpu`, `apple_cpu` or `apple_gpu`, so this backend's native routes and its `cpu_plan.ops` dispatch checks see the decoration plan as before. Each call now starts by restoring that plan, so a native route can no longer see a previous call's traced specialization. The Princess-Luna unit A/B (gfx1151 host) gave identical failing nodes. No device suite was re-run.

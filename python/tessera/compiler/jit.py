@@ -300,7 +300,11 @@ def _ast_derived_field(name: str) -> property:
             return self.__dict__[slot]
         except KeyError:
             self._materialize_ast_emission()
+        try:
             return self.__dict__[slot]
+        except KeyError:
+            raise AttributeError(
+                f"JitFn has no AST emission to derive {name!r} from") from None
 
     def set(self: "JitFn", value: Any) -> None:
         self.__dict__[slot] = value
@@ -542,10 +546,10 @@ class JitFn:
                 raise self._ast_emission_error
             thunk = self._ast_emission
             if thunk is None:
-                missing = [n for n in _AST_DERIVED_FIELDS
-                           if "_ast_slot_" + n not in self.__dict__]
-                raise AttributeError(
-                    f"JitFn has no AST emission to derive {missing} from")
+                # Another reader finished the emission while this one waited
+                # for the lock (or there was never one); the getter reports a
+                # field that is still absent.
+                return
             try:
                 emission = thunk()
             except BaseException as exc:

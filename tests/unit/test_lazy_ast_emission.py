@@ -8,6 +8,9 @@ is a legacy candidate is such a reader.
 """
 from __future__ import annotations
 
+import threading
+import time
+
 import numpy as np
 import pytest
 
@@ -111,3 +114,37 @@ def test_an_emission_failure_reaches_every_reader():
     # A failed emission leaves the call path intact for tracer calls.
     np.testing.assert_array_equal(fn(x), np.maximum(x, 0.0))
 
+
+
+def test_concurrent_first_readers_all_get_the_module():
+    # Both readers find the slot unset; the second waits on the lock while the
+    # first emits, and must then read the field rather than fail.
+    fn = ts.jit(_body)
+    emit = fn._ast_emission
+    calls = []
+
+    def slow_emit():
+        calls.append(1)
+        time.sleep(0.05)
+        return emit()
+
+    fn._ast_emission = slow_emit
+    barrier = threading.Barrier(4)
+    results, errors = {}, []
+
+    def read(index, field):
+        barrier.wait()
+        try:
+            results[index] = getattr(fn, field)
+        except Exception as exc:  # noqa: BLE001 -- collected for the assert
+            errors.append(exc)
+
+    threads = [threading.Thread(target=read, args=(i, f))
+               for i, f in enumerate(("graph_ir", "compile_bundle", "graph_ir", "cpu_plan"))]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert errors == []
+    assert len(results) == 4 and calls == [1]
+    assert results[0] is results[2] is fn.graph_ir

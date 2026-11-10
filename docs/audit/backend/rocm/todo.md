@@ -19562,3 +19562,8 @@ When a `@jit` call establishes tracer authority, the CPU plan, the tessera_jit l
 ## `E2E-REAL-6F-dropped-call-scan-2026-11-09`: sibling outcome — parity validated on gfx1151 (Princess-Luna)
 
 The native-target unlowered-op refusal reads the effect scan's resolved `tessera.ops` calls (invocation-aware) instead of the AST front end's dropped-call list, and the dropped-call guard applies only when the AST plan executes. ROCm targets get no traced plan, so the guard is unchanged for them; the change here is the decoration-time refusal, now read from the effect scan. `tests/device/rocm -n 4` on gfx1151, ROCm env sourced, separate worktrees over the shared `build/`: 93 failed / 201 passed on both `main` b516894ed and the branch, identical IDs. gfx1201 was not evaluated, and gfx1151 evidence does not transfer to it. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-09--e2e-real-6f-the-unlowered-op-refusal-reads-the-effect-scan-and-the-dropped-call-guard-protects-only-the-ast-plan))
+
+
+## `E2E-REAL-6F-lazy-ast-module-2026-11-10`: sibling outcome — not applicable (ROCm keeps eager emission)
+
+On the `cpu` reference target, `@jit` now defers the decoration-time AST Graph IR emission until something reads it, so a tracer-authority call never builds the module. ROCm targets keep decoration-time emission, because target legality (`LEGALITY_TARGET_CAPABILITY`) runs on the module. A first draft that deferred `rocm` too broke the gfx1151 standalone-member decoration refusals in `test_gfx1151_quantized_program_packaging.py`, and was narrowed. No ROCm lane changed, so neither gfx1151 nor gfx1201 was re-run. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-10--e2e-real-6f-the-cpu-target-builds-the-ast-module-only-when-something-reads-it))

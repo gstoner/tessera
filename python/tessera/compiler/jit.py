@@ -280,6 +280,41 @@ _PKG_FALLBACK: Any = object()
 _JIT_FALLBACK: Any = object()
 
 
+# Fields a ``JitFn`` derives from the decoration-time AST Graph IR emission.
+# When the decorator defers that emission (E2E-REAL-6F), each one reads as a
+# property that runs the emission the first time anything asks for a field the
+# call has not already set -- so a tracer-authority call, which replaces
+# ``graph_ir`` and the executed plan with its own, never builds the AST module.
+_AST_DERIVED_FIELDS = (
+    "graph_ir", "cpu_plan", "compile_bundle", "compile_result",
+    "lowering_diagnostics", "_legacy_graph_ir", "_frontend_dropped_calls",
+    "_decoration_compile",
+)
+
+
+def _ast_derived_field(name: str) -> property:
+    slot = "_ast_slot_" + name
+
+    def get(self: "JitFn") -> Any:
+        try:
+            return self.__dict__[slot]
+        except KeyError:
+            self._materialize_ast_emission()
+        try:
+            return self.__dict__[slot]
+        except KeyError:
+            raise AttributeError(
+                f"JitFn has no AST emission to derive {name!r} from") from None
+
+    def set(self: "JitFn", value: Any) -> None:
+        self.__dict__[slot] = value
+
+    def delete(self: "JitFn") -> None:
+        self.__dict__.pop(slot, None)
+
+    return property(get, set, delete)
+
+
 def _resolve_dispatch_via_package(value: "bool | str | None",
                                   target_kind: Optional[str]) -> "bool | str":
     """PK8h — resolve the package-dispatch policy.
@@ -479,11 +514,72 @@ class JitFn:
     """
 
     _frontend_batch_policies: tuple[tuple[int | None, ...], ...]
+    _ast_emission: Optional[Callable[[], Any]]
+    _ast_emission_error: Optional[BaseException]
+    _ast_lock: threading.Lock
+
+    graph_ir = _ast_derived_field("graph_ir")
+    cpu_plan = _ast_derived_field("cpu_plan")
+    compile_bundle = _ast_derived_field("compile_bundle")
+    compile_result = _ast_derived_field("compile_result")
+    lowering_diagnostics = _ast_derived_field("lowering_diagnostics")
+    _legacy_graph_ir = _ast_derived_field("_legacy_graph_ir")
+    _frontend_dropped_calls = _ast_derived_field("_frontend_dropped_calls")
+    _decoration_compile = _ast_derived_field("_decoration_compile")
+
+    @property
+    def ast_emission_pending(self) -> bool:
+        """True while the decoration-time AST Graph IR has not been built."""
+        return self._ast_emission is not None
+
+    def _materialize_ast_emission(self) -> None:
+        """Run the deferred AST emission and fill every field still unset.
+
+        A field a call already set (tracer authority's ``graph_ir``, a traced
+        plan's ``cpu_plan``) keeps its value; the decoration copy of the plan
+        lands in ``_decoration_compile`` either way. An emission failure is
+        the decoration-time ``TesseraJitError`` it always was, raised to every
+        reader that needs the AST module rather than once.
+        """
+        with self._ast_lock:
+            if self._ast_emission_error is not None:
+                raise self._ast_emission_error
+            thunk = self._ast_emission
+            if thunk is None:
+                # Another reader finished the emission while this one waited
+                # for the lock (or there was never one); the getter reports a
+                # field that is still absent.
+                return
+            try:
+                emission = thunk()
+            except BaseException as exc:
+                self._ast_emission_error = exc
+                raise
+            module = emission.module
+            derived = {
+                "graph_ir": module,
+                "cpu_plan": emission.cpu_plan,
+                "compile_bundle": emission.compile_bundle,
+                "compile_result": emission.compile_result,
+                "lowering_diagnostics": tuple(emission.diagnostics or ()),
+                "_legacy_graph_ir": (
+                    None
+                    if module.module_attrs.get("tessera.frontend.authority") == '"tracer"'
+                    else module),
+                "_frontend_dropped_calls": tuple(
+                    getattr(module, "frontend_unlowered_calls", ()) or ()),
+                "_decoration_compile": (
+                    emission.cpu_plan, emission.compile_bundle,
+                    emission.compile_result),
+            }
+            for name, value in derived.items():
+                self.__dict__.setdefault("_ast_slot_" + name, value)
+            self._ast_emission = None
 
     def __init__(
         self,
         fn: Callable,
-        graph_ir: GraphIRModule,
+        graph_ir: Optional[GraphIRModule],
         inferred_effect: Effect,
         constraints: ConstraintSolver,
         deterministic: bool = False,
@@ -506,21 +602,33 @@ class JitFn:
         shape_bounds: Optional[Dict[str,int]] = None,
         bounded_source_certificate: Optional[Any] = None,
         bounded_rhs_storage_order: Optional[str] = None,
+        deferred_emission: Optional[Callable[[], Any]] = None,
     ) -> None:
         self._fn = fn
+        # E2E-REAL-6F: a deferred AST emission (``_jit_emit_graph_ir`` bound to
+        # this decoration's inputs). ``graph_ir`` and the fields derived from it
+        # stay unset until something reads one; see ``_AST_DERIVED_FIELDS``.
+        if deferred_emission is None and graph_ir is None:
+            raise TypeError("JitFn needs a graph_ir module or a deferred_emission")
+        self._ast_emission = deferred_emission
+        self._ast_emission_error = None
+        self._ast_lock = threading.Lock()
+        eager_module = graph_ir if deferred_emission is None else None
         self._frontend_batch_axes: tuple[int | None, ...] | None = None
         self._frontend_batch_depth: int = 0
         self._frontend_output_permutation: tuple[int, ...] | None = None
-        self.graph_ir = graph_ir
-        # Decoration-time AST capture is a differential/compatibility oracle,
-        # never the post-specialization compiler authority.  The first concrete
-        # trace replaces ``graph_ir`` while this immutable candidate remains
-        # available only to explicit frontend certificates.
-        self._legacy_graph_ir = (
-            None
-            if graph_ir.module_attrs.get("tessera.frontend.authority") == '"tracer"'
-            else graph_ir
-        )
+        if eager_module is not None:
+            self.graph_ir = eager_module
+            # Decoration-time AST capture is a differential/compatibility
+            # oracle, never the post-specialization compiler authority.  The
+            # first concrete trace replaces ``graph_ir`` while this immutable
+            # candidate remains available only to explicit frontend
+            # certificates.
+            self._legacy_graph_ir = (
+                None
+                if eager_module.module_attrs.get("tessera.frontend.authority") == '"tracer"'
+                else eager_module
+            )
         self._frontend_source_text = source_text
         # Call-time constraint binding belongs to the stable Python ABI, not to
         # the post-specialization tracer module.  Tracer authority may replace
@@ -536,7 +644,8 @@ class JitFn:
         # The signature is the source `lower` reads these off anyway, so derive
         # them rather than accept their absence (Decision #30).
         ir_args = (
-            tuple(graph_ir.functions[0].args) if graph_ir.functions
+            tuple(eager_module.functions[0].args)
+            if eager_module is not None and eager_module.functions
             else _signature_ir_args(fn)
         )
         self._call_arg_names = tuple(argument.name for argument in ir_args)
@@ -561,20 +670,22 @@ class JitFn:
             try:
                 from .trace import function_needs_tracer
 
-                self._needs_trace = function_needs_tracer(graph_ir, fn)
+                self._needs_trace = function_needs_tracer(self.graph_ir, fn)
             except Exception:
                 self._needs_trace = False
         self.attn_config = attn_config
-        self.cpu_plan = cpu_plan
-        self.compile_bundle = compile_bundle
+        if deferred_emission is None:
+            self.cpu_plan = cpu_plan
+            self.compile_bundle = compile_bundle
         # C.3 — canonical answer (typed artifacts + named gates + executable
         # | reason) from the same compile that produced ``compile_bundle``.
         # ``compile_result.bundle is compile_bundle`` post-retrofit; the new
         # field is the one-typed-surface every consumer should reach for.
-        self.compile_result = compile_result
+        if deferred_emission is None:
+            self.compile_result = compile_result
+            self.lowering_diagnostics = tuple(lowering_diagnostics or [])
         self.cpu_tile = tuple(int(v) for v in cpu_tile)
         self.source_origin = source_origin
-        self.lowering_diagnostics = tuple(lowering_diagnostics or [])
         self.native_required = bool(native_required)
         # Autodiff unification — the validated differentiation request (or None)
         # and its mode-neutral provenance facet. Reverse mode is additionally
@@ -607,8 +718,9 @@ class JitFn:
         # user helper, an unresolved spelling). Every lane below executes the
         # emitted graph, so with any of these present it would run a
         # truncated program and return its partial result as the answer.
-        self._frontend_dropped_calls: Tuple[str, ...] = tuple(
-            getattr(graph_ir, "frontend_unlowered_calls", ()) or ())
+        if deferred_emission is None:
+            self._frontend_dropped_calls = tuple(
+                getattr(graph_ir, "frontend_unlowered_calls", ()) or ())
         # Phase 8.2 launch-overhead reduction: the artifact + its metadata
         # depend only on immutable construction inputs, so we lazily build
         # them once and reuse on every __call__. Without caching the small-
@@ -627,7 +739,8 @@ class JitFn:
         # execute. Decoration compiles it from the emitted module; once the
         # tracer holds authority for a call, the plan compiled from the traced
         # module replaces it for that call, one compile per specialization.
-        self._decoration_compile = (cpu_plan, compile_bundle, compile_result)
+        if deferred_emission is None:
+            self._decoration_compile = (cpu_plan, compile_bundle, compile_result)
         self._traced_plan_specializations: Dict[int, _TracedPlan] = {}
         self._executed_traced_plan: Optional[_TracedPlan] = None
         self._decoration_artifact: Any = None
@@ -1214,7 +1327,11 @@ class JitFn:
             # effect scan with no unresolved call, so what the AST dropped is a
             # helper the trace ran through. Only the AST plan is truncated by
             # those drops, and only it is replaced by the original function.
-            dropped_calls = self._dropped_calls_for_this_call()
+            # With a traced plan and the AST still unbuilt, there is no AST
+            # plan for a drop to truncate and no package recognized from it.
+            dropped_calls = (
+                () if self._executed_traced_plan is not None and self.ast_emission_pending
+                else self._dropped_calls_for_this_call())
             if dropped_calls and self._executed_traced_plan is None:
                 return self._eager_for_dropped_calls(args, kwargs, dropped_calls)
             plan_frontend = "tracer" if self._executed_traced_plan is not None else "ast"
@@ -1672,9 +1789,16 @@ class JitFn:
             # trace: a zero-function one (apple_gpu trace-defer, auto_batch
             # skip) must not fail a capture that never needed it. Both fields
             # already have their fallback in scope -- the qualname hash this
-            # line computes anyway, and the function's own name.
+            # line computes anyway, and the function's own name. A deferred
+            # emission is not built for them: the AST names the function
+            # ``__name__``, and its ordinary lowering leaves ``source_hash``
+            # unset -- this fallback. (Its abstract trace of an annotated body
+            # hashes the source text instead; a deferred call keeps the
+            # qualname hash, an identity, not an input to the program.)
             emitted = (
-                self.graph_ir.functions[0] if self.graph_ir.functions else None
+                self.graph_ir.functions[0]
+                if not self.ast_emission_pending and self.graph_ir.functions
+                else None
             )
             source_hash = (
                 emitted.source_hash if emitted is not None else None
@@ -1774,7 +1898,9 @@ class JitFn:
         # ``graph_ir``. (``self.graph_ir`` is the gate, not
         # ``_legacy_graph_ir`` -- the latter is ``None`` for a tracer-authored
         # module, which HAS a function and must still be probed.)
-        if not self.graph_ir.functions:
+        # A deferred emission is never one of those routes (both are
+        # apple_gpu), so it will emit a function and must not be built here.
+        if not self.ast_emission_pending and not self.graph_ir.functions:
             self.frontend_authority = "legacy_candidate_no_emitted_function"
             return
         has_nvfp4 = any(isinstance(value, NVFP4Tensor) for value in ordered)
@@ -1820,13 +1946,19 @@ class JitFn:
         failed or produced a plan the decoration one is not. A traced module
         is specialized to one signature, so the compile is cached on it.
         """
-        decoration_plan, decoration_bundle, _ = self._decoration_compile
         # The target comes from the decorator, not the decoration plan: an AST
         # module truncated by a dropped call (``return helper(x)``) compiles
         # to no plan, and the trace that ran through the helper still does.
         target_kind = str(normalize_target_kind(self.target))
-        if target_kind not in self._TRACED_PLAN_TARGETS or (
-                decoration_plan is not None and decoration_plan.target_kind != target_kind):
+        if target_kind not in self._TRACED_PLAN_TARGETS:
+            return None
+        # A deferred AST emission is compared against only if the traced plan
+        # cannot stand on its own (below); building it here would cost every
+        # tracer-authority call the AST lowering this deferral exists to skip.
+        ast_pending = self.ast_emission_pending
+        decoration_plan, decoration_bundle = (
+            (None, None) if ast_pending else self._decoration_compile[:2])
+        if decoration_plan is not None and decoration_plan.target_kind != target_kind:
             return None
         # A batched or differentiated trace is projected for its own consumers
         # (native vmap, the AD owners); it is not the program these lanes run.
@@ -1860,8 +1992,18 @@ class JitFn:
         if plan is None or plan.target_kind != target_kind:
             self.executed_plan_fallback_reason = "traced module compiled to no plan for this target"
             return None
+        if ast_pending and not bundle.executable:
+            # Not a plan a lane runs on its own: build the AST plan and apply
+            # the comparison below, as for an eagerly emitted decoration.
+            ast_pending = False
+            decoration_plan, decoration_bundle = self._decoration_compile[:2]
+            if decoration_plan is not None and decoration_plan.target_kind != target_kind:
+                return None
         decoration_executable = bool(decoration_bundle is not None and decoration_bundle.executable)
-        if decoration_plan is None:
+        if ast_pending:
+            # An executable traced plan, and no AST plan was built to compare.
+            pass
+        elif decoration_plan is None:
             # Nothing to compare with: the AST module compiled to no plan, and
             # selecting a traced plan lifts the dropped-call guard. Only a plan
             # a lane will run may do that; the Apple lanes run an executable
@@ -1909,7 +2051,10 @@ class JitFn:
             self._decoration_artifact = self._cached_artifact
         else:
             current.artifact = self._cached_artifact
-        if entry is None:
+        if entry is None and self.ast_emission_pending:
+            # Back to "the decoration plan", which nothing has built yet.
+            del self.cpu_plan, self.compile_bundle, self.compile_result
+        elif entry is None:
             self.cpu_plan, self.compile_bundle, self.compile_result = self._decoration_compile
         else:
             self.cpu_plan = entry.cpu_plan
@@ -4992,7 +5137,14 @@ class JitFn:
                     "python_equivalence": "caller_declared", "automatic_selection": False},
                 abi_signature="tessera.native_storage.v1")
 
-        diagnostics = [d.format() for d in self.lowering_diagnostics]
+        # A decoration's lowering diagnostics are its compile bundle's. A traced
+        # plan run before the AST was built reports the traced bundle's; the
+        # AST's would describe a lowering this call did not execute.
+        if self._executed_traced_plan is not None and self.ast_emission_pending:
+            lowering = self.compile_bundle.diagnostics if self.compile_bundle is not None else ()
+        else:
+            lowering = self.lowering_diagnostics
+        diagnostics = [d.format() for d in lowering]
         bundle_metadata = self.compile_bundle.to_metadata() if self.compile_bundle is not None else {}
         metadata: dict[str, Any] = {
             "target": self.cpu_plan.target_kind if self.cpu_plan is not None else normalize_target_kind(self.target),
@@ -5944,25 +6096,49 @@ def jit(
             _auto_batch and target_kind == "apple_gpu" and not emit_package)
 
         # ── Step 6: emit Graph IR (incl. auto_batch-skip + trace-defer) ─────
-        emission = _jit_emit_graph_ir(
-            fn,
-            source_text=source_text,
-            source_origin=source_origin,
-            target=target,
-            target_kind=target_kind,
-            deterministic=deterministic,
-            seed=seed,
-            cpu_tile=cpu_tile,
-            inferred_effect=inferred_effect,
-            constraints=solver.constraints,
-            skip_graph_ir=_skip_graph_ir,
-        )
-        module = emission.module
-        cpu_plan = emission.cpu_plan
-        compile_bundle = emission.compile_bundle
-        compile_result = emission.compile_result
-        diagnostics = emission.diagnostics
-        _trace_deferred = emission.trace_deferred
+        def _emit() -> _GraphIREmission:
+            return _jit_emit_graph_ir(
+                fn,
+                source_text=source_text,
+                source_origin=source_origin,
+                target=target,
+                target_kind=target_kind,
+                deterministic=deterministic,
+                seed=seed,
+                cpu_tile=cpu_tile,
+                inferred_effect=inferred_effect,
+                constraints=solver.constraints,
+                skip_graph_ir=_skip_graph_ir,
+            )
+
+        # E2E-REAL-6F: the AST module is a legacy-candidate plan, not the
+        # compiler authority, so emit it only when something reads it. Every
+        # decoration-time reader is excluded here: any non-``cpu`` target
+        # (compiling the module is where target legality refuses an op the
+        # target lacks -- LEGALITY_TARGET_CAPABILITY, fail-closed at
+        # decoration -- and the Apple targets also read it for the tracer
+        # gate, the `.mtlpackage` recognizer and the AST-vs-traced executable
+        # comparison), a differentiation request (its intent is written into
+        # the module), and the bounded LHS dispatcher. The ``cpu`` reference
+        # target accepts every catalog op, so it loses no refusal.
+        _defer_ast = (
+            target_kind == "cpu"
+            and autodiff is None and wrt is None
+            and shape_bounds is None
+            and source_text is not None)
+        if _defer_ast:
+            module = None
+            cpu_plan = compile_bundle = compile_result = None
+            diagnostics = []
+            _trace_deferred = False
+        else:
+            emission = _emit()
+            module = emission.module
+            cpu_plan = emission.cpu_plan
+            compile_bundle = emission.compile_bundle
+            compile_result = emission.compile_result
+            diagnostics = emission.diagnostics
+            _trace_deferred = emission.trace_deferred
 
         # ── Step 6a: refuse a native target that would drop a tessera.ops call ─
         # Same failure as the Step 0 source refusal, reached by a different
@@ -5996,7 +6172,7 @@ def jit(
         # the actual `.mtlpackage`. Recognition is recorded on the artifact
         # regardless of host (no GPU touched here).
         recognized_package = None
-        if target_kind == "apple_gpu":
+        if target_kind == "apple_gpu" and module is not None:
             try:
                 from .apple_package_author import recognize_op
                 recognized_package = recognize_op(module)
@@ -6013,6 +6189,8 @@ def jit(
 
         diff_request = _ad.build_request(
             fn, autodiff=autodiff, wrt=wrt, native_required=native_required)
+        if _defer_ast and diff_request is not None:
+            raise AssertionError("a deferred AST emission has no differentiation request")
         # Phase 4 (A3): source the native-backward hook from the execution
         # matrix via the program's component ops — the backward is native only if
         # every differentiable op has a device-proven backward on this target.
@@ -6075,6 +6253,7 @@ def jit(
             shape_bounds=shape_bounds,
             bounded_source_certificate=bounded_certificate,
             bounded_rhs_storage_order=rhs_storage_order,
+            deferred_emission=_emit if _defer_ast else None,
         )
         if _trace_deferred:
             # AST emission failed → the tracer is the only execution path. Force

@@ -52,7 +52,12 @@ def test_non_apple_gpu_still_raises_on_ast_failure():
         return ts.ops.add(h, x if x.shape == h.shape else h)
 
     with pytest.raises(TesseraJitError):
-        ts.jit(target="cpu")(bad)
+        ts.jit(target="apple_cpu")(bad)
+    # ``cpu`` defers the AST emission (E2E-REAL-6F): the failure is raised by
+    # the first reader of the AST module instead of at decoration.
+    deferred = ts.jit(target="cpu")(bad)
+    with pytest.raises(TesseraJitError):
+        _ = deferred.graph_ir
 
 
 @gpu

@@ -100,6 +100,9 @@ def test_traced_plan_is_compiled_once_per_specialization(monkeypatch):
 
 def test_a_failed_traced_compile_runs_the_decoration_plan_and_says_why(monkeypatch):
     mlp = _mlp()
+    # The decoration plan is built before the compiler breaks: only the
+    # traced compile is meant to fail (``cpu`` defers the AST emission).
+    assert mlp._decoration_compile[0] is not None
 
     def broken(*_args, **_kwargs):
         raise RuntimeError("synthetic compile failure")

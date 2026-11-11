@@ -186,3 +186,53 @@ def test_ops_lowered_from_syntax_are_checked(monkeypatch):
     # ``x + y`` is no call, so the effect scan does not list it.
     assert not _scan_admits_target_capability(_syntax_only, "x86", None)
     assert not ts.jit(target="x86")(_syntax_only).ast_emission_pending
+
+
+# ── A native tracer-authority call never builds the AST either ───────────────
+
+def _x2() -> np.ndarray:
+    # Rank 2: rocm legality refuses rank-1 elementwise ops.
+    return np.array([[-1.0, 2.0], [0.5, -3.0]], dtype=np.float32)
+
+
+@pytest.mark.parametrize("target", ["rocm", "x86", "nvidia_sm120"])
+def test_a_native_tracer_authority_call_never_builds_the_ast(target):
+    fn = ts.jit(target=target)(_body)
+    x = _x2()
+    for _ in range(2):
+        np.testing.assert_allclose(fn(x, x), _expected(x), rtol=1e-6)
+        assert fn.frontend_authority == "tracer"
+    assert fn.ast_emission_pending
+
+
+def test_native_required_keeps_the_dropped_call_guard():
+    # Its refusal names what the AST dropped, so the module is built.
+    fn = ts.jit(target="x86", native_required=True)(_body)
+    np.testing.assert_allclose(fn(_x2(), _x2()), _expected(_x2()), rtol=1e-6)
+    assert not fn.ast_emission_pending
+
+
+def _prefix_attention(q, k, v):
+    normalized = ts.ops.rmsnorm(q, eps=1e-5, numeric_policy={"accum": "fp32"})
+    return ts.ops.flash_attn(normalized, k, v, causal=False, lse_checkpoint="saved")
+
+
+def _prefix_attention_unsaved(q, k, v):
+    normalized = ts.ops.rmsnorm(q, eps=1e-5, numeric_policy={"accum": "fp32"})
+    return ts.ops.flash_attn(normalized, k, v, causal=False)
+
+
+def test_the_source_attention_gate_reads_the_scan_and_the_trace():
+    from tessera.compiler.jit import _is_source_attention_module
+
+    roots = (np.zeros((1, 2, 3, 4), np.float16), np.zeros((1, 1, 5, 4), np.float16),
+             np.zeros((1, 1, 5, 3), np.float16))
+    fn = ts.jit(target="nvidia_sm120")(_prefix_attention)
+    assert fn._scan_is_source_attention()
+    assert _is_source_attention_module(fn._trace_frontend_capture(roots, {})[0])
+    assert fn.ast_emission_pending
+    # The scan admits the op list; only the trace sees the missing saved LSE.
+    unsaved = ts.jit(target="nvidia_sm120")(_prefix_attention_unsaved)
+    assert unsaved._scan_is_source_attention()
+    assert not _is_source_attention_module(unsaved._trace_frontend_capture(roots, {})[0])
+    assert not ts.jit(target="nvidia_sm120")(_body)._scan_is_source_attention()

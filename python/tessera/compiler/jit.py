@@ -1794,10 +1794,16 @@ class JitFn:
             # ``__name__``, and its ordinary lowering leaves ``source_hash``
             # unset -- this fallback. (Its abstract trace of an annotated body
             # hashes the source text instead; a deferred call keeps the
-            # qualname hash, an identity, not an input to the program.)
+            # qualname hash, an identity, not an input to the program.) Only
+            # the ``cpu`` reference target skips the build: a native target's
+            # routes carry ``source_hash`` into the Tile IR they record, so
+            # their capture keeps the AST's own name and hash.
+            skip_ast = (
+                self.ast_emission_pending
+                and normalize_target_kind(self.target) == "cpu")
             emitted = (
                 self.graph_ir.functions[0]
-                if not self.ast_emission_pending and self.graph_ir.functions
+                if not skip_ast and self.graph_ir.functions
                 else None
             )
             source_hash = (
@@ -5698,6 +5704,43 @@ def _refuse_unlowered_ops_for_native_target(
     )
 
 
+#: Graph ops the AST front end lowers from Python syntax rather than a call,
+#: so the effect scan does not list them.
+_SYNTAX_GRAPH_OPS = {ast.Add: "add", ast.Mult: "mul", ast.Sub: "sub", ast.Div: "div"}
+
+
+def _scan_admits_target_capability(
+    fn: Callable, target_kind: str, source_text: Optional[str],
+) -> bool:
+    """Whether target capability admits every op the body can execute.
+
+    The op-level form of the check the AST module's compilation makes
+    (``check_op_legality`` -> LEGALITY_TARGET_CAPABILITY), over the effect
+    scan's resolved ``tessera.ops`` calls plus the ops Python syntax lowers
+    to. No dtype or rank is known here, so a refusal that depends on one is
+    made by whichever module the call compiles, not at decoration. False --
+    build the AST module now -- when the source cannot be scanned.
+    """
+    from .effect_scan import _function_node, scan_call_effects
+    from .legality import check_op_legality
+
+    scan = scan_call_effects(fn, source_text)
+    node = _function_node(fn, source_text)
+    if not scan.source_available or node is None:
+        return False
+    names = {name for name, _ in scan.ops}
+    for sub in ast.walk(node):
+        if isinstance(sub, (ast.BinOp, ast.AugAssign)) and type(sub.op) in _SYNTAX_GRAPH_OPS:
+            names.add(_SYNTAX_GRAPH_OPS[type(sub.op)])
+        elif isinstance(sub, ast.Attribute) and sub.attr == "T":
+            names.add("transpose")
+    return not any(
+        diag.code == "LEGALITY_TARGET_CAPABILITY"
+        for name in names
+        for diag in check_op_legality(f"tessera.{name}", target=target_kind).diagnostics
+    )
+
+
 def _frontend_jit_diagnostics(builder: GraphIRBuilder) -> List[JitDiagnostic]:
     """Lift a builder's AST-lowering diagnostics into JitDiagnostics."""
     return [
@@ -6113,19 +6156,24 @@ def jit(
 
         # E2E-REAL-6F: the AST module is a legacy-candidate plan, not the
         # compiler authority, so emit it only when something reads it. Every
-        # decoration-time reader is excluded here: any non-``cpu`` target
-        # (compiling the module is where target legality refuses an op the
-        # target lacks -- LEGALITY_TARGET_CAPABILITY, fail-closed at
-        # decoration -- and the Apple targets also read it for the tracer
-        # gate, the `.mtlpackage` recognizer and the AST-vs-traced executable
-        # comparison), a differentiation request (its intent is written into
-        # the module), and the bounded LHS dispatcher. The ``cpu`` reference
-        # target accepts every catalog op, so it loses no refusal.
+        # decoration-time reader is excluded here: the Apple targets (they
+        # read it for the tracer gate, the `.mtlpackage` recognizer and the
+        # AST-vs-traced executable comparison), a differentiation request
+        # (its intent is written into the module), and the bounded LHS
+        # dispatcher. The ``cpu`` reference target accepts every catalog op.
+        # A native target refuses an op it lacks while compiling the module
+        # (LEGALITY_TARGET_CAPABILITY, fail-closed at decoration), so it
+        # defers only when the same capability check over the ops the body
+        # can execute admits every one; otherwise the module is built now and
+        # gives the authoritative answer (a program-level admission such as
+        # gfx1151's quantized MLP included).
         _defer_ast = (
-            target_kind == "cpu"
+            target_kind not in ("apple_cpu", "apple_gpu")
             and autodiff is None and wrt is None
             and shape_bounds is None
-            and source_text is not None)
+            and source_text is not None
+            and (target_kind == "cpu"
+                 or _scan_admits_target_capability(fn, target_kind, source_text)))
         if _defer_ast:
             module = None
             cpu_plan = compile_bundle = compile_result = None

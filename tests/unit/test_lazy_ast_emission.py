@@ -8,6 +8,7 @@ is a legacy candidate is such a reader.
 """
 from __future__ import annotations
 
+import sys
 import threading
 import time
 
@@ -80,16 +81,83 @@ def test_reading_graph_ir_builds_the_ast_module():
     assert fn.cpu_plan is not None and fn.compile_bundle is not None
 
 
-@pytest.mark.parametrize("decorate", [
-    lambda f: ts.jit(target="apple_cpu")(f),
-    lambda f: ts.jit(target="apple_gpu")(f),
-    lambda f: ts.jit(autodiff="reverse", wrt=["x"])(f),
+def test_a_differentiation_request_keeps_the_eager_emission():
+    # Its intent is written into the module.
+    assert not ts.jit(autodiff="reverse", wrt=["x"])(_body).ast_emission_pending
+
+
+# ── The Apple targets defer it too ───────────────────────────────────────────
+
+def _looped(x, y):
+    for _ in range(2):
+        x = tessera.ops.add(x, y)
+    return x
+
+
+def _helper_with_a_branch(v):
+    if v.ndim == 2:
+        return tessera.ops.relu(v)
+    return v
+
+
+def _calls_a_branching_helper(x, y):
+    return _helper_with_a_branch(tessera.ops.add(x, y))
+
+
+def _control_call(x, y):
+    return tessera.control.cond(True, lambda: x, lambda: y)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="the Apple runtimes execute on Darwin only")
+@pytest.mark.parametrize("target", [
+    "apple_cpu",
+    pytest.param("apple_gpu", marks=pytest.mark.hardware_apple_gpu),
 ])
-def test_decoration_time_readers_keep_the_eager_emission(decorate):
-    # The Apple targets read the module (tracer gate, package recognizer, the
-    # AST-vs-traced executable comparison); a differentiation request writes
-    # its intent into it.
-    assert not decorate(_body).ast_emission_pending
+def test_an_apple_tracer_authority_call_never_builds_the_ast(target):
+    fn = ts.jit(target=target)(_body)
+    assert fn.ast_emission_pending
+    x = _x2()
+    for _ in range(2):
+        np.testing.assert_allclose(fn(x, x), _expected(x), rtol=1e-6)
+        assert fn.frontend_authority == "tracer"
+        assert fn.executed_plan_frontend == "tracer"
+    assert fn.ast_emission_pending
+
+
+@pytest.mark.parametrize("body", [_looped, _calls_a_branching_helper, _control_call])
+def test_an_apple_gpu_body_the_tracer_gate_may_route_keeps_the_eager_emission(body):
+    # The Phase-F gate reads the module's scf markers; control flow in the body,
+    # in a helper it calls, or a control.* call keeps it at decoration.
+    assert not ts.jit(target="apple_gpu")(body).ast_emission_pending
+    # apple_cpu has no such gate.
+    assert ts.jit(target="apple_cpu")(body).ast_emission_pending
+
+
+@pytest.mark.parametrize("options", [
+    {"dispatch_via_package": True},
+    {"dispatch_via_package": "auto"},
+    {"auto_batch": True},
+])
+def test_apple_gpu_package_and_auto_batch_routes_keep_the_eager_emission(options):
+    # Both recognize their program from the module (auto_batch skips it).
+    assert not ts.jit(target="apple_gpu", **options)(_body).ast_emission_pending
+
+
+def test_a_deferred_apple_gpu_decoration_recognizes_its_package_on_demand():
+    eager = ts.jit(target="apple_gpu", dispatch_via_package=True)(_body)
+    deferred = ts.jit(target="apple_gpu")(_body)
+    assert deferred.ast_emission_pending
+    assert deferred.recognized_package == eager.recognized_package
+    assert not deferred.ast_emission_pending
+
+
+def test_a_deferred_apple_gpu_emission_failure_still_routes_to_the_tracer():
+    # The gate's one remaining cause, known only once the emission runs.
+    fn = ts.jit(target="apple_gpu")(_drops_a_statement)
+    assert fn.ast_emission_pending
+    assert fn._needs_trace is True
+    assert not fn.ast_emission_pending
+    assert fn._legacy_graph_ir.functions == []
 
 
 def _drops_a_statement(x):

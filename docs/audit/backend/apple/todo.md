@@ -16442,3 +16442,7 @@ On the `cpu` reference target, `@jit` now defers the decoration-time AST Graph I
 ## `E2E-REAL-6F-native-lazy-legality-2026-11-10`: sibling outcome — not applicable (Apple targets keep eager emission)
 
 rocm, x86 and NVIDIA decorations now defer the AST Graph IR module when target capability admits the body. `apple_cpu` and `apple_gpu` are excluded and keep decoration-time emission: they read the module for the tracer gate, the `.mtlpackage` recognizer and the AST-vs-traced executable comparison. The Mac unit suite has the same failing node IDs as the merge base b3f55fc71. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-10--e2e-real-6f-native-targets-defer-the-ast-module-when-capability-admits-the-body))
+
+## `E2E-REAL-6F-native-call-ast-free-2026-11-11`: sibling outcome — not applicable (Apple targets keep eager emission)
+
+Only rocm, x86 and NVIDIA calls skip the AST module. `apple_cpu`/`apple_gpu` still build it at decoration for the tracer gate, the `.mtlpackage` recognizer and the AST-vs-traced comparison; those readers are the next E2E-REAL-6F slice. The Mac unit suite has the same failing node IDs as main 58e85d43e. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-11--e2e-real-6f-a-native-target-tracer-authority-call-no-longer-builds-the-ast-module))

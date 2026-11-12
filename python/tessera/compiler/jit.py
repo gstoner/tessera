@@ -1329,6 +1329,17 @@ class JitFn:
             # those drops, and only it is replaced by the original function.
             # With a traced plan and the AST still unbuilt, there is no AST
             # plan for a drop to truncate and no package recognized from it.
+            # Nor on a native target under tracer authority: the lanes below
+            # execute only a cpu/Apple plan, so its call ends in the original
+            # function whatever the AST dropped. ``native_required`` keeps the
+            # guard, whose refusal names the dropped calls.
+            native_eager = (
+                self.ast_emission_pending
+                and self.frontend_authority == "tracer"
+                and not self.native_required
+                and str(normalize_target_kind(self.target)) not in self._TRACED_PLAN_TARGETS)
+            if native_eager:
+                return self._fn(*args, **kwargs)
             dropped_calls = (
                 () if self._executed_traced_plan is not None and self.ast_emission_pending
                 else self._dropped_calls_for_this_call())
@@ -1794,16 +1805,12 @@ class JitFn:
             # ``__name__``, and its ordinary lowering leaves ``source_hash``
             # unset -- this fallback. (Its abstract trace of an annotated body
             # hashes the source text instead; a deferred call keeps the
-            # qualname hash, an identity, not an input to the program.) Only
-            # the ``cpu`` reference target skips the build: a native target's
-            # routes carry ``source_hash`` into the Tile IR they record, so
-            # their capture keeps the AST's own name and hash.
-            skip_ast = (
-                self.ast_emission_pending
-                and normalize_target_kind(self.target) == "cpu")
+            # qualname hash, an identity, not an input to the program.) No
+            # printer or route reads the function's ``source_hash``: the
+            # ``source_hash`` native Tile IR records is the Graph body hash.
             emitted = (
                 self.graph_ir.functions[0]
-                if not skip_ast and self.graph_ir.functions
+                if not self.ast_emission_pending and self.graph_ir.functions
                 else None
             )
             source_hash = (
@@ -2361,16 +2368,31 @@ class JitFn:
         self.last_fallback_reason = None
         return array
 
+    def _scan_is_source_attention(self) -> bool:
+        """Whether the body's resolved calls are exactly rmsnorm, flash_attn."""
+        cached = self.__dict__.get("_source_attention_scan")
+        if cached is None:
+            from .effect_scan import scan_call_effects
+
+            scan = scan_call_effects(self._fn, self._frontend_source_text)
+            cached = (scan.source_available and not scan.unresolved
+                      and [name for name, _ in scan.ops] == ["rmsnorm", "flash_attn"])
+            self.__dict__["_source_attention_scan"] = cached
+        return cached
+
     def _try_source_attention_call(self, args, kwargs):
         """Consume original normalization/attention SSA through a native program."""
         if (normalize_target_kind(self.target) != "nvidia_sm120"
-                or self.differentiation_request is not None
-                or len(self.graph_ir.functions) != 1
-                or len(self.graph_ir.functions[0].args) != 3
-                or len(self.graph_ir.functions[0].result_types) != 2
-                or [op.op_name for op in self.graph_ir.functions[0].body]
-                   != ["tessera.rmsnorm", "tessera.flash_attn"]
-                or self.graph_ir.functions[0].body[1].kwargs.get("lse_checkpoint") != "saved"):
+                or self.differentiation_request is not None):
+            return _JIT_FALLBACK
+        # With the AST unbuilt, the effect scan stands in for its op list and
+        # the parameter list for its three arguments (a scalar parameter would
+        # make ``input_signature`` raise); the traced module this route
+        # outlines is checked below either way.
+        if self.ast_emission_pending:
+            if len(self.arg_names) != 3 or not self._scan_is_source_attention():
+                return _JIT_FALLBACK
+        elif not _is_source_attention_module(self.graph_ir):
             return _JIT_FALLBACK
         from .prepared_attention_forward import input_signature
         from .native_source_program import outline_source_program
@@ -2386,6 +2408,8 @@ class JitFn:
         call = self._native_source_attention_calls.get(signature)
         if call is None:
             module, _ = self._trace_frontend_capture(args, kwargs)
+            if not _is_source_attention_module(module):
+                return _JIT_FALLBACK
             from copy import deepcopy
             module = deepcopy(module)
             module.module_attrs.update({"tessera.target": '"nvidia_sm120"',
@@ -5741,6 +5765,18 @@ def _scan_admits_target_capability(
     )
 
 
+def _is_source_attention_module(module: GraphIRModule) -> bool:
+    """One function: three roots, rmsnorm into saved-LSE flash_attn, (O, LSE)."""
+    if len(module.functions) != 1:
+        return False
+    function = module.functions[0]
+    return (len(function.args) == 3
+            and len(function.result_types) == 2
+            and [op.op_name for op in function.body]
+            == ["tessera.rmsnorm", "tessera.flash_attn"]
+            and function.body[1].kwargs.get("lse_checkpoint") == "saved")
+
+
 def _frontend_jit_diagnostics(builder: GraphIRBuilder) -> List[JitDiagnostic]:
     """Lift a builder's AST-lowering diagnostics into JitDiagnostics."""
     return [
@@ -6139,20 +6175,31 @@ def jit(
             _auto_batch and target_kind == "apple_gpu" and not emit_package)
 
         # ── Step 6: emit Graph IR (incl. auto_batch-skip + trace-defer) ─────
+        # A deferred emission runs on first read, after the decoration's
+        # ``deterministic_host_for_dashboard`` block may have exited; it renders
+        # its gates under the host mode the decoration saw, as an eager one did.
+        from . import pipeline_gates as _gates
+        _decoration_host_mode = _gates._DASHBOARD_DETERMINISTIC
+
         def _emit() -> _GraphIREmission:
-            return _jit_emit_graph_ir(
-                fn,
-                source_text=source_text,
-                source_origin=source_origin,
-                target=target,
-                target_kind=target_kind,
-                deterministic=deterministic,
-                seed=seed,
-                cpu_tile=cpu_tile,
-                inferred_effect=inferred_effect,
-                constraints=solver.constraints,
-                skip_graph_ir=_skip_graph_ir,
-            )
+            reader_host_mode = _gates._DASHBOARD_DETERMINISTIC
+            _gates._DASHBOARD_DETERMINISTIC = _decoration_host_mode
+            try:
+                return _jit_emit_graph_ir(
+                    fn,
+                    source_text=source_text,
+                    source_origin=source_origin,
+                    target=target,
+                    target_kind=target_kind,
+                    deterministic=deterministic,
+                    seed=seed,
+                    cpu_tile=cpu_tile,
+                    inferred_effect=inferred_effect,
+                    constraints=solver.constraints,
+                    skip_graph_ir=_skip_graph_ir,
+                )
+            finally:
+                _gates._DASHBOARD_DETERMINISTIC = reader_host_mode
 
         # E2E-REAL-6F: the AST module is a legacy-candidate plan, not the
         # compiler authority, so emit it only when something reads it. Every

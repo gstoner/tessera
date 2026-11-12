@@ -186,3 +186,92 @@ def test_ops_lowered_from_syntax_are_checked(monkeypatch):
     # ``x + y`` is no call, so the effect scan does not list it.
     assert not _scan_admits_target_capability(_syntax_only, "x86", None)
     assert not ts.jit(target="x86")(_syntax_only).ast_emission_pending
+
+
+# ── A native tracer-authority call never builds the AST either ───────────────
+
+def _x2() -> np.ndarray:
+    # Rank 2: rocm legality refuses rank-1 elementwise ops.
+    return np.array([[-1.0, 2.0], [0.5, -3.0]], dtype=np.float32)
+
+
+@pytest.mark.parametrize("target", ["rocm", "x86", "nvidia_sm120"])
+def test_a_native_tracer_authority_call_never_builds_the_ast(target):
+    fn = ts.jit(target=target)(_body)
+    x = _x2()
+    for _ in range(2):
+        np.testing.assert_allclose(fn(x, x), _expected(x), rtol=1e-6)
+        assert fn.frontend_authority == "tracer"
+    assert fn.ast_emission_pending
+
+
+def test_native_required_keeps_the_dropped_call_guard():
+    # Its refusal names what the AST dropped, so the module is built.
+    fn = ts.jit(target="x86", native_required=True)(_body)
+    np.testing.assert_allclose(fn(_x2(), _x2()), _expected(_x2()), rtol=1e-6)
+    assert not fn.ast_emission_pending
+
+
+def _prefix_attention(q, k, v):
+    normalized = ts.ops.rmsnorm(q, eps=1e-5, numeric_policy={"accum": "fp32"})
+    return ts.ops.flash_attn(normalized, k, v, causal=False, lse_checkpoint="saved")
+
+
+def _prefix_attention_unsaved(q, k, v):
+    normalized = ts.ops.rmsnorm(q, eps=1e-5, numeric_policy={"accum": "fp32"})
+    return ts.ops.flash_attn(normalized, k, v, causal=False)
+
+
+def test_the_source_attention_gate_reads_the_scan_and_the_trace():
+    from tessera.compiler.jit import _is_source_attention_module
+
+    roots = (np.zeros((1, 2, 3, 4), np.float16), np.zeros((1, 1, 5, 4), np.float16),
+             np.zeros((1, 1, 5, 3), np.float16))
+    fn = ts.jit(target="nvidia_sm120")(_prefix_attention)
+    assert fn._scan_is_source_attention()
+    assert _is_source_attention_module(fn._trace_frontend_capture(roots, {})[0])
+    assert fn.ast_emission_pending
+    # The scan admits the op list; only the trace sees the missing saved LSE.
+    unsaved = ts.jit(target="nvidia_sm120")(_prefix_attention_unsaved)
+    assert unsaved._scan_is_source_attention()
+    assert not _is_source_attention_module(unsaved._trace_frontend_capture(roots, {})[0])
+    assert not ts.jit(target="nvidia_sm120")(_body)._scan_is_source_attention()
+
+
+def _matmul(a, b):
+    return a @ b
+
+
+def test_a_deferred_emission_keeps_the_decoration_host_mode(monkeypatch):
+    # A host with nvcc (Super-Bear) passes the real toolchain gate, so the
+    # dashboard's generic-host rendering is the only reason it fails.
+    from tessera.compiler import pipeline_gates as pg
+
+    real_which = pg.shutil.which
+    monkeypatch.setattr(pg.shutil, "which",
+                        lambda name, *a, **k: "/usr/bin/nvcc" if name == "nvcc"
+                        else real_which(name, *a, **k))
+    with pg.deterministic_host_for_dashboard():
+        fn = ts.jit(target="nvidia_sm90")(_matmul)
+    assert fn.ast_emission_pending
+    assert fn.compile_result.first_failing_gate.gate == "toolchain"
+    assert not pg._DASHBOARD_DETERMINISTIC
+    # Outside the block the same decoration sees the toolchain.
+    assert ts.jit(target="nvidia_sm90")(_matmul).compile_result.first_failing_gate.gate != "toolchain"
+
+
+def _prefix_attention_with_eps(q, k, v, eps=1e-5):
+    normalized = ts.ops.rmsnorm(q, eps=eps, numeric_policy={"accum": "fp32"})
+    return ts.ops.flash_attn(normalized, k, v, causal=False, lse_checkpoint="saved")
+
+
+def test_the_source_attention_gate_declines_a_scalar_parameter():
+    from tessera.compiler.jit import _JIT_FALLBACK
+
+    roots = (np.zeros((1, 2, 3, 4), np.float16), np.zeros((1, 1, 5, 4), np.float16),
+             np.zeros((1, 1, 5, 3), np.float16))
+    fn = ts.jit(target="nvidia_sm120")(_prefix_attention_with_eps)
+    assert fn._scan_is_source_attention()
+    # Declines rather than raising from ``input_signature`` on the scalar.
+    assert fn._try_source_attention_call(roots, {}) is _JIT_FALLBACK
+    assert fn.ast_emission_pending

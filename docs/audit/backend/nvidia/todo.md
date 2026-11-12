@@ -17068,3 +17068,15 @@ On the `cpu` reference target, `@jit` now defers the decoration-time AST Graph I
 ## `E2E-REAL-6F-native-lazy-legality-2026-11-10`: sibling outcome — follow-up required (sm_120 not evaluated)
 
 NVIDIA targets now defer the decoration-time AST Graph IR module when the op-level capability check over the effect scan admits the body. The trace capture still reads the AST module's function name and source hash on NVIDIA targets, because portable NVIDIA routes record `source_hash` in their Tile IR. **Owed:** the sm_120 unit + `tests/device/nvidia` A/B against the merge base b3f55fc71. The run on The-Super-Bear was lost when its WSL2 instance went down mid-sweep, so no sm_120 result exists for this change. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-10--e2e-real-6f-native-targets-defer-the-ast-module-when-capability-admits-the-body))
+
+## `E2E-REAL-6F-native-call-ast-free-2026-11-11`: sibling outcome — parity validated on sm_120
+
+This discharges the owed sm_120 A/B for `E2E-REAL-6F-native-lazy-legality-2026-11-10` above, which found one regression. Deferring the AST emission let it run after a `deterministic_host_for_dashboard` block had exited. On The-Super-Bear, which has `nvcc`, `test_jit_target_nvidia_surfaces_toolchain_gate_at_decoration_time` then reported `runtime_abi` as the first failing gate instead of `toolchain`, deterministically from 58e85d43e on. The deferred thunk now keeps the decoration's host mode.
+
+This slice also stops NVIDIA tracer-authority calls from building the AST module. The sm_120 source-attention gate now reads the effect scan, and the traced module is checked for saved-LSE shape.
+
+Results on The-Super-Bear (RTX 5070):
+- `tests/device/nvidia`: 937 failed / 5,566 passed with identical failing node IDs at b3f55fc71, 58e85d43e and de84fc1f6.
+- `tests/unit` at 14c2e326f: the same failing IDs as b3f55fc71 (23 failed / 86 errors).
+
+([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-11--e2e-real-6f-a-native-target-tracer-authority-call-no-longer-builds-the-ast-module))

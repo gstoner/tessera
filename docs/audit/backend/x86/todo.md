@@ -12680,3 +12680,7 @@ On the `cpu` reference target, `@jit` now defers the decoration-time AST Graph I
 ## `E2E-REAL-6F-native-lazy-legality-2026-11-10`: sibling outcome — parity validated on Princess-Luna
 
 `@jit(target="x86")` defers the decoration-time AST Graph IR module when the op-level capability check over the effect scan admits the body; x86 has no NVFP4/scaled-quantization ops, so a body calling one still builds the module and is refused at decoration. A call still builds the module, because the x86 lane executes the AST plan. Princess-Luna's `tests/unit` failing node IDs match the merge base b3f55fc71. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-10--e2e-real-6f-native-targets-defer-the-ast-module-when-capability-admits-the-body))
+
+## `E2E-REAL-6F-native-call-ast-free-2026-11-11`: sibling outcome — parity validated on Princess-Luna
+
+An `@jit(target="x86")` call under tracer authority no longer builds the deferred AST Graph IR module. Correction to the 2026-11-10 note: the x86 lane does not execute the AST plan. The x86 decoration plan is `artifact_only`, so a call that no native route takes runs the original function, on main as well. `native_required=True` keeps the dropped-call refusal. Princess-Luna's `tests/unit` failing node IDs match main 58e85d43e. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-11--e2e-real-6f-a-native-target-tracer-authority-call-no-longer-builds-the-ast-module))

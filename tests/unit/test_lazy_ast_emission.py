@@ -258,3 +258,20 @@ def test_a_deferred_emission_keeps_the_decoration_host_mode(monkeypatch):
     assert not pg._DASHBOARD_DETERMINISTIC
     # Outside the block the same decoration sees the toolchain.
     assert ts.jit(target="nvidia_sm90")(_matmul).compile_result.first_failing_gate.gate != "toolchain"
+
+
+def _prefix_attention_with_eps(q, k, v, eps=1e-5):
+    normalized = ts.ops.rmsnorm(q, eps=eps, numeric_policy={"accum": "fp32"})
+    return ts.ops.flash_attn(normalized, k, v, causal=False, lse_checkpoint="saved")
+
+
+def test_the_source_attention_gate_declines_a_scalar_parameter():
+    from tessera.compiler.jit import _JIT_FALLBACK
+
+    roots = (np.zeros((1, 2, 3, 4), np.float16), np.zeros((1, 1, 5, 4), np.float16),
+             np.zeros((1, 1, 5, 3), np.float16))
+    fn = ts.jit(target="nvidia_sm120")(_prefix_attention_with_eps)
+    assert fn._scan_is_source_attention()
+    # Declines rather than raising from ``input_signature`` on the scalar.
+    assert fn._try_source_attention_call(roots, {}) is _JIT_FALLBACK
+    assert fn.ast_emission_pending

@@ -2385,10 +2385,12 @@ class JitFn:
         if (normalize_target_kind(self.target) != "nvidia_sm120"
                 or self.differentiation_request is not None):
             return _JIT_FALLBACK
-        # With the AST unbuilt, the effect scan stands in for its op list; the
-        # traced module this route outlines is checked below either way.
+        # With the AST unbuilt, the effect scan stands in for its op list and
+        # the parameter list for its three arguments (a scalar parameter would
+        # make ``input_signature`` raise); the traced module this route
+        # outlines is checked below either way.
         if self.ast_emission_pending:
-            if not self._scan_is_source_attention():
+            if len(self.arg_names) != 3 or not self._scan_is_source_attention():
                 return _JIT_FALLBACK
         elif not _is_source_attention_module(self.graph_ir):
             return _JIT_FALLBACK

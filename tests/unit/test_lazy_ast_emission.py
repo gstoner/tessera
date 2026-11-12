@@ -8,7 +8,6 @@ is a legacy candidate is such a reader.
 """
 from __future__ import annotations
 
-import sys
 import threading
 import time
 
@@ -108,11 +107,10 @@ def _control_call(x, y):
     return tessera.control.cond(True, lambda: x, lambda: y)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="the Apple runtimes execute on Darwin only")
-@pytest.mark.parametrize("target", [
-    "apple_cpu",
-    pytest.param("apple_gpu", marks=pytest.mark.hardware_apple_gpu),
-])
+# Both Apple runtimes execute on the Darwin host only; elsewhere the traced
+# bundle is artifact-only and the call builds the AST plan to compare.
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.parametrize("target", ["apple_cpu", "apple_gpu"])
 def test_an_apple_tracer_authority_call_never_builds_the_ast(target):
     fn = ts.jit(target=target)(_body)
     assert fn.ast_emission_pending

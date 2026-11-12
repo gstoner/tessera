@@ -4,7 +4,8 @@ An AST Graph-IR emission failure no longer hard-fails ``@jit(target="apple_gpu")
 decoration: the tracer executes the function by RUNNING it (it never reads the AST
 graph_ir), so a body the AST can't emit — e.g. surrounding straight-line code +
 a residual + a shape-conditional around a raw loop — still decorates and runs via
-the tracer at call time. Non-apple_gpu targets still raise (they depend on the IR).
+the tracer at call time. Non-apple_gpu targets still raise (they depend on the IR),
+from the first reader of the deferred module (E2E-REAL-6F).
 """
 
 import numpy as np
@@ -51,13 +52,14 @@ def test_non_apple_gpu_still_raises_on_ast_failure():
             h = ts.ops.silu(ts.ops.matmul(h, w))
         return ts.ops.add(h, x if x.shape == h.shape else h)
 
-    with pytest.raises(TesseraJitError):
-        ts.jit(target="apple_cpu")(bad)
-    # ``cpu`` defers the AST emission (E2E-REAL-6F): the failure is raised by
-    # the first reader of the AST module instead of at decoration.
-    deferred = ts.jit(target="cpu")(bad)
-    with pytest.raises(TesseraJitError):
-        _ = deferred.graph_ir
+    # ``cpu`` and ``apple_cpu`` defer the AST emission (E2E-REAL-6F): the
+    # failure is raised by the first reader of the AST module instead of at
+    # decoration.
+    for target in ("apple_cpu", "cpu"):
+        deferred = ts.jit(target=target)(bad)
+        assert deferred.ast_emission_pending
+        with pytest.raises(TesseraJitError):
+            _ = deferred.graph_ir
 
 
 @gpu

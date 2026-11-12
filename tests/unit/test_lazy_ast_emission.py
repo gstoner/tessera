@@ -236,3 +236,25 @@ def test_the_source_attention_gate_reads_the_scan_and_the_trace():
     assert unsaved._scan_is_source_attention()
     assert not _is_source_attention_module(unsaved._trace_frontend_capture(roots, {})[0])
     assert not ts.jit(target="nvidia_sm120")(_body)._scan_is_source_attention()
+
+
+def _matmul(a, b):
+    return a @ b
+
+
+def test_a_deferred_emission_keeps_the_decoration_host_mode(monkeypatch):
+    # A host with nvcc (Super-Bear) passes the real toolchain gate, so the
+    # dashboard's generic-host rendering is the only reason it fails.
+    from tessera.compiler import pipeline_gates as pg
+
+    real_which = pg.shutil.which
+    monkeypatch.setattr(pg.shutil, "which",
+                        lambda name, *a, **k: "/usr/bin/nvcc" if name == "nvcc"
+                        else real_which(name, *a, **k))
+    with pg.deterministic_host_for_dashboard():
+        fn = ts.jit(target="nvidia_sm90")(_matmul)
+    assert fn.ast_emission_pending
+    assert fn.compile_result.first_failing_gate.gate == "toolchain"
+    assert not pg._DASHBOARD_DETERMINISTIC
+    # Outside the block the same decoration sees the toolchain.
+    assert ts.jit(target="nvidia_sm90")(_matmul).compile_result.first_failing_gate.gate != "toolchain"

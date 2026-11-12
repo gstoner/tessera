@@ -6173,20 +6173,31 @@ def jit(
             _auto_batch and target_kind == "apple_gpu" and not emit_package)
 
         # ── Step 6: emit Graph IR (incl. auto_batch-skip + trace-defer) ─────
+        # A deferred emission runs on first read, after the decoration's
+        # ``deterministic_host_for_dashboard`` block may have exited; it renders
+        # its gates under the host mode the decoration saw, as an eager one did.
+        from . import pipeline_gates as _gates
+        _decoration_host_mode = _gates._DASHBOARD_DETERMINISTIC
+
         def _emit() -> _GraphIREmission:
-            return _jit_emit_graph_ir(
-                fn,
-                source_text=source_text,
-                source_origin=source_origin,
-                target=target,
-                target_kind=target_kind,
-                deterministic=deterministic,
-                seed=seed,
-                cpu_tile=cpu_tile,
-                inferred_effect=inferred_effect,
-                constraints=solver.constraints,
-                skip_graph_ir=_skip_graph_ir,
-            )
+            reader_host_mode = _gates._DASHBOARD_DETERMINISTIC
+            _gates._DASHBOARD_DETERMINISTIC = _decoration_host_mode
+            try:
+                return _jit_emit_graph_ir(
+                    fn,
+                    source_text=source_text,
+                    source_origin=source_origin,
+                    target=target,
+                    target_kind=target_kind,
+                    deterministic=deterministic,
+                    seed=seed,
+                    cpu_tile=cpu_tile,
+                    inferred_effect=inferred_effect,
+                    constraints=solver.constraints,
+                    skip_graph_ir=_skip_graph_ir,
+                )
+            finally:
+                _gates._DASHBOARD_DETERMINISTIC = reader_host_mode
 
         # E2E-REAL-6F: the AST module is a legacy-candidate plan, not the
         # compiler authority, so emit it only when something reads it. Every

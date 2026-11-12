@@ -14952,3 +14952,35 @@ ROCm: parity validated on gfx1151 and gfx1201. x86: parity validated on Princess
 Remaining: native-target calls still build the module through the three readers above; making them AST-free is the next slice (dropped calls from the scan on trace failure, the source-attention gate from the source, and x86 executing a traced plan). The Apple readers and the legacy-candidate calls remain after that.
 Evidence: python/tessera/compiler/jit.py; tests/unit/test_lazy_ast_emission.py; tests/unit/test_jit_zero_function_candidate.py
 <!-- entry-fields:end -->
+
+### 2026-11-11 — E2E-REAL-6F: a native-target tracer-authority call no longer builds the AST module
+
+Owner: [E2E-REAL-6F](INTEGRATED_COMPILER_PLAN.md#e2e-real-6f)
+PRs: branch `claude/e2e6f-native-call-ast-free`; sync E2E-REAL-6F-native-call-ast-free-2026-11-11.
+Outcome: a rocm, x86 or NVIDIA call under tracer authority now runs without building the deferred AST Graph IR module. Before this, the three call-path readers named in the 2026-11-10 entry each built it:
+- **Trace capture** read the AST function's name and source hash to stamp the traced function. It now stamps them only when the module already exists. No printer or route reads the function-level `source_hash`: the `source_hash` that portable NVIDIA Tile IR records is the Graph body hash (`portable_nvidia_source_reverse.py`). The printed Graph IR is identical with or without it.
+- **`_try_source_attention_call`** (sm_120) matched the AST module's op list. With the module unbuilt it now reads the effect scan's resolved calls (exactly `rmsnorm`, `flash_attn`). The traced module the route outlines is then checked for the same shape (three roots, two results, saved-LSE `flash_attn`) whichever way the gate was reached.
+- **The dropped-call guard** now returns the original function directly for a native tracer-authority call. Every lane after it executes only a `cpu`/Apple plan; a native decoration plan is `artifact_only`, so such a call ended in the original function on `main` too, whatever the AST dropped. `native_required=True` keeps the guard, whose refusal names the dropped calls.
+
+Fix carried with it, a #1060 regression that only sm_120 could see: a deferred emission runs on first read, which can be after a `deterministic_host_for_dashboard` block has exited. On Super-Bear, which has `nvcc`, the gates then saw the real toolchain. `test_jit_target_nvidia_surfaces_toolchain_gate_at_decoration_time` failed deterministically from 58e85d43e on, with `runtime_abi` reported first instead of `toolchain`. The Mac has no `nvcc`, so its toolchain gate fails either way, which hid it. The deferred thunk now renders under the host mode its decoration saw. The new test fakes `nvcc` and reproduces the sm_120 failure on the Mac without the fix.
+
+Correction to the 2026-11-10 entry, two claims withdrawn:
+- "portable NVIDIA routes record `source_hash` in their Tile IR" was read as the function's source hash. It is the Graph body hash, and the function-level field has no consumer.
+- "x86, whose lane executes the AST plan" is wrong. The x86 decoration plan is `artifact_only`, and an x86 call that no native route takes runs the original function.
+
+Probe (Mac unit suite, before the `native_required` exclusion): exactly one native call took the new path, rocm `test_jit_zero_function_candidate._unlowerable_intermediate`. Its AST emission fails, so `main` raised at the call; the branch runs the traced program, the same contract as `cpu`. No dropped-call reason changed.
+
+Not changed, pre-existing: a native call that no native route takes falls through to the original function and records no `FallbackReason`, and `native_required` does not refuse that fall-through.
+
+Measured (unsandboxed; scratch worktrees over each box's shared build trees):
+- **Mac M1 Max (macOS 27.2)**, `tests/unit -m "not slow" -n 8`, main 58e85d43e vs de84fc1f6: identical failing node IDs (345 failed, 413 errors on both); the extra passes are the new tests. At 14c2e326f: identical IDs again (32,964 passed, the new host-mode test).
+- **Princess-Luna (gfx1151)**, 58e85d43e vs de84fc1f6: `tests/unit` 327 failed / 327 errors on both; `tests/device/rocm` 93 failed / 201 passed on both; identical IDs. `tests/unit` at 14c2e326f: identical IDs (327 failed / 327 errors).
+- **Tajasarus (gfx1201)**, `TESSERA_ROCM_CHIP=gfx1201`, `TESSERA_GFX1201_DEVICE_PROOF=1`: `tests/unit` 347 failed / 313 errors on both; `tests/device/rocm` 178 failed / 3,675 passed on both; identical IDs. `tests/unit` at 14c2e326f: identical IDs except one: `test_stdlib_dspark_perf.py::test_ds2_runtime_launch_overhead_is_bounded_against_ds1_oracle`, a launch-overhead timing bound that failed once under a load average of ~35 on 16 threads. Rerun alone, it passed 3 of 3 at both 58e85d43e and 14c2e326f.
+- **The-Super-Bear (sm_120)**, chain b3f55fc71 → 58e85d43e → de84fc1f6, which also supplies the sm_120 A/B the 2026-11-10 entry owed:
+  - `tests/unit` 23 → 24 failed (86 errors throughout). The one new failure is the host-mode regression above. At 14c2e326f `test_jit_canonical_compile.py` + `test_lazy_ast_emission.py` pass (32). Full suite at 14c2e326f: 23 failed / 86 errors, the same node IDs as b3f55fc71.
+  - `tests/device/nvidia` b3f55fc71 → 58e85d43e: 937 failed / 5,566 passed on both, identical IDs. 58e85d43e → de84fc1f6: 937 failed / 5,566 passed on both, identical IDs.
+
+ROCm: parity validated on gfx1151 and gfx1201. x86: parity validated on Princess-Luna. NVIDIA: parity validated on sm_120 (RTX 5070); this also discharges the 2026-11-10 entry's owed sm_120 A/B. Apple: not applicable (the Apple targets keep decoration-time emission), Mac sweep identical.
+Remaining: the Apple decoration readers (tracer gate, `.mtlpackage` recognizer, AST-vs-traced comparison) and legacy-candidate calls still build the module; then the route census and `_OpExtractor` deletion.
+Evidence: python/tessera/compiler/jit.py; tests/unit/test_lazy_ast_emission.py
+<!-- entry-fields:end -->

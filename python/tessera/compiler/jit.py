@@ -532,6 +532,10 @@ class JitFn:
         """True while the decoration-time AST Graph IR has not been built."""
         return self._ast_emission is not None
 
+    _needs_trace_value: Optional[bool]
+    _recognized_package: Optional[Any]
+    _recognized_package_pending: bool
+
     @property
     def _needs_trace(self) -> bool:
         """Whether this apple_gpu call routes through the Phase-F tracer.
@@ -716,7 +720,7 @@ class JitFn:
         # source that the gate cannot fire on control flow; whether the AST
         # emission fails (and so trace-defers) is known only once it runs,
         # so the answer stays open (``None``) until then.
-        self._needs_trace_value: Optional[bool] = False
+        self._needs_trace_value = False
         if target == "apple_gpu":
             if deferred_emission is not None:
                 self._needs_trace_value = None

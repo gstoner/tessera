@@ -12684,3 +12684,7 @@ On the `cpu` reference target, `@jit` now defers the decoration-time AST Graph I
 ## `E2E-REAL-6F-native-call-ast-free-2026-11-11`: sibling outcome — parity validated on Princess-Luna
 
 An `@jit(target="x86")` call under tracer authority no longer builds the deferred AST Graph IR module. Correction to the 2026-11-10 note: the x86 lane does not execute the AST plan. The x86 decoration plan is `artifact_only`, so a call that no native route takes runs the original function, on main as well. `native_required=True` keeps the dropped-call refusal. Princess-Luna's `tests/unit` failing node IDs match main 58e85d43e. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-11--e2e-real-6f-a-native-target-tracer-authority-call-no-longer-builds-the-ast-module))
+
+## `E2E-REAL-6F-apple-ast-deferral-2026-11-12`: sibling outcome — not applicable
+
+Apple-target decorations only; no x86 path changed. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-12--e2e-real-6f-the-apple-targets-defer-the-ast-module-when-nothing-reads-it-at-decoration))

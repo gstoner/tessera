@@ -14984,3 +14984,27 @@ ROCm: parity validated on gfx1151 and gfx1201. x86: parity validated on Princess
 Remaining: the Apple decoration readers (tracer gate, `.mtlpackage` recognizer, AST-vs-traced comparison) and legacy-candidate calls still build the module; then the route census and `_OpExtractor` deletion.
 Evidence: python/tessera/compiler/jit.py; tests/unit/test_lazy_ast_emission.py
 <!-- entry-fields:end -->
+
+### 2026-11-12 — E2E-REAL-6F: the Apple targets defer the AST module when nothing reads it at decoration
+
+Owner: [E2E-REAL-6F](INTEGRATED_COMPILER_PLAN.md#e2e-real-6f)
+PRs: branch `claude/e2e6f-apple-ast-deferral`; sync E2E-REAL-6F-apple-ast-deferral-2026-11-12.
+Outcome: `apple_cpu` and `apple_gpu` decorations now defer the AST Graph IR module the way `cpu` and the native targets do, and a tracer-authority call on either runs its traced plan without building it. The 2026-11-11 entry named three Apple readers; each is now either decided without the module or keeps the eager emission:
+- **The AST-vs-traced executable comparison** already handled a deferred emission (the `cpu` slice). With the module unbuilt, an executable traced bundle runs on its own; an artifact-only one still builds the AST plan and compares. `apple_cpu` therefore defers on the same op-level capability check as the native targets.
+- **The Phase-F tracer gate** (`apple_gpu`) read the module's `tessera.scf.*` markers. `_body_may_need_tracer` now answers from syntax: control-flow statements, comprehensions or `try`/`with` in the body or in a plain Python helper it calls, a `control.*` call, a call through a non-Tessera module, or unreadable source keep the eager emission. The one gate cause syntax cannot see, an AST emission failure (which trace-defers), is decided when the emission runs: `_needs_trace` stays open on a deferred decoration and builds the module on first read, except on a call executing a traced plan, which runs that plan.
+- **The `.mtlpackage` recognizer** runs on demand: `recognized_package` builds the module the first time `emit_package` asks. `auto_batch`, `emit_package` and `dispatch_via_package` (including `"auto"` and the global autoroute) keep the eager emission, since each reads the module at decoration or on every call.
+- **The unlowered-op refusal's tracer exemption** read the module (a trace-deferred `apple_gpu` body skipped the refusal). A body calling an uncatalogued `tessera.ops` callable keeps the eager emission, so that decision is unchanged.
+
+Gap closed with it: the package route's dropped-call check read `()` whenever a traced plan ran with the AST unbuilt, so a `dispatch_via_package` set after decoration could execute a truncated AST program. The route now checks the drops itself. `test_dropped_call_scan.py::test_a_truncated_ast_program_never_reaches_the_package_route` caught it.
+
+Behaviour change, by design: an `apple_cpu` body whose AST emission fails now raises `TesseraJitError` from the first reader of the AST plan instead of at decoration, as `cpu`, rocm and x86 already did. Three tests pinned the old timing or used an inline Darwin skip the Apple test inventory refuses; they are updated.
+
+Measured (unsandboxed; scratch worktrees over each box's shared build trees):
+- **Mac M1 Max (macOS 27.2)**, `tests/unit -m "not slow" -n 8`, main 48989e5a5 vs fb133ca8f: 3 new failures, the three tests above. At 175e1a884: identical failing node IDs to main (345 failed, 413 errors on both); the extra passes are the new tests.
+- **Princess-Luna (gfx1151, Ubuntu 26.04 WSL2)**, ROCm env sourced, `TESSERA_ROCM_CHIP=gfx1151`: `tests/unit -m "not slow" -n 8`, main 48989e5a5 vs fb133ca8f: the same 3 expected new failures and nothing else; `tests/device/rocm` 93 failed / 201 passed on both with identical failing IDs. At 175e1a884: identical failing unit node IDs to main (327 failed, 327 errors on both).
+
+ROCm: parity validated on gfx1151 (Princess-Luna); gfx1201 not run, the change touches only Apple-target decorations and the `apple_gpu` package route. x86: not applicable (no x86 path changed). NVIDIA: not applicable (no NVIDIA path changed). Apple: Mac sweep identical; the deferred `apple_cpu`/`apple_gpu` tracer-authority calls execute on the M1 Max (`test_an_apple_tracer_authority_call_never_builds_the_ast`).
+Not measured: how many Apple decorations in the suite now defer, and how many Apple calls stay AST-free.
+Remaining: legacy-candidate calls (non-tensor, effectful and unmigrated signatures) and the eager Apple cases above still build the module; then the route census and `_OpExtractor` deletion.
+Evidence: python/tessera/compiler/jit.py; tests/unit/test_lazy_ast_emission.py; tests/unit/test_jit_zero_function_candidate.py
+<!-- entry-fields:end -->

@@ -19575,3 +19575,7 @@ On the `cpu` reference target, `@jit` now defers the decoration-time AST Graph I
 ## `E2E-REAL-6F-native-call-ast-free-2026-11-11`: sibling outcome — parity validated on gfx1151 and gfx1201
 
 A `@jit(target="rocm")` call under tracer authority no longer builds the deferred AST Graph IR module: the trace capture stops reading it, and the dropped-call guard is skipped because no later lane runs a rocm plan. In the Mac suite, one rocm call took the new path: a body whose AST emission fails now runs its traced program instead of raising at the call, as on `cpu`. Princess-Luna (gfx1151) and Tajasarus (gfx1201): `tests/unit` and `tests/device/rocm` have the same failing node IDs as main 58e85d43e. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-11--e2e-real-6f-a-native-target-tracer-authority-call-no-longer-builds-the-ast-module))
+
+## `E2E-REAL-6F-apple-ast-deferral-2026-11-12`: sibling outcome — parity validated on gfx1151
+
+Apple-target decorations only; no rocm path changed. Princess-Luna (gfx1151) `tests/unit` and `tests/device/rocm` were run as the Linux host for the Apple targets' artifact-only branch (see the log). gfx1201 not run: nothing it owns changed. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-12--e2e-real-6f-the-apple-targets-defer-the-ast-module-when-nothing-reads-it-at-decoration))

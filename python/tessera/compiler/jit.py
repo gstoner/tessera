@@ -532,6 +532,49 @@ class JitFn:
         """True while the decoration-time AST Graph IR has not been built."""
         return self._ast_emission is not None
 
+    _needs_trace_value: Optional[bool]
+    _recognized_package: Optional[Any]
+    _recognized_package_pending: bool
+
+    @property
+    def _needs_trace(self) -> bool:
+        """Whether this apple_gpu call routes through the Phase-F tracer.
+
+        Open only on a deferred decoration, where the one remaining cause is
+        an AST emission failure. A call executing a traced plan runs that
+        plan, so it does not ask; any other reader builds the module.
+        """
+        if self._needs_trace_value is None:
+            if self._executed_traced_plan is not None:
+                return False
+            self._materialize_ast_emission()
+            if self._needs_trace_value is None:
+                self._needs_trace_value = False
+        return bool(self._needs_trace_value)
+
+    @_needs_trace.setter
+    def _needs_trace(self, value: bool) -> None:
+        self._needs_trace_value = bool(value)
+
+    @property
+    def recognized_package(self) -> Optional[Any]:
+        """The authorable `.mtlpackage` region recognized from the AST module."""
+        if self._recognized_package_pending:
+            module = self._legacy_graph_ir
+            self._recognized_package_pending = False
+            if module is not None:
+                try:
+                    from .apple_package_author import recognize_op
+                    self._recognized_package = recognize_op(module)
+                except Exception:
+                    self._recognized_package = None
+        return self._recognized_package
+
+    @recognized_package.setter
+    def recognized_package(self, value: Optional[Any]) -> None:
+        self._recognized_package_pending = False
+        self._recognized_package = value
+
     def _materialize_ast_emission(self) -> None:
         """Run the deferred AST emission and fill every field still unset.
 
@@ -574,6 +617,14 @@ class JitFn:
             }
             for name, value in derived.items():
                 self.__dict__.setdefault("_ast_slot_" + name, value)
+            if self.__dict__.get("_needs_trace_value", False) is None:
+                # The decoration's tracer gate, as an eager emission sets it.
+                from .trace import function_needs_tracer
+                try:
+                    needs = function_needs_tracer(module, self._fn)
+                except Exception:
+                    needs = False
+                self._needs_trace_value = bool(emission.trace_deferred or needs)
             self._ast_emission = None
 
     def __init__(
@@ -665,14 +716,21 @@ class JitFn:
         # running path; pure straight-line functions keep the existing
         # package/auto_batch/canonical path untouched. Detected once at
         # decoration; best-effort (a detect bug must not break decoration).
-        self._needs_trace: bool = False
+        # A deferred apple_gpu decoration (E2E-REAL-6F) has shown from its
+        # source that the gate cannot fire on control flow; whether the AST
+        # emission fails (and so trace-defers) is known only once it runs,
+        # so the answer stays open (``None``) until then.
+        self._needs_trace_value = False
         if target == "apple_gpu":
-            try:
-                from .trace import function_needs_tracer
+            if deferred_emission is not None:
+                self._needs_trace_value = None
+            else:
+                try:
+                    from .trace import function_needs_tracer
 
-                self._needs_trace = function_needs_tracer(self.graph_ir, fn)
-            except Exception:
-                self._needs_trace = False
+                    self._needs_trace_value = function_needs_tracer(self.graph_ir, fn)
+                except Exception:
+                    self._needs_trace_value = False
         self.attn_config = attn_config
         if deferred_emission is None:
             self.cpu_plan = cpu_plan
@@ -697,7 +755,11 @@ class JitFn:
         # compute region is an authorable Apple-GPU packaged kernel, else
         # None. ``emit_package`` turns it into a real `.mtlpackage` given
         # concrete example-arg shapes. Populated only for target="apple_gpu".
-        self.recognized_package = recognized_package
+        # A deferred apple_gpu decoration recognizes it from the AST module
+        # the first time something asks (``emit_package``).
+        self._recognized_package = recognized_package
+        self._recognized_package_pending = (
+            deferred_emission is not None and target == "apple_gpu")
         self._emitted_package_path: Optional[str] = None
         # PK8e (2026-06-02) — route ``__call__`` through the authored
         # `.mtlpackage` instead of the live MPS/MSL envelope. Value:
@@ -1374,11 +1436,14 @@ class JitFn:
             # down), so we drop through to the normal apple_gpu lane. The
             # package is recognized from the decoration module, so a call it
             # serves executes the AST's program whoever holds authority; a
-            # truncated AST program never reaches it.
+            # truncated AST program never reaches it. A traced plan skipped
+            # the drop check above while the AST was unbuilt; this route
+            # needs the AST, so it checks the drops itself.
             if (
                 self.dispatch_via_package
                 and not dropped_calls
                 and self.recognized_package is not None
+                and not self._dropped_calls_for_this_call()
                 and self.cpu_plan is not None
                 and self.cpu_plan.target_kind == "apple_gpu"
             ):
@@ -5765,6 +5830,87 @@ def _scan_admits_target_capability(
     )
 
 
+#: Syntax the AST front end lowers to ``tessera.scf.*`` (or that a trace
+#: cannot represent), any of which routes an apple_gpu body to the tracer.
+_CONTROL_FLOW_NODES = (
+    ast.For, ast.AsyncFor, ast.While, ast.If, ast.IfExp, ast.Match,
+    ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp,
+    ast.Try, ast.With, ast.AsyncWith,
+)
+_CONTROL_CALLS = frozenset({"fori_loop", "cond", "while_loop", "scan"})
+
+
+def _body_may_need_tracer(
+    fn: Callable, source_text: Optional[str], _seen: Optional[set] = None,
+) -> bool:
+    """Whether the apple_gpu Phase-F tracer gate could fire for ``fn``.
+
+    ``function_needs_tracer`` reads the AST module's ``tessera.scf.*``
+    markers; this answers the same question from syntax so the module need
+    not be built. Conservative: control-flow syntax anywhere in the body or
+    in a plain Python helper it calls, a ``control.*`` call, an unreadable
+    source, or a call through a non-Tessera module answers True.
+    """
+    import types
+
+    from .effect_scan import _dotted, _function_node, _function_scope, _resolve_dotted
+
+    seen = set() if _seen is None else _seen
+    if id(fn) in seen:
+        return False
+    seen.add(id(fn))
+    node = _function_node(fn, source_text)
+    if node is None:
+        return True
+    scope = _function_scope(fn)
+    for sub in ast.walk(node):
+        if isinstance(sub, _CONTROL_FLOW_NODES):
+            return True
+        if not isinstance(sub, ast.Call):
+            continue
+        dotted = _dotted(sub.func)
+        if dotted is None:
+            return True
+        if dotted.split(".")[-1] in _CONTROL_CALLS:
+            return True
+        target = _resolve_dotted(scope, dotted)
+        module = getattr(target, "__module__", None) or ""
+        if module == "tessera" or module.startswith("tessera."):
+            continue
+        if isinstance(target, types.FunctionType):
+            if _body_may_need_tracer(target, None, seen):
+                return True
+        elif target is not None and not isinstance(target, type):
+            # A builtin (``len``) carries no control flow of its own; any
+            # other callable may.
+            if getattr(target, "__module__", None) != "builtins":
+                return True
+    return False
+
+
+def _apple_gpu_decoration_defers(
+    fn: Callable, source_text: Optional[str], *,
+    auto_batch: bool, emit_package: Any, dispatch_via_package: Any,
+) -> bool:
+    """Whether an apple_gpu decoration has no reader of the AST module.
+
+    Its decoration-time readers are the auto_batch skip, package authoring
+    and dispatch (both recognize the package from the module), the Phase-F
+    tracer gate, and the unlowered-op refusal's tracer exemption. Each is
+    either opted into or decided here from the source; an undecidable body
+    builds the module as before.
+    """
+    from .effect_scan import scan_call_effects
+    from .op_catalog import get_op_spec
+
+    if auto_batch or emit_package or dispatch_via_package:
+        return False
+    if any(get_op_spec(name) is None for name, _ in scan_call_effects(fn, source_text).ops):
+        # The refusal's tracer exemption depends on the module.
+        return False
+    return not _body_may_need_tracer(fn, source_text)
+
+
 def _is_source_attention_module(module: GraphIRModule) -> bool:
     """One function: three roots, rmsnorm into saved-LSE flash_attn, (O, LSE)."""
     if len(module.functions) != 1:
@@ -6203,19 +6349,24 @@ def jit(
 
         # E2E-REAL-6F: the AST module is a legacy-candidate plan, not the
         # compiler authority, so emit it only when something reads it. Every
-        # decoration-time reader is excluded here: the Apple targets (they
-        # read it for the tracer gate, the `.mtlpackage` recognizer and the
-        # AST-vs-traced executable comparison), a differentiation request
-        # (its intent is written into the module), and the bounded LHS
-        # dispatcher. The ``cpu`` reference target accepts every catalog op.
-        # A native target refuses an op it lacks while compiling the module
-        # (LEGALITY_TARGET_CAPABILITY, fail-closed at decoration), so it
-        # defers only when the same capability check over the ops the body
-        # can execute admits every one; otherwise the module is built now and
-        # gives the authoritative answer (a program-level admission such as
-        # gfx1151's quantized MLP included).
+        # decoration-time reader is excluded here: a differentiation request
+        # (its intent is written into the module), the bounded LHS
+        # dispatcher, and on apple_gpu the readers
+        # ``_apple_gpu_decoration_defers`` names (auto_batch, package
+        # authoring/dispatch, the Phase-F tracer gate). The ``cpu`` reference
+        # target accepts every catalog op. Every other target refuses an op
+        # it lacks while compiling the module (LEGALITY_TARGET_CAPABILITY,
+        # fail-closed at decoration), so it defers only when the same
+        # capability check over the ops the body can execute admits every
+        # one; otherwise the module is built now and gives the authoritative
+        # answer (a program-level admission such as gfx1151's quantized MLP
+        # included).
         _defer_ast = (
-            target_kind not in ("apple_cpu", "apple_gpu")
+            (target_kind != "apple_gpu" or _apple_gpu_decoration_defers(
+                fn, source_text, auto_batch=_auto_batch,
+                emit_package=emit_package,
+                dispatch_via_package=_resolve_dispatch_via_package(
+                    dispatch_via_package, target_kind)))
             and autodiff is None and wrt is None
             and shape_bounds is None
             and source_text is not None

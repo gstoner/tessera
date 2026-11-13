@@ -17080,3 +17080,7 @@ Results on The-Super-Bear (RTX 5070):
 - `tests/unit` at 14c2e326f: the same failing IDs as b3f55fc71 (23 failed / 86 errors).
 
 ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-11--e2e-real-6f-a-native-target-tracer-authority-call-no-longer-builds-the-ast-module))
+
+## `E2E-REAL-6F-apple-ast-deferral-2026-11-12`: sibling outcome — not applicable
+
+Apple-target decorations only; no NVIDIA path changed. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-12--e2e-real-6f-the-apple-targets-defer-the-ast-module-when-nothing-reads-it-at-decoration))

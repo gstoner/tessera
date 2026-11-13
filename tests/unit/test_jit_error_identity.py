@@ -37,9 +37,8 @@ def test_decoration_error_caught_via_either_import_path():
         return tessera.ops.add(h, x if x.shape == h.shape else h)
 
     import pytest
-    with pytest.raises(FromBoundary):  # caught via the _jit_boundary name
-        tessera.jit(target="apple_cpu")(bad)
-    # A deferred emission raises the same class from its first reader.
-    deferred = tessera.jit(target="cpu")(bad)
-    with pytest.raises(FromBoundary):
-        _ = deferred.compile_bundle
+    # A deferred emission raises the class from its first reader.
+    for target in ("apple_cpu", "cpu"):
+        deferred = tessera.jit(target=target)(bad)
+        with pytest.raises(FromBoundary):  # caught via the _jit_boundary name
+            _ = deferred.compile_bundle

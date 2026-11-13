@@ -11,19 +11,20 @@ The reachable producer is an unlowerable intermediate statement. ``_OpExtractor`
 drops a statement it cannot emit (``visit_Assign`` falls through to
 ``generic_visit`` when ``_emit_expr`` returns ``None``), which leaves a later op
 referencing a dangling operand; the function then fails verification with
-``GRAPH_IR_UNDEFINED_OPERAND``. ``apple_cpu`` re-raises that as a
-``TesseraJitError`` at decoration; ``apple_gpu`` defers to the tracer and
-keeps an empty module; the ``cpu`` reference target and the native targets
-whose capability admits every op the body calls defer the AST emission itself
-(E2E-REAL-6F), so the error is raised by the first call that needs the AST
-plan, and a ``cpu`` tensor call the tracer captures never builds it.
+``GRAPH_IR_UNDEFINED_OPERAND``. ``apple_gpu`` defers to the tracer and keeps
+an empty module once that module is built; every target whose capability
+admits each op the body calls -- ``cpu``, the native targets and, since
+2026-11-12, ``apple_cpu`` and an ``apple_gpu`` body with no reader of the
+module at decoration -- defers the AST emission itself (E2E-REAL-6F), so the
+error is raised by the first call that needs the AST plan, and a tensor call
+the tracer captures never builds it.
 
 What is pinned here, per target:
 
 * No target ever surfaces a raw ``IndexError`` (the regression).
-* ``apple_cpu`` raises ``TesseraJitError`` at decoration time; ``cpu``,
-  ``rocm`` and ``x86`` raise it from a call that needs the AST plan, and
-  ``cpu`` runs a tensor call through the tracer.
+* ``cpu``, ``apple_cpu``, ``rocm`` and ``x86`` raise ``TesseraJitError``
+  from a call that needs the AST plan, and ``cpu`` runs a tensor call through
+  the tracer.
 * ``apple_gpu`` decorates and routes to the tracer. The tracer runs the body,
   so a construct the AST front end could not lower may well execute correctly
   there -- and when it cannot, the failure is a stable Tessera diagnostic
@@ -49,13 +50,10 @@ from tessera.compiler.trace import TesseraTraceError
 
 gpu = pytest.mark.hardware_apple_gpu
 
-# Targets that depend on the AST Graph IR. ``apple_cpu`` emits it at
-# decoration and hard-fails there; ``cpu`` (target None) and a native target
-# whose capability admits the body's ops defer the emission to the first
-# reader of the AST plan.
+# Targets that depend on the AST Graph IR. Each defers the emission to the
+# first reader of the AST plan when its capability admits the body's ops.
 _IR_DEPENDENT_TARGETS = [None, "apple_cpu", "rocm"]
-_DECORATION_EMITTING_TARGETS = ["apple_cpu"]
-_DEFERRED_TARGETS = [None, "cpu", "rocm", "x86"]
+_DEFERRED_TARGETS = [None, "cpu", "apple_cpu", "rocm", "x86"]
 
 
 def _not_a_graph_op(v):
@@ -89,18 +87,12 @@ def test_zero_function_candidate_does_not_raise_indexerror():
     depend on whether the tracer can then execute the body (or on a device).
     """
     fn = _decorate("apple_gpu", _unlowerable_intermediate)
+    # The deferred decoration builds the empty candidate on first read.
+    assert fn._legacy_graph_ir.functions == []
     fn._establish_tracer_authority((np.zeros(3, np.float32),), {})
     # The decoration-time effect stands in for the body we could not read, and
     # routing records that the AST candidate was not superseded.
     assert fn.frontend_authority.startswith("legacy_candidate")
-
-
-@pytest.mark.parametrize("target", _DECORATION_EMITTING_TARGETS)
-def test_ir_dependent_targets_raise_tessera_jit_error_at_decoration(target):
-    """Never ``IndexError`` -- a Tessera diagnostic naming the failure."""
-    with pytest.raises(TesseraJitError) as excinfo:
-        _decorate(target, _unlowerable_intermediate)
-    assert "GRAPH_IR_UNDEFINED_OPERAND" in str(excinfo.value)
 
 
 @pytest.mark.parametrize("target", _DEFERRED_TARGETS)

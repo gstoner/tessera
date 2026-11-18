@@ -24,6 +24,7 @@ from __future__ import annotations
 import collections
 import functools
 import importlib
+import inspect
 import json
 import os
 import sys
@@ -172,22 +173,26 @@ def _eager_reasons(scope: Optional[Dict[str, Any]]) -> List[str]:
 
 
 def _wrap_lower(original):
+    # Forward the call untouched: a wrapper that restated ``lower``'s
+    # parameters broke every decoration the day ``lower`` gained one.
+    signature = inspect.signature(original)
+
     @functools.wraps(original)
-    def lower(self, fn, effect_tag=None, target_attr=None, source_text=None,
-              prefer_abstract_trace=False, source_origin=None):
+    def lower(*args, **kwargs):
         if getattr(_STATE, "depth", 0):
-            return original(self, fn, effect_tag, target_attr, source_text,
-                            prefer_abstract_trace, source_origin)
+            return original(*args, **kwargs)
         _STATE.depth = 1
         _STATE.ast_ran = False
         _STATE.trace_error = None
         try:
-            return original(self, fn, effect_tag, target_attr, source_text,
-                            prefer_abstract_trace, source_origin)
+            return original(*args, **kwargs)
         finally:
             _STATE.depth = 0
             try:
-                _record_lower(fn, prefer_abstract_trace)
+                bound = signature.bind(*args, **kwargs)
+                bound.apply_defaults()
+                _record_lower(bound.arguments["fn"],
+                              bool(bound.arguments.get("prefer_abstract_trace", False)))
             except Exception as exc:  # never mask the lowering's own outcome
                 _write({"kind": "census_error", "error": repr(exc)})
     return lower

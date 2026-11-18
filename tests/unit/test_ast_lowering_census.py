@@ -80,3 +80,27 @@ def test_the_census_refuses_to_record_nowhere(tmp_path: Path) -> None:
         cwd=str(REPO_ROOT), env=env, capture_output=True, text=True, timeout=300)
     assert proc.returncode != 0
     assert "TESSERA_AST_CENSUS_DIR" in proc.stdout + proc.stderr
+
+
+def test_the_lower_wrapper_forwards_parameters_it_does_not_know() -> None:
+    # The first version restated ``lower``'s parameters, so the day ``lower``
+    # gained ``legality_target`` every decoration under the census raised
+    # TypeError (3,548 false failures). The wrapper must pass calls through.
+    from scripts import ast_lowering_census as census
+
+    seen = {}
+
+    def lower(self, fn, effect_tag=None, *, prefer_abstract_trace=False,
+              brand_new_option="default"):
+        seen.update(fn=fn, prefer=prefer_abstract_trace, option=brand_new_option)
+        return "lowered"
+
+    wrapped = census._wrap_lower(lower)
+    saved = census._OUT
+    census._OUT = None  # record nothing; only the forwarding is under test
+    try:
+        assert wrapped(object(), len, prefer_abstract_trace=True,
+                       brand_new_option="new") == "lowered"
+    finally:
+        census._OUT = saved
+    assert seen == {"fn": len, "prefer": True, "option": "new"}

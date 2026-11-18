@@ -12688,3 +12688,7 @@ An `@jit(target="x86")` call under tracer authority no longer builds the deferre
 ## `E2E-REAL-6F-apple-ast-deferral-2026-11-12`: sibling outcome — not applicable
 
 Apple-target decorations only; no x86 path changed. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-12--e2e-real-6f-the-apple-targets-defer-the-ast-module-when-nothing-reads-it-at-decoration))
+
+## `E2E-REAL-6F-ast-build-census-2026-11-18`: sibling outcome — not applicable
+
+A measurement tool for what still builds the AST Graph IR module; no x86 path changed. It ran on the Mac only, so x86-device-gated tests that skip there are not in its counts. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-18--e2e-real-6f-a-committed-census-ranks-what-still-builds-the-ast-module))

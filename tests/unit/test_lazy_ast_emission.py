@@ -400,8 +400,12 @@ def test_mapped_owners_share_one_ast_oracle_lowering(monkeypatch):
         calls.append(1)
         return original(self, *args, **kwargs)
 
-    monkeypatch.setattr(GraphIRBuilder, "_extract_ops", counting)
     first, second = vmap(scalar), vmap(scalar)
+    # The owners carry the traced module, so each must ask for the oracle.
+    for owner in (first, second):
+        assert owner.graph_ir.module_attrs.get("tessera.frontend.authority") == '"tracer"'
+        assert owner._legacy_graph_ir is None
+    monkeypatch.setattr(GraphIRBuilder, "_extract_ops", counting)
     oracle = first._ensure_legacy_graph_ir()
     assert len(calls) == 1
     again = second._ensure_legacy_graph_ir()

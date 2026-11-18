@@ -341,3 +341,40 @@ def test_the_source_attention_gate_declines_a_scalar_parameter():
     # Declines rather than raising from ``input_signature`` on the scalar.
     assert fn._try_source_attention_call(roots, {}) is _JIT_FALLBACK
     assert fn.ast_emission_pending
+
+
+@pytest.mark.parametrize("target", [None, "cpu", "apple_cpu", "apple_gpu", "x86"])
+def test_the_native_descriptor_call_leaves_the_ast_unbuilt_where_it_cannot_serve(target):
+    # Only the ROCm and sm_120 lanes have descriptor routes. The ROCm product
+    # check used to read ``graph_ir`` before the target gate, so every other
+    # call that reached it built the deferred AST module only to fall back.
+    from tessera.compiler.jit import _JIT_FALLBACK
+
+    fn = ts.jit(_body) if target is None else ts.jit(target=target)(_body)
+    assert fn.ast_emission_pending
+    x = _x()
+    assert fn._try_native_descriptor_call((x, x), {}) is _JIT_FALLBACK
+    assert fn.ast_emission_pending
+
+
+def test_the_decoration_trace_is_verified_against_the_decorations_target():
+    # A fp32 ``scaled_matmul`` is legal on gfx1201 and not on the CPU table.
+    # Verified against the CPU table, the decoration-time trace was refused
+    # and the program fell back to the AST frontend, which ``tessera.vmap``
+    # then read for every scaled map.
+    from tessera.compiler.graph_ir import GraphIRBuilder
+    from tests.unit.test_public_floating_scaled_reverse import floating_python_source
+
+    fn = ts.from_text(floating_python_source(), target="rocm_gfx1201")
+    assert fn.ast_emission_pending
+    assert fn.graph_ir.module_attrs.get("tessera.frontend.authority") == '"tracer"'
+    assert fn._legacy_graph_ir is None
+
+    def authority(legality_target):
+        builder = GraphIRBuilder()
+        builder.lower(fn._fn, source_text=fn._frontend_source_text,
+                      prefer_abstract_trace=True, legality_target=legality_target)
+        return builder.module().module_attrs.get("tessera.frontend.authority")
+
+    assert authority("rocm_gfx1201") == '"tracer"'
+    assert authority("cpu") is None  # the CPU table refuses it: AST fallback

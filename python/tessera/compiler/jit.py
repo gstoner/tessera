@@ -2545,7 +2545,12 @@ class JitFn:
             parent_view_request = requests_parent_view(self.graph_ir)
             from .rocm_block_quant_native import requests_block_quant
             block_quant_request = requests_block_quant(self.graph_ir)
-        rocm_product = (self.differentiation_request is None
+        # Only the ROCm lanes consume ``rocm_product``. Read the module for them
+        # alone: every other target returns ``_JIT_FALLBACK`` below, and on a
+        # deferred decoration this read was what built the AST module for an
+        # apple_gpu / cpu / untargeted call it could never serve.
+        rocm_product = (target in {"rocm", "rocm_gfx1151", "rocm_gfx1201"}
+                        and self.differentiation_request is None
                         and len(self.graph_ir.functions) == 1
                         and len(self.graph_ir.functions[0].body) == 1
                         and self.graph_ir.functions[0].body[0].op_name in {"tessera.matmul", "tessera.gemm"})
@@ -4833,7 +4838,7 @@ class JitFn:
     def _legality_target(self) -> str:
         """The target name Graph IR legality is checked against for this jit:
         the string alias when one was given, else the CPU table."""
-        return self.target if isinstance(self.target, str) else "cpu"
+        return _legality_target_for(self.target)
 
     def compile_report(self):
         """Synthesize a :class:`CompileReport` from this JitFn's
@@ -5931,11 +5936,24 @@ def _frontend_jit_diagnostics(builder: GraphIRBuilder) -> List[JitDiagnostic]:
     ]
 
 
+def _legality_target_for(target: Optional[Any]) -> str:
+    """The target Graph IR legality is checked against for a jit target:
+    the string alias when one was given, else the CPU table.
+
+    Shared by the call-time tracer (``JitFn._legality_target``) and the
+    decoration-time abstract trace (``GraphIRBuilder.lower``), so a program
+    the call-time tracer admits is not refused at decoration by a different
+    capability table.
+    """
+    return target if isinstance(target, str) else "cpu"
+
+
 def _recover_frontend_diagnostics(
     fn: Callable, *, source_text: Optional[str],
     effect_tag: Optional[str], target_attr: Optional[str],
     prefer_abstract_trace: bool,
     source_origin: str = "inspect",
+    legality_target: str = "cpu",
 ) -> List[JitDiagnostic]:
     """Re-derive the AST front end's diagnostics on the emission-failure path.
 
@@ -5955,6 +5973,7 @@ def _recover_frontend_diagnostics(
             fn, effect_tag=effect_tag, target_attr=target_attr,
             source_text=source_text, source_origin=source_origin,
             prefer_abstract_trace=prefer_abstract_trace,
+            legality_target=legality_target,
         )
         return _frontend_jit_diagnostics(builder)
     except Exception:
@@ -6025,6 +6044,7 @@ def _jit_emit_graph_ir(
                 fn, effect_tag=effect_tag,
                 target_attr=target_attr, source_text=source_text, source_origin=source_origin,
                 prefer_abstract_trace=inferred_effect == Effect.pure,
+                legality_target=_legality_target_for(target),
             )
             module = builder.module()
             frontend_diagnostics.extend(
@@ -6133,6 +6153,7 @@ def _jit_emit_graph_ir(
                 fn, source_text=source_text, source_origin=source_origin, effect_tag=effect_tag,
                 target_attr=target_attr,
                 prefer_abstract_trace=inferred_effect == Effect.pure,
+                legality_target=_legality_target_for(target),
             )
         return _GraphIREmission(
             module=GraphIRModule(), cpu_plan=None, compile_bundle=None,

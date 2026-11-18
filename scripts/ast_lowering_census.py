@@ -47,7 +47,7 @@ _MACHINERY = {
     (_JIT_FILE, "recognized_package"),
     (_JIT_FILE, "_recover_frontend_diagnostics"),
     (_GRAPH_IR_FILE, "lower"),
-    ("ast_lowering_census.py", "_materialize_ast_emission"),
+    ("ast_lowering_census.py", "run"),
     ("ast_lowering_census.py", "__init__"),
 }
 
@@ -242,6 +242,9 @@ def _wrap_init(original):
     @functools.wraps(original)
     def __init__(self, *args, **kwargs):
         original(self, *args, **kwargs)
+        thunk = self.__dict__.get("_ast_emission")
+        if thunk is not None:
+            self._ast_emission = _recording_thunk(self, thunk)
         try:
             deferred = kwargs.get("deferred_emission") is not None
             facts = _stack_facts(skip=2)
@@ -261,31 +264,38 @@ def _wrap_init(original):
     return __init__
 
 
-def _wrap_materialize(original):
-    """A deferred emission runs once per JitFn; record who triggered it.
+def _recording_thunk(owner, thunk):
+    """Wrap one decoration's deferred emission so it records when it runs.
 
     ``lower`` alone undercounts readers: ``graph_ir_cache`` answers a repeat
     source without lowering, so a reader that forces the module would be
-    invisible on a cache hit. ``pending`` distinguishes the first, real
-    materialization from a later no-op call.
+    invisible on a cache hit. The thunk is the unit to count:
+    ``_materialize_ast_emission`` runs it at most once, under ``_ast_lock``,
+    and caches a failure rather than rerunning it, so concurrent first readers
+    and repeated reads after a failure each leave exactly one record, naming
+    the reader that actually ran the emission and whether it succeeded.
     """
-    @functools.wraps(original)
-    def _materialize_ast_emission(self, *args, **kwargs):
-        pending = self.ast_emission_pending
+    @functools.wraps(thunk)
+    def run():
+        outcome = "ok"
         try:
-            return original(self, *args, **kwargs)
+            return thunk()
+        except BaseException as exc:
+            outcome = f"failed:{type(exc).__name__}"
+            raise
         finally:
-            if pending:
-                try:
-                    facts = _stack_facts(skip=2)
-                    facts.pop("_decorate")
-                    _write({"kind": "materialize",
-                            "function": getattr(getattr(self, "_fn", None),
-                                                "__qualname__", None),
-                            **facts})
-                except Exception as exc:
-                    _write({"kind": "census_error", "error": repr(exc)})
-    return _materialize_ast_emission
+            try:
+                # Skip _stack_facts and this wrapper; the next frame is
+                # _materialize_ast_emission, which the reader walk skips too.
+                facts = _stack_facts(skip=2)
+                facts.pop("_decorate")
+                _write({"kind": "materialize", "outcome": outcome,
+                        "function": getattr(getattr(owner, "_fn", None),
+                                            "__qualname__", None),
+                        **facts})
+            except Exception as exc:
+                _write({"kind": "census_error", "error": repr(exc)})
+    return run
 
 
 def pytest_configure(config) -> None:
@@ -306,7 +316,6 @@ def pytest_configure(config) -> None:
     trace.trace = _wrap_trace_stage(trace.trace)
     trace.to_graph_ir_module = _wrap_trace_stage(trace.to_graph_ir_module)
     JitFn.__init__ = _wrap_init(JitFn.__init__)
-    JitFn._materialize_ast_emission = _wrap_materialize(JitFn._materialize_ast_emission)
 
 
 # ── summary ────────────────────────────────────────────────────────────────
@@ -341,8 +350,9 @@ def summarize(directory: Path, top: int = 15) -> str:
            f"- `JitFn` decorations: {len(decorations)} (deferred "
            f"{sum(r['deferred'] for r in decorations)})",
            f"- internal `JitFn` owners (not decorations): {len(owners)}",
-           f"- deferred emissions later materialized: {len(materialized)} "
-           f"(each builds the AST module unless graph_ir_cache already holds it)",
+           f"- deferred emissions run: {len(materialized)} (failed "
+           f"{sum(r.get('outcome', 'ok') != 'ok' for r in materialized)}; each builds the "
+           f"AST module unless graph_ir_cache already holds it)",
            f"- census errors: {len(errors)}"]
     out += table("AST lowerings by phase / emitter",
                  collections.Counter(f"{r['phase']} / {r['emitter']}" for r in ast))

@@ -58,6 +58,18 @@ def test_the_census_attributes_every_build_it_records(tmp_path: Path) -> None:
     assert materialized and all(r["field"] for r in materialized)
     assert not [r for r in records if str(r.get("reader", "")).startswith("ast_lowering_census.py")]
 
+    # One record per emission actually run: four racing first readers run it
+    # once, and reads after a failure rethrow the cached error without
+    # rerunning it.
+    def materialized_in(test_name: str) -> list[dict]:
+        return [r for r in materialized if r["test"].endswith("::" + test_name)]
+
+    concurrent = materialized_in("test_concurrent_first_readers_all_get_the_module")
+    assert [r["outcome"] for r in concurrent] == ["ok"], concurrent
+    failed = materialized_in("test_an_emission_failure_reaches_every_reader")
+    assert [r["outcome"] for r in failed] == ["failed:TesseraJitError"], failed
+    assert failed[0]["field"] == "_decoration_compile"
+
 
 def test_the_census_refuses_to_record_nowhere(tmp_path: Path) -> None:
     env = {k: v for k, v in os.environ.items() if k != "TESSERA_AST_CENSUS_DIR"}

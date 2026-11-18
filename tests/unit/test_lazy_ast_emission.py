@@ -378,3 +378,33 @@ def test_the_decoration_trace_is_verified_against_the_decorations_target():
 
     assert authority("rocm_gfx1201") == '"tracer"'
     assert authority("cpu") is None  # the CPU table refuses it: AST fallback
+
+
+def test_mapped_owners_share_one_ast_oracle_lowering(monkeypatch):
+    # With the decoration trace owning ``graph_ir``, each ``tessera.vmap``
+    # owner asks ``_ensure_legacy_graph_ir`` for the AST oracle its
+    # certificate compares against. The oracle is memoized, so the second
+    # owner of the same source does not lower it through the AST again, and
+    # each owner still gets its own copy.
+    from tessera.autodiff import vmap
+    from tessera.compiler import graph_ir_cache
+    from tessera.compiler.graph_ir import GraphIRBuilder
+    from tests.unit.test_public_floating_scaled_reverse import floating_python_source
+
+    graph_ir_cache.clear_graph_ir_cache()
+    scalar = ts.from_text(floating_python_source(), target="rocm_gfx1201")
+    calls = []
+    original = GraphIRBuilder._extract_ops
+
+    def counting(self, *args, **kwargs):
+        calls.append(1)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(GraphIRBuilder, "_extract_ops", counting)
+    first, second = vmap(scalar), vmap(scalar)
+    oracle = first._ensure_legacy_graph_ir()
+    assert len(calls) == 1
+    again = second._ensure_legacy_graph_ir()
+    assert len(calls) == 1
+    assert again == oracle and again is not oracle
+    assert oracle.module_attrs.get("tessera.frontend.authority") is None

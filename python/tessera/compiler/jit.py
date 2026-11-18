@@ -877,10 +877,30 @@ class JitFn:
         merely an absent answer dressed as a failure.
         """
         if self._legacy_graph_ir is None or not self._legacy_graph_ir.functions:
-            builder = GraphIRBuilder()
-            builder.lower(self._fn, source_text=self._frontend_source_text,
-                          source_origin=self.source_origin)
-            self._legacy_graph_ir = builder.module()
+            # Memoized under its own cache lane. When the decoration-time
+            # trace owns ``graph_ir`` (a native scaled program, say), every
+            # owner ``tessera.vmap`` builds from it asks for this oracle to
+            # certify against; uncached, each owner lowered the same source
+            # through the AST again. The key is everything this lowering
+            # reads, and the cache deep-copies on store and on hit.
+            from . import graph_ir_cache as _gic
+            from .graph_ir import _loc_path, _scalar_const_env
+            code = getattr(self._fn, "__code__", None)
+            key = dict(
+                lane="ast_oracle",
+                source_location=(
+                    f"{self.source_origin}:{_loc_path(code.co_filename)}:{code.co_firstlineno}"
+                    if code is not None else str(self.source_origin)),
+                constant_environment=repr(sorted(_scalar_const_env(self._fn).items())),
+            )
+            module = _gic.lookup(self._frontend_source_text, **key)
+            if module is None:
+                builder = GraphIRBuilder()
+                builder.lower(self._fn, source_text=self._frontend_source_text,
+                              source_origin=self.source_origin)
+                module = builder.module()
+                _gic.store(self._frontend_source_text, module, **key)
+            self._legacy_graph_ir = module
         return self._legacy_graph_ir
 
     # PK8a (2026-06-02) — Graph IR → `.mtlpackage` AOT emission.

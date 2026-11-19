@@ -12688,3 +12688,7 @@ An `@jit(target="x86")` call under tracer authority no longer builds the deferre
 ## `E2E-REAL-6F-apple-ast-deferral-2026-11-12`: sibling outcome — not applicable
 
 Apple-target decorations only; no x86 path changed. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-12--e2e-real-6f-the-apple-targets-defer-the-ast-module-when-nothing-reads-it-at-decoration))
+
+## `E2E-REAL-6F-decoration-trace-legality-2026-11-18`: sibling outcome — not applicable
+
+The decoration trace now verifies against `x86` legality; no x86 lowering or kernel path changed, and no x86 device lane was run. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-18--e2e-real-6f-the-decoration-trace-is-verified-against-its-own-target))

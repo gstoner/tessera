@@ -17084,3 +17084,7 @@ Results on The-Super-Bear (RTX 5070):
 ## `E2E-REAL-6F-apple-ast-deferral-2026-11-12`: sibling outcome — not applicable
 
 Apple-target decorations only; no NVIDIA path changed. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-12--e2e-real-6f-the-apple-targets-defer-the-ast-module-when-nothing-reads-it-at-decoration))
+
+## `E2E-REAL-6F-decoration-trace-legality-2026-11-18`: sibling outcome — parity validated on sm_120 (RTX 5070)
+
+No NVIDIA lowering changed; decorations now trace against their own target's legality table. The-Super-Bear unit and `tests/device/nvidia` failing node IDs match main once the device lane runs with the release gate's `TESSERA_OPT` / `TESSERA_NVIDIA_OPT` / `MLIR_OPT` (without them 425 tests fail with `KeyError` on both trees and evaluate nothing); 239 device failures are pre-existing on main. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-18--e2e-real-6f-the-decoration-trace-is-verified-against-its-own-target))

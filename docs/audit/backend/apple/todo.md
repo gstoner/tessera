@@ -16450,3 +16450,7 @@ Only rocm, x86 and NVIDIA calls skip the AST module. `apple_cpu`/`apple_gpu` sti
 ## `E2E-REAL-6F-apple-ast-deferral-2026-11-12`: sibling outcome — parity validated on the Mac (M1 Max)
 
 `@jit(target="apple_cpu")` and `@jit(target="apple_gpu")` now defer the decoration-time AST Graph IR module, and a tracer-authority call on either runs its traced plan without building it. `apple_gpu` keeps the eager emission for `auto_batch`, `emit_package`, `dispatch_via_package` (incl. `"auto"` and the global autoroute), an uncatalogued `tessera.ops` call, and control flow in the body or a helper it calls; an emission failure still routes to the Phase-F tracer, decided when the emission runs. The package route now checks dropped calls itself when a traced plan ran with the AST unbuilt. An `apple_cpu` emission failure raises from the first reader instead of at decoration. Mac `tests/unit` failing node IDs match main 48989e5a5. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-12--e2e-real-6f-the-apple-targets-defer-the-ast-module-when-nothing-reads-it-at-decoration))
+
+## `E2E-REAL-6F-decoration-trace-legality-2026-11-18`: sibling outcome — parity validated on the Mac (M1 Max)
+
+The decoration-time trace now verifies against `apple_gpu`/`apple_cpu` legality, so ops only the GPU table admits trace at decoration; the Mac unit sweep's failing node IDs match main (one wall-clock test aside). ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-18--e2e-real-6f-the-decoration-trace-is-verified-against-its-own-target))

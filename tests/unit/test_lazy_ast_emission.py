@@ -412,3 +412,28 @@ def test_mapped_owners_share_one_ast_oracle_lowering(monkeypatch):
     assert len(calls) == 1
     assert again == oracle and again is not oracle
     assert oracle.module_attrs.get("tessera.frontend.authority") is None
+
+
+def test_the_ast_oracle_cache_keys_on_the_resolved_annotations():
+    # A factory makes callables with one source text and one code location
+    # whose annotations differ through a closure. ``lower`` bakes those
+    # extents into the Graph module, so the memoized oracle of one must not
+    # be served to the other.
+    from tessera.compiler import graph_ir_cache
+
+    def make(n):
+        def f(x):
+            return ts.ops.relu(x)
+        # This module postpones annotations, so a closure ``n`` written in
+        # the signature would stay an unresolved string; attach the object.
+        f.__annotations__ = {"x": ts.Tensor[n]}
+        return ts.jit(f)
+
+    graph_ir_cache.clear_graph_ir_cache()
+    eight, sixteen = make(8), make(16)
+    for fn in (eight, sixteen):
+        fn._legacy_graph_ir = None
+    first = eight._ensure_legacy_graph_ir().to_mlir()
+    second = sixteen._ensure_legacy_graph_ir().to_mlir()
+    assert 'tessera.dim_names = ["8"]' in first
+    assert 'tessera.dim_names = ["16"]' in second

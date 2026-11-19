@@ -882,9 +882,13 @@ class JitFn:
             # owner ``tessera.vmap`` builds from it asks for this oracle to
             # certify against; uncached, each owner lowered the same source
             # through the AST again. The key is everything this lowering
-            # reads, and the cache deep-copies on store and on hit.
+            # reads, and the cache deep-copies on store and on hit. That
+            # includes the resolved argument annotations: a factory can make
+            # callables with one source and one code location whose
+            # annotations differ (``Tensor[n]`` over a closure ``n``), and
+            # ``lower`` bakes those extents into op attributes.
             from . import graph_ir_cache as _gic
-            from .graph_ir import _loc_path, _scalar_const_env
+            from .graph_ir import _loc_path, _scalar_const_env, ir_args_from_signature
             code = getattr(self._fn, "__code__", None)
             key = dict(
                 lane="ast_oracle",
@@ -892,6 +896,7 @@ class JitFn:
                     f"{self.source_origin}:{_loc_path(code.co_filename)}:{code.co_firstlineno}"
                     if code is not None else str(self.source_origin)),
                 constant_environment=repr(sorted(_scalar_const_env(self._fn).items())),
+                call_abi=repr(ir_args_from_signature(self._fn)),
             )
             module = _gic.lookup(self._frontend_source_text, **key)
             if module is None:

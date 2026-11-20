@@ -19580,6 +19580,10 @@ A `@jit(target="rocm")` call under tracer authority no longer builds the deferre
 
 Apple-target decorations only; no rocm path changed. Princess-Luna (gfx1151) `tests/unit` and `tests/device/rocm` were run as the Linux host for the Apple targets' artifact-only branch (see the log). gfx1201 not run: nothing it owns changed. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-12--e2e-real-6f-the-apple-targets-defer-the-ast-module-when-nothing-reads-it-at-decoration))
 
+## `E2E-REAL-6F-ast-build-census-2026-11-18`: sibling outcome — not applicable
+
+A measurement tool for what still builds the AST Graph IR module; no rocm path changed. It ran on the Mac only, so rocm-device-gated tests that skip there are not in its counts. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-18--e2e-real-6f-a-committed-census-ranks-what-still-builds-the-ast-module))
+
 ## `E2E-REAL-6F-decoration-trace-legality-2026-11-18`: sibling outcome — parity validated on gfx1201; gfx1151 follow-up owed
 
 Native scaled programs on `rocm_gfx1201` are tracer-owned at decoration and their `vmap` owners share one memoized AST oracle. Tajasarus unit and `tests/device/rocm` failing node IDs match main. Princess-Luna had no GPU after a reboot (ROCk not loaded), so gfx1151 is unevaluated. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-18--e2e-real-6f-the-decoration-trace-is-verified-against-its-own-target))

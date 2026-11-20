@@ -15009,6 +15009,26 @@ Remaining: legacy-candidate calls (non-tensor, effectful and unmigrated signatur
 Evidence: python/tessera/compiler/jit.py; tests/unit/test_lazy_ast_emission.py; tests/unit/test_jit_zero_function_candidate.py
 <!-- entry-fields:end -->
 
+### 2026-11-18 — E2E-REAL-6F: a committed census ranks what still builds the AST module
+
+Owner: [E2E-REAL-6F](INTEGRATED_COMPILER_PLAN.md#e2e-real-6f)
+PRs: branch `claude/e2e6f-ast-build-census`; sync E2E-REAL-6F-ast-build-census-2026-11-18.
+Outcome: `scripts/ast_lowering_census.py`, an opt-in pytest plugin (`-p scripts.ast_lowering_census`, `TESSERA_AST_CENSUS_DIR=<dir>`), records every `GraphIRBuilder.lower` call (AST route or abstract trace, and why the trace was not used), every `JitFn` construction (decoration, deferred or eager and why, or an internal owner and its constructor), and every deferred emission that runs (once per `JitFn`, under `_ast_lock`; the field read, the reader frame, and whether it succeeded). `python3 scripts/ast_lowering_census.py summarize <dir>` ranks them. The 2026-11-07 count came from an uncommitted probe; this one can be rerun. It changes no result: `tests/unit/test_ast_lowering_census.py` runs it over `test_lazy_ast_emission.py` and fails if any eager decoration is unexplained or a reader is the census's own frame, and the suite's failing node IDs are identical with and without it.
+
+Measured on the Mac (M1 Max, macOS 27.2, main 6ab47dd32 plus this change), `tests/unit -m "not slow" -n 8`:
+- **2,381 `lower` calls, 2,296 on the AST route** (11-07, different probe: 3,290). Why the trace was not used: signature not traceable 1,556; effectful (trace not preferred) 642; trace raised 98 (94 `TesseraTraceError`, 4 `TypeError`). `graph_ir_cache` means a lowering count understates readers, so materializations are counted separately.
+- **7,979 decorations, 5,285 deferred, 2,694 eager.** 2,494 of the eager ones (93%) are differentiation requests (`autodiff`/`wrt`): `rocm_gfx1201` 1,480, x86 414, `rocm` 402, `nvidia_sm120` 96, `cpu` 56. The Apple readers left by the 11-12 slice are small: `apple_gpu` control flow 115, `dispatch_via_package` 35, `auto_batch` 28, `emit_package` 4; `apple_gpu` defers 1,859 of 2,046 and `apple_cpu` all 156. `shape_bounds` 9, capability scan refused 4 (gfx1151), source unavailable 3.
+- **3,877 internal owners** are not decorations: 3,866 from `native_vmap._native_scaled_vmap`, 10 from `native_public_jvp`.
+- **2,396 deferred emissions ran** (11 failed), by reader: `autodiff/transforms.py:vmap` 1,144 (reads `fn.graph_ir` to pick the native scaled route; `rocm_gfx1201` 1,094, `nvidia_sm120` 50); `conformance_matrix._ir_proof` 504 (`compile_bundle`, 56 per target); `jit._build_runtime_artifact` 201 (`lowering_diagnostics`); `jit._try_native_descriptor_call` 125; `jit._trace_frontend_capture` 90 (`_frontend_dropped_calls`, on the trace-failure path); then `explain`, `_resident_frontend_specs`, `target_ir`, `ir_text` and test helpers.
+
+Found by the census, not fixed here: `_try_native_descriptor_call` computes `rocm_product` from `self.graph_ir.functions` (`jit.py:2548`) before its target gate (`jit.py:2559`), so an `apple_gpu`, `cpu` or untargeted call reaching it builds the AST module only to return `_JIT_FALLBACK` (120 of its 125: `apple_gpu` 103, untargeted 12, `cpu`/`apple_cpu` 4, x86 1). This answers the open question in the 11-12 recommendation: the native-target selectors do force the build on calls they can never serve.
+
+ROCm, x86, NVIDIA, Apple: not applicable (a measurement tool; no backend path changed). The census is host-independent but ran only on the Mac, so device-gated tests that skip there are not counted; a gfx1201 or sm_120 run would add their differentiation and vmap traffic.
+Remaining: the ranked readers above, largest first — differentiation-request decorations, `tessera.vmap`'s module read, the conformance matrix's `compile_bundle`, the descriptor call's ungated read — then the route census and `_OpExtractor` deletion.
+Evidence: scripts/ast_lowering_census.py; tests/unit/test_ast_lowering_census.py
+
+<!-- entry-fields:end -->
+
 ### 2026-11-18 — E2E-REAL-6F: the decoration trace is verified against its own target
 
 Owner: [E2E-REAL-6F](INTEGRATED_COMPILER_PLAN.md#e2e-real-6f)
@@ -15019,7 +15039,7 @@ Outcome: the 2026-11-18 census ranked `tessera.vmap`'s read of `fn.graph_ir` (1,
 - **The descriptor call reads `graph_ir` only for the ROCm lanes.** Its `rocm_product` check ran before the target gate. Builds through it fell from 125 to 5. For `apple_gpu` the build moved rather than disappeared: those 103 legacy-candidate calls now build the module when `__call__` reads `_needs_trace`; the saving is on `cpu`, x86 and untargeted calls.
 
 Measured (unsandboxed; scratch worktrees over each box's shared build trees):
-- **Mac M1 Max (macOS 27.2)**, `tests/unit -m "not slow" -n 8` under `scripts/ast_lowering_census.py` (loaded from outside the tree; it is in a separate PR), main 6ab47dd32 vs dd3e8c3e4: AST lowerings 2,296 -> 2,253, abstract traces 85 -> 163, lowerings under the `vmap` reader 43 -> 6. Failing node IDs identical to main except `test_apple_gpu_precompile_warmup.py::test_warmup_then_production_call_is_faster_than_cold`, a wall-clock test that passes 3 of 3 alone on both trees.
+- **Mac M1 Max (macOS 27.2)**, `tests/unit -m "not slow" -n 8` under `scripts/ast_lowering_census.py` (merged with #1064), main 6ab47dd32 vs dd3e8c3e4: AST lowerings 2,296 -> 2,253, abstract traces 85 -> 163, lowerings under the `vmap` reader 43 -> 6. Failing node IDs identical to main except `test_apple_gpu_precompile_warmup.py::test_warmup_then_production_call_is_faster_than_cold`, a wall-clock test that passes 3 of 3 alone on both trees.
 - **Tajasarus (gfx1201, Ubuntu 26.04 WSL2)**, `TESSERA_ROCM_CHIP=gfx1201`, `TESSERA_GFX1201_DEVICE_PROOF=1`: `tests/unit -m "not slow" -n 8` 347 failed / 313 errors and `tests/device/rocm` 178 failed / 3,675 passed at main, a28d37e7e and dd3e8c3e4, identical failing node IDs.
 - **The-Super-Bear (sm_120, RTX 5070, Ubuntu 26.04 WSL2)**, main 6ab47dd32 vs dd3e8c3e4: `tests/unit -m "not slow" -n 8` 23 failed / 86 errors on both, identical failing node IDs. `tests/device/nvidia` reported 937 failed / 5,566 passed on both with identical IDs, but 425 of those were `KeyError: 'TESSERA_OPT'` (the run did not export the release gate's `TESSERA_OPT` / `TESSERA_NVIDIA_OPT` / `MLIR_OPT`), so they evaluated nothing. Rerunning all 937 with the full env: 698 pass and 239 fail on both trees, identical failing node IDs.
 - **Princess-Luna (gfx1151): not evaluated.** It came back from a reboot without its GPU (`rocminfo`: "ROCk module is NOT loaded"); hipcc then targeted an arch without WMMA and every device-executing test failed at main and on the branch alike.

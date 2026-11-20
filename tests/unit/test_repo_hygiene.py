@@ -80,3 +80,40 @@ class TestNoTrackedBuildArtifacts:
             f".gitignore missing required pattern(s): {missing!r}. "
             f"These keep machine-local build trees out of the repo."
         )
+
+
+class TestNoTrackedCodeIntelligenceCaches:
+    """graphify and CodeGraph indexes are machine-local caches.
+
+    CLAUDE.md keeps both out of commits. The root ``.gitignore`` rule
+    ``graphify-out/`` already matches at every depth, yet 572 files under
+    ``python/graphify-out/`` and ``src/graphify-out/`` were committed
+    (``a93e63352``, ``0bf81cb95``) — an ignore rule does not stop
+    ``git add -f`` or a path that was tracked before the rule. This makes
+    the rule load-bearing.
+    """
+
+    def test_no_tracked_graphify_out(self) -> None:
+        offenders = [
+            f for f in _tracked_files()
+            if "graphify-out" in Path(f).parts
+        ]
+        assert offenders == [], (
+            "graphify-out/ is a local graphify cache and must not be "
+            "tracked. Untrack via `git rm -r --cached <dir>/graphify-out`.\n"
+            "Offenders:\n"
+            + "\n".join(f"  - {f}" for f in offenders[:20])
+            + (f"\n  ... and {len(offenders) - 20} more" if len(offenders) > 20 else "")
+        )
+
+    def test_only_codegraph_config_is_tracked(self) -> None:
+        allowed = {".codegraph/config.json", ".codegraph/.gitignore"}
+        offenders = [
+            f for f in _tracked_files()
+            if ".codegraph" in Path(f).parts and f not in allowed
+        ]
+        assert offenders == [], (
+            "Only .codegraph/config.json and .codegraph/.gitignore may be "
+            "tracked; the CodeGraph database is a local cache.\n"
+            "Offenders:\n" + "\n".join(f"  - {f}" for f in offenders[:20])
+        )

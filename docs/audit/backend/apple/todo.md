@@ -16454,3 +16454,7 @@ Only rocm, x86 and NVIDIA calls skip the AST module. `apple_cpu`/`apple_gpu` sti
 ## `E2E-REAL-6F-ast-build-census-2026-11-18`: sibling outcome — not applicable
 
 A measurement tool for what still builds the AST Graph IR module; no apple path changed. It ran on the Mac only, so apple-device-gated tests that skip there are not in its counts. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-18--e2e-real-6f-a-committed-census-ranks-what-still-builds-the-ast-module))
+
+## `E2E-REAL-6F-decoration-trace-legality-2026-11-18`: sibling outcome — parity validated on the Mac (M1 Max)
+
+The decoration-time trace now verifies against `apple_gpu`/`apple_cpu` legality, so ops only the GPU table admits trace at decoration; the Mac unit sweep's failing node IDs match main (one wall-clock test aside). ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-18--e2e-real-6f-the-decoration-trace-is-verified-against-its-own-target))

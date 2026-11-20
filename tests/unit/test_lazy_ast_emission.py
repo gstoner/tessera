@@ -341,3 +341,99 @@ def test_the_source_attention_gate_declines_a_scalar_parameter():
     # Declines rather than raising from ``input_signature`` on the scalar.
     assert fn._try_source_attention_call(roots, {}) is _JIT_FALLBACK
     assert fn.ast_emission_pending
+
+
+@pytest.mark.parametrize("target", [None, "cpu", "apple_cpu", "apple_gpu", "x86"])
+def test_the_native_descriptor_call_leaves_the_ast_unbuilt_where_it_cannot_serve(target):
+    # Only the ROCm and sm_120 lanes have descriptor routes. The ROCm product
+    # check used to read ``graph_ir`` before the target gate, so every other
+    # call that reached it built the deferred AST module only to fall back.
+    from tessera.compiler.jit import _JIT_FALLBACK
+
+    fn = ts.jit(_body) if target is None else ts.jit(target=target)(_body)
+    assert fn.ast_emission_pending
+    x = _x()
+    assert fn._try_native_descriptor_call((x, x), {}) is _JIT_FALLBACK
+    assert fn.ast_emission_pending
+
+
+def test_the_decoration_trace_is_verified_against_the_decorations_target():
+    # A fp32 ``scaled_matmul`` is legal on gfx1201 and not on the CPU table.
+    # Verified against the CPU table, the decoration-time trace was refused
+    # and the program fell back to the AST frontend, which ``tessera.vmap``
+    # then read for every scaled map.
+    from tessera.compiler.graph_ir import GraphIRBuilder
+    from tests.unit.test_public_floating_scaled_reverse import floating_python_source
+
+    fn = ts.from_text(floating_python_source(), target="rocm_gfx1201")
+    assert fn.ast_emission_pending
+    assert fn.graph_ir.module_attrs.get("tessera.frontend.authority") == '"tracer"'
+    assert fn._legacy_graph_ir is None
+
+    def authority(legality_target):
+        builder = GraphIRBuilder()
+        builder.lower(fn._fn, source_text=fn._frontend_source_text,
+                      prefer_abstract_trace=True, legality_target=legality_target)
+        return builder.module().module_attrs.get("tessera.frontend.authority")
+
+    assert authority("rocm_gfx1201") == '"tracer"'
+    assert authority("cpu") is None  # the CPU table refuses it: AST fallback
+
+
+def test_mapped_owners_share_one_ast_oracle_lowering(monkeypatch):
+    # With the decoration trace owning ``graph_ir``, each ``tessera.vmap``
+    # owner asks ``_ensure_legacy_graph_ir`` for the AST oracle its
+    # certificate compares against. The oracle is memoized, so the second
+    # owner of the same source does not lower it through the AST again, and
+    # each owner still gets its own copy.
+    from tessera.autodiff import vmap
+    from tessera.compiler import graph_ir_cache
+    from tessera.compiler.graph_ir import GraphIRBuilder
+    from tests.unit.test_public_floating_scaled_reverse import floating_python_source
+
+    graph_ir_cache.clear_graph_ir_cache()
+    scalar = ts.from_text(floating_python_source(), target="rocm_gfx1201")
+    calls = []
+    original = GraphIRBuilder._extract_ops
+
+    def counting(self, *args, **kwargs):
+        calls.append(1)
+        return original(self, *args, **kwargs)
+
+    first, second = vmap(scalar), vmap(scalar)
+    # The owners carry the traced module, so each must ask for the oracle.
+    for owner in (first, second):
+        assert owner.graph_ir.module_attrs.get("tessera.frontend.authority") == '"tracer"'
+        assert owner._legacy_graph_ir is None
+    monkeypatch.setattr(GraphIRBuilder, "_extract_ops", counting)
+    oracle = first._ensure_legacy_graph_ir()
+    assert len(calls) == 1
+    again = second._ensure_legacy_graph_ir()
+    assert len(calls) == 1
+    assert again == oracle and again is not oracle
+    assert oracle.module_attrs.get("tessera.frontend.authority") is None
+
+
+def test_the_ast_oracle_cache_keys_on_the_resolved_annotations():
+    # A factory makes callables with one source text and one code location
+    # whose annotations differ through a closure. ``lower`` bakes those
+    # extents into the Graph module, so the memoized oracle of one must not
+    # be served to the other.
+    from tessera.compiler import graph_ir_cache
+
+    def make(n):
+        def f(x):
+            return ts.ops.relu(x)
+        # This module postpones annotations, so a closure ``n`` written in
+        # the signature would stay an unresolved string; attach the object.
+        f.__annotations__ = {"x": ts.Tensor[n]}
+        return ts.jit(f)
+
+    graph_ir_cache.clear_graph_ir_cache()
+    eight, sixteen = make(8), make(16)
+    for fn in (eight, sixteen):
+        fn._legacy_graph_ir = None
+    first = eight._ensure_legacy_graph_ir().to_mlir()
+    second = sixteen._ensure_legacy_graph_ir().to_mlir()
+    assert 'tessera.dim_names = ["8"]' in first
+    assert 'tessera.dim_names = ["16"]' in second

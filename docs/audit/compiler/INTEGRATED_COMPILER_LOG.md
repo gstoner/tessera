@@ -15027,3 +15027,20 @@ ROCm, x86, NVIDIA, Apple: not applicable (a measurement tool; no backend path ch
 Remaining: the ranked readers above, largest first — differentiation-request decorations, `tessera.vmap`'s module read, the conformance matrix's `compile_bundle`, the descriptor call's ungated read — then the route census and `_OpExtractor` deletion.
 Evidence: scripts/ast_lowering_census.py; tests/unit/test_ast_lowering_census.py
 <!-- entry-fields:end -->
+
+### 2026-11-20 — E2E-REAL-6F: the decoration-time Graph IR cache keys on the call ABI
+
+Owner: [E2E-REAL-6F](INTEGRATED_COMPILER_PLAN.md#e2e-real-6f)
+PRs: branch `claude/e2e6f-decoration-cache-call-abi`; sync E2E-REAL-6F-decoration-cache-call-abi-2026-11-20.
+Outcome: `graph_ir_cache` keyed a decoration on source text, effect, target, lane, code location and scalar constants, but not on the resolved argument annotations. A factory makes callables with one source text and one code location whose annotations differ through a closure (`ts.Tensor[n]`), and `GraphIRBuilder.lower` bakes those extents into the module (`tessera.dim_names`), so the second callable reused the first one's module. The key now carries `call_abi = repr(ir_args_from_signature(fn))`, the same derivation the lowering uses. The AST-oracle lane (`_ensure_legacy_graph_ir`) got the same key in the 11-18 slice; this applies it to the decoration lane in `_decorate`. `test_jit_cache_distinguishes_resolved_argument_annotations` fails with the key field removed.
+
+Measured (unsandboxed; main 6ab47dd32 vs 29140d070):
+- **Mac M1 Max (macOS 27.2)**, `tests/unit -m "not slow" -n 8`: failing node IDs match main except `test_apple_gpu_precompile_warmup.py::test_warmup_then_production_call_is_faster_than_cold`, a wall-clock comparison that passes 3 of 3 run alone.
+- **Tajasarus (gfx1201)**, `TESSERA_ROCM_CHIP=gfx1201`, `TESSERA_GFX1201_DEVICE_PROOF=1`: `tests/unit` 347 failed / 313 errors and `tests/device/rocm` 178 failed / 3,675 passed on both revisions, identical failing node IDs.
+- **The-Super-Bear (sm_120, RTX 5070)**, both suites run with the release gate's tool variables exported: `tests/unit` 691 failed / 86 errors on both, identical IDs (the exported `TESSERA_OPT` points at `build-nvidia-cuda`, which is why the unit count differs from the 11-18 run without it). `tests/device/nvidia` 521 failed on both with identical failed IDs; 29140d070 added 8 setup errors, each `nvidia-smi` timing out after 5 s, and those 8 rerun at 29140d070 gave 7 passed / 1 skipped.
+- **Princess-Luna (gfx1151): not evaluated** (ssh timed out).
+
+ROCm: parity validated on gfx1201; gfx1151 follow-up owed. NVIDIA: parity validated on sm_120 (RTX 5070). x86, Apple: no backend path changed; host-independent cache key.
+Remaining: as in the 11-18 entries — differentiation-request decorations, the conformance matrix's `compile_bundle`, then the route census and `_OpExtractor` deletion.
+Evidence: python/tessera/compiler/graph_ir_cache.py; python/tessera/compiler/jit.py; tests/unit/test_graph_ir_cache.py
+<!-- entry-fields:end -->

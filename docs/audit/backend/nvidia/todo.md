@@ -17088,3 +17088,7 @@ Apple-target decorations only; no NVIDIA path changed. ([log](../../compiler/INT
 ## `E2E-REAL-6F-ast-build-census-2026-11-18`: sibling outcome — not applicable
 
 A measurement tool for what still builds the AST Graph IR module; no nvidia path changed. It ran on the Mac only, so nvidia-device-gated tests that skip there are not in its counts. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-18--e2e-real-6f-a-committed-census-ranks-what-still-builds-the-ast-module))
+
+## `E2E-REAL-6F-decoration-cache-call-abi-2026-11-20`: sibling outcome — parity validated on sm_120 (RTX 5070)
+
+The decoration-time Graph IR cache now keys on the resolved argument annotations; no NVIDIA lowering changed. The-Super-Bear unit and `tests/device/nvidia` failing node IDs match main; 8 setup errors from `nvidia-smi` timeouts passed on rerun. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-20--e2e-real-6f-the-decoration-time-graph-ir-cache-keys-on-the-call-abi))

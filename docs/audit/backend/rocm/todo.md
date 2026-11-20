@@ -19583,3 +19583,7 @@ Apple-target decorations only; no rocm path changed. Princess-Luna (gfx1151) `te
 ## `E2E-REAL-6F-ast-build-census-2026-11-18`: sibling outcome — not applicable
 
 A measurement tool for what still builds the AST Graph IR module; no rocm path changed. It ran on the Mac only, so rocm-device-gated tests that skip there are not in its counts. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-18--e2e-real-6f-a-committed-census-ranks-what-still-builds-the-ast-module))
+
+## `E2E-REAL-6F-decoration-cache-call-abi-2026-11-20`: sibling outcome — parity validated on gfx1201; gfx1151 follow-up owed
+
+The decoration-time Graph IR cache now keys on the resolved argument annotations; no ROCm lowering changed. Tajasarus unit and `tests/device/rocm` failing node IDs match main. Princess-Luna was unreachable, so gfx1151 is owed. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-20--e2e-real-6f-the-decoration-time-graph-ir-cache-keys-on-the-call-abi))

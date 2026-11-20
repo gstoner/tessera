@@ -5130,6 +5130,7 @@ class GraphIRBuilder:
         source_text: Optional[str] = None,
         prefer_abstract_trace: bool = False,
         source_origin: Optional[str] = None,
+        legality_target: object = "cpu",
     ) -> "GraphIRFunction":
         """
         Lower fn to a GraphIRFunction and add it to the module.
@@ -5142,6 +5143,12 @@ class GraphIRBuilder:
             source_text : optional Python source text for functions whose
                           source cannot be retrieved with inspect.getsource()
             source_origin: optional file:<absolute path> origin for supplied source
+            legality_target: the target the abstract trace's Graph IR is
+                          verified against (``to_graph_ir_module``). It must be
+                          the target the module compiles for: verified against
+                          the CPU table, a storage dtype or op only a GPU target
+                          carries refused the trace and sent the program to the
+                          AST frontend.
 
         Returns:
             GraphIRFunction — the emitted function IR
@@ -5177,6 +5184,7 @@ class GraphIRBuilder:
                         source_hash=hashlib.sha256(
                             source_identity.encode("utf-8")
                         ).hexdigest(),
+                        target=legality_target,
                     )
                     if target_attr is not None:
                         self.context.module.module_attrs["tessera.target"] = target_attr

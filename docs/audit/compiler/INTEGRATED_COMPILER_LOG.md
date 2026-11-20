@@ -15008,3 +15008,22 @@ Not measured: how many Apple decorations in the suite now defer, and how many Ap
 Remaining: legacy-candidate calls (non-tensor, effectful and unmigrated signatures) and the eager Apple cases above still build the module; then the route census and `_OpExtractor` deletion.
 Evidence: python/tessera/compiler/jit.py; tests/unit/test_lazy_ast_emission.py; tests/unit/test_jit_zero_function_candidate.py
 <!-- entry-fields:end -->
+
+### 2026-11-18 — E2E-REAL-6F: a committed census ranks what still builds the AST module
+
+Owner: [E2E-REAL-6F](INTEGRATED_COMPILER_PLAN.md#e2e-real-6f)
+PRs: branch `claude/e2e6f-ast-build-census`; sync E2E-REAL-6F-ast-build-census-2026-11-18.
+Outcome: `scripts/ast_lowering_census.py`, an opt-in pytest plugin (`-p scripts.ast_lowering_census`, `TESSERA_AST_CENSUS_DIR=<dir>`), records every `GraphIRBuilder.lower` call (AST route or abstract trace, and why the trace was not used), every `JitFn` construction (decoration, deferred or eager and why, or an internal owner and its constructor), and every deferred emission that runs (once per `JitFn`, under `_ast_lock`; the field read, the reader frame, and whether it succeeded). `python3 scripts/ast_lowering_census.py summarize <dir>` ranks them. The 2026-11-07 count came from an uncommitted probe; this one can be rerun. It changes no result: `tests/unit/test_ast_lowering_census.py` runs it over `test_lazy_ast_emission.py` and fails if any eager decoration is unexplained or a reader is the census's own frame, and the suite's failing node IDs are identical with and without it.
+
+Measured on the Mac (M1 Max, macOS 27.2, main 6ab47dd32 plus this change), `tests/unit -m "not slow" -n 8`:
+- **2,381 `lower` calls, 2,296 on the AST route** (11-07, different probe: 3,290). Why the trace was not used: signature not traceable 1,556; effectful (trace not preferred) 642; trace raised 98 (94 `TesseraTraceError`, 4 `TypeError`). `graph_ir_cache` means a lowering count understates readers, so materializations are counted separately.
+- **7,979 decorations, 5,285 deferred, 2,694 eager.** 2,494 of the eager ones (93%) are differentiation requests (`autodiff`/`wrt`): `rocm_gfx1201` 1,480, x86 414, `rocm` 402, `nvidia_sm120` 96, `cpu` 56. The Apple readers left by the 11-12 slice are small: `apple_gpu` control flow 115, `dispatch_via_package` 35, `auto_batch` 28, `emit_package` 4; `apple_gpu` defers 1,859 of 2,046 and `apple_cpu` all 156. `shape_bounds` 9, capability scan refused 4 (gfx1151), source unavailable 3.
+- **3,877 internal owners** are not decorations: 3,866 from `native_vmap._native_scaled_vmap`, 10 from `native_public_jvp`.
+- **2,396 deferred emissions ran** (11 failed), by reader: `autodiff/transforms.py:vmap` 1,144 (reads `fn.graph_ir` to pick the native scaled route; `rocm_gfx1201` 1,094, `nvidia_sm120` 50); `conformance_matrix._ir_proof` 504 (`compile_bundle`, 56 per target); `jit._build_runtime_artifact` 201 (`lowering_diagnostics`); `jit._try_native_descriptor_call` 125; `jit._trace_frontend_capture` 90 (`_frontend_dropped_calls`, on the trace-failure path); then `explain`, `_resident_frontend_specs`, `target_ir`, `ir_text` and test helpers.
+
+Found by the census, not fixed here: `_try_native_descriptor_call` computes `rocm_product` from `self.graph_ir.functions` (`jit.py:2548`) before its target gate (`jit.py:2559`), so an `apple_gpu`, `cpu` or untargeted call reaching it builds the AST module only to return `_JIT_FALLBACK` (120 of its 125: `apple_gpu` 103, untargeted 12, `cpu`/`apple_cpu` 4, x86 1). This answers the open question in the 11-12 recommendation: the native-target selectors do force the build on calls they can never serve.
+
+ROCm, x86, NVIDIA, Apple: not applicable (a measurement tool; no backend path changed). The census is host-independent but ran only on the Mac, so device-gated tests that skip there are not counted; a gfx1201 or sm_120 run would add their differentiation and vmap traffic.
+Remaining: the ranked readers above, largest first — differentiation-request decorations, `tessera.vmap`'s module read, the conformance matrix's `compile_bundle`, the descriptor call's ungated read — then the route census and `_OpExtractor` deletion.
+Evidence: scripts/ast_lowering_census.py; tests/unit/test_ast_lowering_census.py
+<!-- entry-fields:end -->

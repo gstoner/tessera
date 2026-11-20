@@ -96,6 +96,7 @@ def _cache_key(
     lane: str = "tessera_jit",
     source_location: str = "",
     constant_environment: str = "",
+    call_abi: str = "",
 ) -> str | None:
     """Build a stable cache key from the inputs that influence the
     Graph IR shape.
@@ -119,6 +120,8 @@ def _cache_key(
     hasher.update(source_location.encode("utf-8"))
     hasher.update(b"\x00")
     hasher.update(constant_environment.encode("utf-8"))
+    hasher.update(b"\x00")
+    hasher.update(call_abi.encode("utf-8"))
     return hasher.hexdigest()
 
 
@@ -130,6 +133,7 @@ def lookup(
     lane: str = "tessera_jit",
     source_location: str = "",
     constant_environment: str = "",
+    call_abi: str = "",
 ) -> GraphIRModule | None:
     """Probe the cache.  Returns a fresh deep copy of the cached
     module on hit, ``None`` on miss.
@@ -142,7 +146,7 @@ def lookup(
     key = _cache_key(
         source_text, effect_tag=effect_tag,
         target_attr=target_attr, lane=lane, source_location=source_location,
-        constant_environment=constant_environment,
+        constant_environment=constant_environment, call_abi=call_abi,
     )
     if key is None:
         return None
@@ -170,6 +174,7 @@ def store(
     lane: str = "tessera_jit",
     source_location: str = "",
     constant_environment: str = "",
+    call_abi: str = "",
 ) -> None:
     """Stash a fresh module in the cache.  No-op when ``source_text``
     is empty (matches :func:`lookup`'s behavior).
@@ -182,7 +187,7 @@ def store(
     key = _cache_key(
         source_text, effect_tag=effect_tag,
         target_attr=target_attr, lane=lane, source_location=source_location,
-        constant_environment=constant_environment,
+        constant_environment=constant_environment, call_abi=call_abi,
     )
     if key is None:
         return

@@ -153,3 +153,25 @@ def test_jit_cache_distinguishes_captured_attention_policy():
         function(("q","k","v"),causal))._ensure_legacy_graph_ir()
         for causal in (False,True,False)]
     assert [module.functions[0].body[0].kwargs["causal"] for module in modules]==[False,True,False]
+
+
+def test_jit_cache_distinguishes_resolved_argument_annotations():
+    # A factory makes callables with one source text and one code location
+    # whose annotations differ through a closure. ``lower`` bakes those
+    # extents into the module, so one decoration's cached module must not be
+    # served to the other.
+    import tessera as ts
+    from tessera.compiler.graph_ir_cache import clear_graph_ir_cache
+
+    def make(n):
+        def f(x):
+            return ts.ops.relu(x)
+        # This module postpones annotations, so a closure ``n`` written in
+        # the signature would stay an unresolved string; attach the object.
+        f.__annotations__ = {"x": ts.Tensor[n]}
+        return ts.jit(f)
+
+    clear_graph_ir_cache()
+    eight, sixteen = make(8), make(16)
+    assert 'tessera.dim_names = ["8"]' in eight.graph_ir.to_mlir()
+    assert 'tessera.dim_names = ["16"]' in sixteen.graph_ir.to_mlir()

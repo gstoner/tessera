@@ -6010,15 +6010,20 @@ def _jit_emit_graph_ir(
         # source_text + effect_tag + target_attr.
         from . import graph_ir_cache as _gic
         # Identical source at different call sites must not reuse stale locs.
-        from .graph_ir import _loc_path, _scalar_const_env
+        # Nor may one source with different resolved annotations: a factory
+        # can make callables with one source text and one code location whose
+        # annotations differ through a closure (``Tensor[n]``), and ``lower``
+        # bakes those extents into the module.
+        from .graph_ir import _loc_path, _scalar_const_env, ir_args_from_signature
         source_location = (
             f"{source_origin}:{_loc_path(fn.__code__.co_filename)}:{fn.__code__.co_firstlineno}"
         )
         constant_environment = repr(sorted(_scalar_const_env(fn).items()))
+        call_abi = repr(ir_args_from_signature(fn))
         module = _gic.lookup(
             source_text, effect_tag=effect_tag, target_attr=target_attr,
             source_location=source_location,
-            constant_environment=constant_environment)
+            constant_environment=constant_environment, call_abi=call_abi)
         if module is None:
             builder = GraphIRBuilder()
             builder.lower(
@@ -6033,7 +6038,7 @@ def _jit_emit_graph_ir(
                 source_text, module,
                 effect_tag=effect_tag, target_attr=target_attr,
                 source_location=source_location,
-                constant_environment=constant_environment,
+                constant_environment=constant_environment, call_abi=call_abi,
             )
         diagnostics: list[JitDiagnostic] = list(frontend_diagnostics)
         if source_text is None:

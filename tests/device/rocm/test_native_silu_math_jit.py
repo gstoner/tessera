@@ -56,7 +56,7 @@ def public_silu_route():
     request this fixture and still run on gfx1151."""
     from tests._support.rocm_build import require_rocm_host_arch
 
-    require_rocm_host_arch("gfx1201", "public SiLU JIT selection awaits gfx1151 execution proof")
+    require_rocm_host_arch("gfx1201", live=True, why="public SiLU JIT selection awaits gfx1151 execution proof")
 
 
 @pytest.mark.parametrize("storage", ["f32", "f16", "bf16"])

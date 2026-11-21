@@ -23,7 +23,7 @@ def _owning_gfx1201():
     transfers to gfx1151, so a red row there must mean a gfx1151 defect."""
     from tests._support.rocm_build import require_rocm_host_arch
 
-    require_rocm_host_arch("gfx1201", "public quantizer/product route is promoted only on gfx1201")
+    require_rocm_host_arch("gfx1201", live=True, why="public quantizer/product route is promoted only on gfx1201")
 
 
 @pytest.mark.parametrize("shape",[(3,17,32),(19,33,64),(256,128,12288)])

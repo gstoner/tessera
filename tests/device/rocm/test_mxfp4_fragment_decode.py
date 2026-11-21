@@ -21,7 +21,7 @@ def _owning_gfx1201():
     transfers to gfx1151, so a red row there must mean a gfx1151 defect."""
     from tests._support.rocm_build import require_rocm_host_arch
 
-    require_rocm_host_arch("gfx1201", "packed E2M1 fragment decode is an RDNA4 WMMA layout proof")
+    require_rocm_host_arch("gfx1201", live=True, why="packed E2M1 fragment decode is an RDNA4 WMMA layout proof")
 
 
 def expected_registers(codes, k, n, row, col):

@@ -12,7 +12,7 @@ def _owning_gfx1201():
     transfers to gfx1151, so a red row there must mean a gfx1151 defect."""
     from tests._support.rocm_build import require_rocm_host_arch
 
-    require_rocm_host_arch("gfx1201", "public one-parent gate/up route is admitted only on rocm_gfx1201")
+    require_rocm_host_arch("gfx1201", live=True, why="public one-parent gate/up route is admitted only on rocm_gfx1201")
 
 
 def gate_up_3_17(parent):

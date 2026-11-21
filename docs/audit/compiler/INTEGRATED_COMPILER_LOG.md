@@ -15065,3 +15065,16 @@ ROCm: parity validated on gfx1201; gfx1151 follow-up owed. NVIDIA: parity valida
 Remaining: as in the 11-18 entries — differentiation-request decorations, the conformance matrix's `compile_bundle`, then the route census and `_OpExtractor` deletion.
 Evidence: python/tessera/compiler/graph_ir_cache.py; python/tessera/compiler/jit.py; tests/unit/test_graph_ir_cache.py
 <!-- entry-fields:end -->
+
+### 2026-11-21 — E2E-REAL-6F: the conformance matrix proves its IR rungs on the traced module
+
+Owner: [E2E-REAL-6F](INTEGRATED_COMPILER_PLAN.md#e2e-real-6f)
+PRs: branch `claude/e2e6f-conformance-traced-proof`; sync E2E-REAL-6F-conformance-traced-proof-2026-11-21.
+Outcome: `conformance_matrix._ir_proof` proved each curated program's Graph, Schedule, Tile and Target rungs from the decoration-time AST module and its `compile_bundle`. It was the second-largest reader of the deferred emission in the 11-18 census (504). It now traces the program on its fixed-seed corroboration inputs (`conformance_evaluator.corroboration_inputs`) and compiles that module with `compile_graph_module`, the driver a tracer-authority call uses, so the rungs are proven on the module the compiler executes. `kv_cache_read` has no corroboration inputs: the tracer cannot take its `KVCacheHandle` ("'KVCacheHandle' object is not iterable"), so its 9 cells keep the AST module. A probe before the change showed the traced route reaching the same four rungs as the AST route for all 54 pure cells (6 programs × 9 targets). Every generated dashboard, `op_target_conformance` included, regenerates byte-identical.
+
+Measured on the Mac (M1 Max, macOS 27.2, unsandboxed), `tests/unit -m "not slow" -n 8` under `scripts/ast_lowering_census.py`, main dfebdc397 vs 04a9d7a50: failing node IDs identical. AST lowerings 2,263 → 1,842; `_ir_proof` deferred emissions 504 → 73 (the `kv_cache_read` cells). `test_ir_proof_compiles_the_traced_module_without_the_ast_one` and `test_ir_proof_reports_a_failed_trace_as_missing` both fail against the previous `_ir_proof`.
+
+ROCm, NVIDIA, x86, Apple: not applicable. The change is to the audit dashboard's proof source, the dashboard output is unchanged, and no backend lowering or runtime path changed. No device lane was run.
+Remaining: `kv_cache_read`'s 9 cells (a stateful-argument trace), `tessera.vmap`'s module read, then the route census and the `_OpExtractor` deletion gate.
+Evidence: python/tessera/compiler/conformance_matrix.py; python/tessera/compiler/conformance_evaluator.py; tests/unit/test_op_target_conformance.py
+<!-- entry-fields:end -->

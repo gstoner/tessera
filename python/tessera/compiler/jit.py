@@ -527,6 +527,35 @@ class JitFn:
     _frontend_dropped_calls = _ast_derived_field("_frontend_dropped_calls")
     _decoration_compile = _ast_derived_field("_decoration_compile")
 
+    def _resolved_provenance(self, index: int) -> Any:
+        resolve = self.__dict__.get("_deferred_provenance")
+        if resolve is not None:
+            self._materialize_ast_emission()
+            differentiation, backward = resolve()
+            self.__dict__.setdefault("_differentiation_provenance", differentiation)
+            self.__dict__.setdefault("_backward_provenance", backward)
+            self._deferred_provenance = None
+        return self.__dict__[
+            ("_differentiation_provenance", "_backward_provenance")[index]]
+
+    @property
+    def differentiation_provenance(self) -> Any:
+        """Mode-neutral provenance of the differentiation request."""
+        return self._resolved_provenance(0)
+
+    @differentiation_provenance.setter
+    def differentiation_provenance(self, value: Any) -> None:
+        self.__dict__["_differentiation_provenance"] = value
+
+    @property
+    def backward_provenance(self) -> Any:
+        """Reverse-mode mirror of the provenance (NOT_REQUESTED otherwise)."""
+        return self._resolved_provenance(1)
+
+    @backward_provenance.setter
+    def backward_provenance(self, value: Any) -> None:
+        self.__dict__["_backward_provenance"] = value
+
     @property
     def ast_emission_pending(self) -> bool:
         """True while the decoration-time AST Graph IR has not been built."""
@@ -649,6 +678,7 @@ class JitFn:
         differentiation_request: Optional[Any] = None,
         differentiation_provenance: Optional[Any] = None,
         backward_provenance: Optional[Any] = None,
+        deferred_provenance: Optional[Callable[[], Tuple[Any, Any]]] = None,
         source_text: Optional[str] = None,
         shape_bounds: Optional[Dict[str,int]] = None,
         bounded_source_certificate: Optional[Any] = None,
@@ -749,8 +779,13 @@ class JitFn:
         # and its mode-neutral provenance facet. Reverse mode is additionally
         # mirrored onto the compatibility-only ``backward`` surface.
         self.differentiation_request = differentiation_request
-        self.differentiation_provenance = differentiation_provenance
-        self.backward_provenance = backward_provenance
+        # A deferred differentiation request resolves its provenance from the
+        # compile inside the deferred emission, so it reads as pending until
+        # something asks for it.
+        self._deferred_provenance = deferred_provenance
+        if deferred_provenance is None:
+            self.differentiation_provenance = differentiation_provenance
+            self.backward_provenance = backward_provenance
         # PK8a (2026-06-02) — shape-free RecognizedOp when this module's
         # compute region is an authorable Apple-GPU packaged kernel, else
         # None. ``emit_package`` turns it into a real `.mtlpackage` given
@@ -6400,8 +6435,7 @@ def jit(
 
         # E2E-REAL-6F: the AST module is a legacy-candidate plan, not the
         # compiler authority, so emit it only when something reads it. Every
-        # decoration-time reader is excluded here: a differentiation request
-        # (its intent is written into the module), the bounded LHS
+        # decoration-time reader is excluded here: the bounded LHS
         # dispatcher, and on apple_gpu the readers
         # ``_apple_gpu_decoration_defers`` names (auto_batch, package
         # authoring/dispatch, the Phase-F tracer gate). The ``cpu`` reference
@@ -6411,14 +6445,15 @@ def jit(
         # capability check over the ops the body can execute admits every
         # one; otherwise the module is built now and gives the authoritative
         # answer (a program-level admission such as gfx1151's quantized MLP
-        # included).
+        # included). A differentiation request defers too: the intent it
+        # writes into the module and the backward provenance it reads from
+        # the compile both run inside the deferred emission (Step 6b).
         _defer_ast = (
             (target_kind != "apple_gpu" or _apple_gpu_decoration_defers(
                 fn, source_text, auto_batch=_auto_batch,
                 emit_package=emit_package,
                 dispatch_via_package=_resolve_dispatch_via_package(
                     dispatch_via_package, target_kind)))
-            and autodiff is None and wrt is None
             and shape_bounds is None
             and source_text is not None
             and (target_kind == "cpu"
@@ -6431,10 +6466,6 @@ def jit(
         else:
             emission = _emit()
             module = emission.module
-            cpu_plan = emission.cpu_plan
-            compile_bundle = emission.compile_bundle
-            compile_result = emission.compile_result
-            diagnostics = emission.diagnostics
             _trace_deferred = emission.trace_deferred
 
         # ── Step 6a: refuse a native target that would drop a tessera.ops call ─
@@ -6486,42 +6517,70 @@ def jit(
 
         diff_request = _ad.build_request(
             fn, autodiff=autodiff, wrt=wrt, native_required=native_required)
-        if _defer_ast and diff_request is not None:
-            raise AssertionError("a deferred AST emission has no differentiation request")
-        # Phase 4 (A3): source the native-backward hook from the execution
-        # matrix via the program's component ops — the backward is native only if
-        # every differentiable op has a device-proven backward on this target.
-        _bwd_families = (
-            tuple(compile_result.component_ops)
-            if compile_result is not None else ()
-        )
-        differentiation_prov = _ad.resolve_differentiation_provenance(
-            diff_request, target=target_kind, op_families=_bwd_families)
-        backward_prov = (
-            differentiation_prov
-            if diff_request is not None and diff_request.mode == "reverse"
-            else _ad.NOT_REQUESTED
-        )
-        if diff_request is not None and module is not None:
-            intent = diff_request.module_intent_attrs()
-            # The C++ --tessera-autodiff pass reads the `tessera.autodiff` marker
-            # off the `func.func` (AutodiffPass.cpp: func->getAttrOfType), so the
-            # actionable home is the function's fn_attrs. Attach it to the
-            # differentiated function (matched by name; all functions if the
-            # single-function module has no name match). A module-level marker is
-            # also set as a program-level breadcrumb.
-            module.module_attrs.update(intent)
-            fns = getattr(module, "functions", []) or []
-            named = [gf for gf in fns if getattr(gf, "name", None) == fn.__name__]
-            for gf in (named or fns):
-                gf.fn_attrs.update(intent)
-        if diff_request is not None and compile_result is not None:
-            import dataclasses as _dc
-            compile_result = _dc.replace(
-                compile_result,
-                differentiation=differentiation_prov,
-                backward=(backward_prov if diff_request.mode == "reverse" else None),
+
+        def _differentiate(emission: _GraphIREmission) -> Tuple[
+                _GraphIREmission, Any, Any]:
+            # Phase 4 (A3): source the native-backward hook from the execution
+            # matrix via the program's component ops — the backward is native
+            # only if every differentiable op has a device-proven backward on
+            # this target.
+            compiled = emission.compile_result
+            families = tuple(compiled.component_ops) if compiled is not None else ()
+            differentiation = _ad.resolve_differentiation_provenance(
+                diff_request, target=target_kind, op_families=families)
+            backward = (
+                differentiation
+                if diff_request is not None and diff_request.mode == "reverse"
+                else _ad.NOT_REQUESTED
             )
+            if diff_request is None:
+                return emission, differentiation, backward
+            if emission.module is not None:
+                intent = diff_request.module_intent_attrs()
+                # The C++ --tessera-autodiff pass reads the `tessera.autodiff`
+                # marker off the `func.func` (AutodiffPass.cpp:
+                # func->getAttrOfType), so the actionable home is the
+                # function's fn_attrs. Attach it to the differentiated function
+                # (matched by name; all functions if the single-function module
+                # has no name match). A module-level marker is also set as a
+                # program-level breadcrumb.
+                emission.module.module_attrs.update(intent)
+                fns = getattr(emission.module, "functions", []) or []
+                named = [gf for gf in fns if getattr(gf, "name", None) == fn.__name__]
+                for gf in (named or fns):
+                    gf.fn_attrs.update(intent)
+            if compiled is not None:
+                import dataclasses as _dc
+                emission = _dc.replace(emission, compile_result=_dc.replace(
+                    compiled,
+                    differentiation=differentiation,
+                    backward=(backward if diff_request.mode == "reverse" else None),
+                ))
+            return emission, differentiation, backward
+
+        deferred_emission: Optional[Callable[[], _GraphIREmission]] = None
+        deferred_provenance: Optional[Callable[[], Tuple[Any, Any]]] = None
+        if _defer_ast:
+            differentiation_prov = backward_prov = None
+            if diff_request is None:
+                differentiation_prov = backward_prov = _ad.NOT_REQUESTED
+                deferred_emission = _emit
+            else:
+                provenance: Dict[str, Tuple[Any, Any]] = {}
+
+                def _emit_differentiated() -> _GraphIREmission:
+                    emitted, differentiation, backward = _differentiate(_emit())
+                    provenance["value"] = (differentiation, backward)
+                    return emitted
+
+                deferred_emission = _emit_differentiated
+                deferred_provenance = lambda: provenance["value"]  # noqa: E731
+        else:
+            emission, differentiation_prov, backward_prov = _differentiate(emission)
+            cpu_plan = emission.cpu_plan
+            compile_bundle = emission.compile_bundle
+            compile_result = emission.compile_result
+            diagnostics = emission.diagnostics
 
         # ── Step 7: wrap and return ──────────────────────────────────────────
         jitfn = JitFn(
@@ -6546,11 +6605,12 @@ def jit(
             differentiation_request=diff_request,
             differentiation_provenance=differentiation_prov,
             backward_provenance=backward_prov,
+            deferred_provenance=deferred_provenance,
             source_text=source_text,
             shape_bounds=shape_bounds,
             bounded_source_certificate=bounded_certificate,
             bounded_rhs_storage_order=rhs_storage_order,
-            deferred_emission=_emit if _defer_ast else None,
+            deferred_emission=deferred_emission,
         )
         if _trace_deferred:
             # AST emission failed → the tracer is the only execution path. Force

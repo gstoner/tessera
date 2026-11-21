@@ -46,6 +46,9 @@ _MACHINERY = {
     (_JIT_FILE, "_emit"), (_JIT_FILE, "_jit_emit_graph_ir"),
     (_JIT_FILE, "_ensure_legacy_graph_ir"), (_JIT_FILE, "_needs_trace"),
     (_JIT_FILE, "recognized_package"),
+    (_JIT_FILE, "differentiation_provenance"), (_JIT_FILE, "backward_provenance"),
+    (_JIT_FILE, "_resolved_provenance"), (_JIT_FILE, "_emit_differentiated"),
+    (_JIT_FILE, "_differentiate"),
     (_JIT_FILE, "_recover_frontend_diagnostics"),
     (_GRAPH_IR_FILE, "lower"),
     ("ast_lowering_census.py", "run"),
@@ -101,8 +104,9 @@ def _stack_facts(skip: int = 3) -> Dict[str, Any]:
         key = (short, code.co_name)
         if key == (_JIT_FILE, "get") and field is None:
             field = frame.f_locals.get("name")
-        elif key in {(_JIT_FILE, "_needs_trace"), (_JIT_FILE, "recognized_package")} \
-                and field is None:
+        elif key in {(_JIT_FILE, "_needs_trace"), (_JIT_FILE, "recognized_package"),
+                     (_JIT_FILE, "differentiation_provenance"),
+                     (_JIT_FILE, "backward_provenance")} and field is None:
             field = code.co_name
         if emitter is None and short == _JIT_FILE and code.co_name in {
                 "_jit_emit_graph_ir", "_ensure_legacy_graph_ir",
@@ -143,8 +147,6 @@ def _eager_reasons(scope: Optional[Dict[str, Any]]) -> List[str]:
     fn = scope.get("fn")
     source_text = scope.get("source_text")
     target_kind = scope.get("target_kind")
-    if scope.get("autodiff") is not None or scope.get("wrt") is not None:
-        reasons.append("differentiation_request")
     if scope.get("shape_bounds") is not None:
         reasons.append("shape_bounds")
     if source_text is None:

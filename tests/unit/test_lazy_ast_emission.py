@@ -80,9 +80,39 @@ def test_reading_graph_ir_builds_the_ast_module():
     assert fn.cpu_plan is not None and fn.compile_bundle is not None
 
 
-def test_a_differentiation_request_keeps_the_eager_emission():
-    # Its intent is written into the module.
-    assert not ts.jit(autodiff="reverse", wrt=["x"])(_body).ast_emission_pending
+def test_a_differentiation_request_defers_and_writes_its_intent_on_emission():
+    # The intent the C++ autodiff pass keys on, and the backward provenance
+    # read from the compile, are produced by the deferred emission, so the
+    # decoration builds no AST module until something reads one.
+    from tessera.compiler.autodiff_request import BackwardStatus
+
+    eager = ts.jit(autodiff="reverse", wrt=["x"])
+    lazy = ts.jit(autodiff="reverse", wrt=["x"])(_body)
+    assert lazy.ast_emission_pending
+    assert "_differentiation_provenance" not in lazy.__dict__
+    backward = lazy.backward_provenance
+    assert not lazy.ast_emission_pending, "provenance comes from the compile"
+    assert backward.status is not BackwardStatus.NOT_REQUESTED
+    assert lazy.differentiation_provenance is backward
+    assert lazy.compile_result.backward is backward
+    text = lazy.graph_ir.to_mlir()
+    assert "tessera.autodiff" in text
+    fn_attrs = [gf.fn_attrs for gf in lazy.graph_ir.functions]
+    assert any("tessera.autodiff" in attrs for attrs in fn_attrs), fn_attrs
+
+    # Reading the module first resolves the same provenance afterwards.
+    module_first = eager(_body)
+    assert "tessera.autodiff" in module_first.graph_ir.to_mlir()
+    assert module_first.backward_provenance.status is backward.status
+
+
+def test_a_forward_request_defers_with_not_requested_backward():
+    from tessera.compiler.autodiff_request import BackwardStatus
+
+    jvp = ts.jit(autodiff="forward", wrt=["x"])(_body)
+    assert jvp.ast_emission_pending
+    assert jvp.backward_provenance.status is BackwardStatus.NOT_REQUESTED
+    assert jvp.differentiation_provenance.status is not BackwardStatus.NOT_REQUESTED
 
 
 # ── The Apple targets defer it too ───────────────────────────────────────────

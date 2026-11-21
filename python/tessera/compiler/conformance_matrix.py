@@ -45,6 +45,7 @@ from tessera.compiler import backend_manifest as _bm
 from tessera.compiler import conformance_evaluator as _ce
 from tessera.compiler import execution_matrix as _em
 from tessera.compiler import primitive_coverage as _pc
+from tessera.compiler.driver import compile_graph_module
 from tessera.compiler.schedule_ir import lower_graph_to_schedule_ir
 from tessera.compiler.tile_ir import lower_schedule_to_tile_ir
 from tessera.compiler.target_ir import lower_tile_to_target_ir
@@ -330,11 +331,33 @@ def _ir_proof(op: str, target: str) -> IRProof:
 
     A registry row is not evidence. The rung completes only when the compiler
     emits that artifact and its in-process IR verifier accepts the typed module.
+
+    The Graph module is the one the compiler executes: the tracer's capture of
+    the curated program on its corroboration inputs (E2E-REAL-6F), compiled by
+    the same driver a tracer-authority call uses. The decoration-time AST
+    module is read only for a program with no corroboration inputs -- the
+    stateful ``kv_cache_read`` accessor, whose cache handle the tracer cannot
+    take as an argument.
     """
     try:
         fn = _ce._jitted(op, target)
-        bundle = fn.compile_bundle
-        graph = fn.graph_ir
+        args = _ce.corroboration_inputs(op)
+        if args is None:
+            bundle = fn.compile_bundle
+            graph = fn.graph_ir
+        else:
+            graph, _ = fn._trace_frontend_capture(args, {})
+            bundle = compile_graph_module(
+                graph,
+                source_origin=fn.source_origin,
+                target=target,
+                cpu_tile=tuple(fn.cpu_tile),
+                options={
+                    "cpu_tile": list(fn.cpu_tile),
+                    "deterministic": fn.deterministic,
+                    "seed": fn.seed,
+                },
+            )
     except Exception as exc:  # noqa: BLE001 - audit converts failures to evidence
         return IRProof(PROOF_MISSING, PROOF_MISSING, PROOF_MISSING,
                        PROOF_MISSING, f"compile failed: {exc}")

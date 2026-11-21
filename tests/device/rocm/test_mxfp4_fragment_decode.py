@@ -15,6 +15,15 @@ from tests.unit.test_rocm_mxfp4_fragment_decode import CASES, fragment_byte_sour
 pytestmark = pytest.mark.hardware_rocm
 
 
+@pytest.fixture(autouse=True)
+def _owning_gfx1201():
+    """Skip, naming the host arch, on a sibling ROCm host: gfx1201 proof never
+    transfers to gfx1151, so a red row there must mean a gfx1151 defect."""
+    from tests._support.rocm_build import require_rocm_host_arch
+
+    require_rocm_host_arch("gfx1201", "packed E2M1 fragment decode is an RDNA4 WMMA layout proof")
+
+
 def expected_registers(codes, k, n, row, col):
     # Independent value-domain oracle; NumPy performs the E4M3 encoding.
     levels = np.array([0., .5, 1., 1.5, 2., 3., 4., 6.], np.float32)

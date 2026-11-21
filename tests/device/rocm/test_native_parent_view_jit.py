@@ -6,6 +6,15 @@ from tessera import runtime as rt
 from tessera.compiler import rocm_parent_view_native as native
 
 
+@pytest.fixture(autouse=True)
+def _owning_gfx1201():
+    """Skip, naming the host arch, on a sibling ROCm host: gfx1201 proof never
+    transfers to gfx1151, so a red row there must mean a gfx1151 defect."""
+    from tests._support.rocm_build import require_rocm_host_arch
+
+    require_rocm_host_arch("gfx1201", "public one-parent gate/up route is admitted only on rocm_gfx1201")
+
+
 def gate_up_3_17(parent):
     left = ts.ops.slice(parent, [0, 0], [3, 17])
     right = ts.ops.slice(parent, [0, 17], [3, 17])

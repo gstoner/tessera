@@ -17,6 +17,15 @@ pytestmark=[pytest.mark.hardware_rocm,pytest.mark.compiler_route]
 from benchmarks.rocm.benchmark_public_quantized_product import make_product,inputs,oracle
 
 
+@pytest.fixture(autouse=True)
+def _owning_gfx1201():
+    """Skip, naming the host arch, on a sibling ROCm host: gfx1201 proof never
+    transfers to gfx1151, so a red row there must mean a gfx1151 defect."""
+    from tests._support.rocm_build import require_rocm_host_arch
+
+    require_rocm_host_arch("gfx1201", "public quantizer/product route is promoted only on gfx1201")
+
+
 @pytest.mark.parametrize("shape",[(3,17,32),(19,33,64),(256,128,12288)])
 def test_public_jit_composed_quantization_matches_oracle_and_replays_without_compiler(shape,monkeypatch):
     assert rt._rocm_live_arch()=="gfx1201","owning gfx1201 required"

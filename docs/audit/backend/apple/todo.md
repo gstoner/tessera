@@ -16458,3 +16458,7 @@ A measurement tool for what still builds the AST Graph IR module; no apple path 
 ## `E2E-REAL-6F-decoration-trace-legality-2026-11-18`: sibling outcome — parity validated on the Mac (M1 Max)
 
 The decoration-time trace now verifies against `apple_gpu`/`apple_cpu` legality, so ops only the GPU table admits trace at decoration; the Mac unit sweep's failing node IDs match main (one wall-clock test aside). ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-18--e2e-real-6f-the-decoration-trace-is-verified-against-its-own-target))
+
+## `E2E-REAL-6F-decoration-cache-call-abi-2026-11-20`: sibling outcome — parity validated on the Mac (M1 Max)
+
+A host-independent cache-key fix; the Mac unit sweep's failing node IDs match main (one wall-clock test aside, which passes alone). ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-20--e2e-real-6f-the-decoration-time-graph-ir-cache-keys-on-the-call-abi))

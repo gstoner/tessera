@@ -19587,3 +19587,7 @@ A measurement tool for what still builds the AST Graph IR module; no rocm path c
 ## `E2E-REAL-6F-decoration-trace-legality-2026-11-18`: sibling outcome — parity validated on gfx1201; gfx1151 follow-up owed
 
 Native scaled programs on `rocm_gfx1201` are tracer-owned at decoration and their `vmap` owners share one memoized AST oracle. Tajasarus unit and `tests/device/rocm` failing node IDs match main. Princess-Luna had no GPU after a reboot (ROCk not loaded), so gfx1151 is unevaluated. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-18--e2e-real-6f-the-decoration-trace-is-verified-against-its-own-target))
+
+## `E2E-REAL-6F-decoration-cache-call-abi-2026-11-20`: sibling outcome — parity validated on gfx1201; gfx1151 follow-up owed
+
+The decoration-time Graph IR cache now keys on the resolved argument annotations; no ROCm lowering changed. Tajasarus unit and `tests/device/rocm` failing node IDs match main. Princess-Luna was unreachable, so gfx1151 is owed. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-20--e2e-real-6f-the-decoration-time-graph-ir-cache-keys-on-the-call-abi))

@@ -17092,3 +17092,7 @@ A measurement tool for what still builds the AST Graph IR module; no nvidia path
 ## `E2E-REAL-6F-decoration-trace-legality-2026-11-18`: sibling outcome — parity validated on sm_120 (RTX 5070)
 
 No NVIDIA lowering changed; decorations now trace against their own target's legality table. The-Super-Bear unit and `tests/device/nvidia` failing node IDs match main once the device lane runs with the release gate's `TESSERA_OPT` / `TESSERA_NVIDIA_OPT` / `MLIR_OPT` (without them 425 tests fail with `KeyError` on both trees and evaluate nothing); 239 device failures are pre-existing on main. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-18--e2e-real-6f-the-decoration-trace-is-verified-against-its-own-target))
+
+## `E2E-REAL-6F-decoration-cache-call-abi-2026-11-20`: sibling outcome — parity validated on sm_120 (RTX 5070)
+
+The decoration-time Graph IR cache now keys on the resolved argument annotations; no NVIDIA lowering changed. The-Super-Bear unit and `tests/device/nvidia` failing node IDs match main; 8 setup errors from `nvidia-smi` timeouts passed on rerun. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-20--e2e-real-6f-the-decoration-time-graph-ir-cache-keys-on-the-call-abi))

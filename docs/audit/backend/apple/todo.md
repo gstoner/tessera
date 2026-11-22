@@ -16467,5 +16467,8 @@ A host-independent cache-key fix; the Mac unit sweep's failing node IDs match ma
 
 The conformance dashboard now proves its IR rungs on the traced module; the dashboard output is unchanged and no apple lowering or runtime path changed. Evidence is the Mac unit suite only. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-the-conformance-matrix-proves-its-ir-rungs-on-the-traced-module))
 
+## `E2E-REAL-6F-differentiation-deferral-2026-11-21`: sibling outcome — not applicable
+
+Differentiation-request decorations now defer the AST module; no apple lowering or runtime path changed. Evidence is the Mac unit suite only. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-differentiation-requests-defer-the-ast-module))
 
 ## `AR-DECODE-PROGRAM-1-S1a-2026-11-22`: sibling outcome — not applicable — no Apple lowering exists; the Schedule contract admits sm_120 only and refuses every other target by name. Apple belongs to slice S7. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4b-s1a--in-place-paged-kv-write-on-sm_120-2026-11-22))

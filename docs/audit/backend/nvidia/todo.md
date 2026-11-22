@@ -17101,6 +17101,9 @@ The decoration-time Graph IR cache now keys on the resolved argument annotations
 
 The conformance dashboard now proves its IR rungs on the traced module; the dashboard output is unchanged and no nvidia lowering or runtime path changed. Evidence is the Mac unit suite only. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-the-conformance-matrix-proves-its-ir-rungs-on-the-traced-module))
 
+## `E2E-REAL-6F-differentiation-deferral-2026-11-21`: sibling outcome — parity validated on sm_120 (RTX 5070)
+
+Differentiation-request decorations now defer the AST module; no NVIDIA lowering changed. The-Super-Bear unit and `tests/device/nvidia` failing node IDs match dfebdc397. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-differentiation-requests-defer-the-ast-module))
 
 ## `AR-DECODE-PROGRAM-1-S1a-2026-11-22`: owning slice — in-place paged KV write (sm_120)
 

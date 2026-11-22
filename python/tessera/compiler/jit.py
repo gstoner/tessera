@@ -527,6 +527,9 @@ class JitFn:
     _frontend_dropped_calls = _ast_derived_field("_frontend_dropped_calls")
     _decoration_compile = _ast_derived_field("_decoration_compile")
 
+    # Pending differentiation provenance; cleared once something resolves it.
+    _deferred_provenance: Optional[Callable[[], Tuple[Any, Any]]]
+
     def _resolved_provenance(self, index: int) -> Any:
         resolve = self.__dict__.get("_deferred_provenance")
         if resolve is not None:

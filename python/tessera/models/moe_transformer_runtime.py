@@ -138,18 +138,18 @@ def _project_qkv_materialized(x, lw, config, positions):
         S = x.shape[0]
         c = x @ mlaw.w_dkv                                          # (S,d_c)
         k_nope = (c @ mlaw.w_uk).reshape(S, Hh, d_nope)
-        k_rope = _attn.apply_rope(x @ mlaw.w_kr, positions)         # (S,d_rope) shared
+        k_rope = _attn.apply_rope(x @ mlaw.w_kr, positions, base=config.rope_theta)         # (S,d_rope) shared
         K = np.concatenate([k_nope, np.broadcast_to(k_rope[:, None, :], (S, Hh, d_rope))],
                            axis=-1)                                 # (S,Hh,D)
         q = (x @ mlaw.w_q).reshape(S, Hh, d_nope + d_rope)
-        q_rope = _attn.apply_rope(q[..., d_nope:].transpose(1, 0, 2), positions).transpose(1, 0, 2)
+        q_rope = _attn.apply_rope(q[..., d_nope:].transpose(1, 0, 2), positions, base=config.rope_theta).transpose(1, 0, 2)
         Q = np.concatenate([q[..., :d_nope], q_rope], axis=-1)     # (S,Hh,D)
         V = (c @ mlaw.w_uv).reshape(S, Hh, d_v)
         return Q, K, V
     Hq, Hkv = config.num_attention_heads, config.num_kv_heads
     q, k, v = _gqa_project(x, lw, config)
-    qr = _attn.apply_rope(q.transpose(1, 0, 2), positions).transpose(1, 0, 2)
-    kr = _attn.apply_rope(k.transpose(1, 0, 2), positions).transpose(1, 0, 2)
+    qr = _attn.apply_rope(q.transpose(1, 0, 2), positions, base=config.rope_theta).transpose(1, 0, 2)
+    kr = _attn.apply_rope(k.transpose(1, 0, 2), positions, base=config.rope_theta).transpose(1, 0, 2)
     return qr, kr, v
 
 
@@ -276,8 +276,8 @@ def _attn_prefill(x, lw, config, max_seq, layer_index: int = 0):
     S = x.shape[0]
     q, k, v = _gqa_project(x, lw, config)
     pos = np.arange(S)
-    qr = _attn.apply_rope(q.transpose(1, 0, 2), pos).transpose(1, 0, 2)
-    kr = _attn.apply_rope(k.transpose(1, 0, 2), pos).transpose(1, 0, 2)
+    qr = _attn.apply_rope(q.transpose(1, 0, 2), pos, base=config.rope_theta).transpose(1, 0, 2)
+    kr = _attn.apply_rope(k.transpose(1, 0, 2), pos, base=config.rope_theta).transpose(1, 0, 2)
     Q = qr.transpose(1, 0, 2)[None]                    # (1,Hq,S,D)
     K = kr.transpose(1, 0, 2)[None]                    # (1,Hkv,S,D)
     V = v.transpose(1, 0, 2)[None]
@@ -304,8 +304,8 @@ def _attn_decode(x_t, lw, cache, config, position):
         return o @ lw.attn["w_o"], ("mla", lat, rope)
     _, K_prev, V_prev = cache                          # K_prev rope'd (P,Hkv,D), V_prev (P,Hkv,D)
     q, k, v = _gqa_project(x_t, lw, config)            # (1,Hq/Hkv,D)
-    qr = _attn.apply_rope(q.transpose(1, 0, 2), np.array([position])).transpose(1, 0, 2)
-    krt = _attn.apply_rope(k.transpose(1, 0, 2), np.array([position])).transpose(1, 0, 2)
+    qr = _attn.apply_rope(q.transpose(1, 0, 2), np.array([position]), base=config.rope_theta).transpose(1, 0, 2)
+    krt = _attn.apply_rope(k.transpose(1, 0, 2), np.array([position]), base=config.rope_theta).transpose(1, 0, 2)
     K = np.concatenate([K_prev, krt], axis=0)          # (P+1,Hkv,D)
     V = np.concatenate([V_prev, v], axis=0)
     g = Hq // Hkv

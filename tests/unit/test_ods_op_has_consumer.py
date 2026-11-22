@@ -282,6 +282,9 @@ def test_scan_parses_every_ods_form() -> None:
         "tessera_rocm.nvfp4_expand",
         "tessera_rocm.swmmac",
         "tessera_rocm.scalar_matmul",
+        "tessera.paged_kv_write",          # AR-DECODE-PROGRAM-1 S1a
+        "schedule.paged_kv_write",
+        "tile.paged_kv_write_kernel",
         "tile.tmem.store",                 # dotted mnemonic
         "tessera.neighbors.halo.region",   # dotted dialect name
     ):
@@ -305,7 +308,7 @@ def test_scan_parses_every_ods_form() -> None:
 # 695 -> 697: typed Tile and NVIDIA native-program invocation records.
 # 697 -> 698: native storage-preserving schedule.binary_kernel.
 # 701 -> 703: Graph tessera.count_nonzero and tessera.top_k (Apple GPU descriptors).
-_DECLARED_OP_RECORDS = 703
+_DECLARED_OP_RECORDS = 706
 
 
 def test_scan_calls_a_known_consumed_op_consumed() -> None:

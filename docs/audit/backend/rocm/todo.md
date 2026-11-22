@@ -19601,3 +19601,15 @@ The conformance dashboard now proves its IR rungs on the traced module; the dash
 ## `E2E-REAL-6F-differentiation-deferral-2026-11-21`: sibling outcome — parity validated on gfx1201 and gfx1151
 
 Differentiation-request decorations now defer the AST module; no ROCm lowering changed. Tajasarus and Princess-Luna unit and `tests/device/rocm` failing node IDs match dfebdc397. The Luna chain also closes the gfx1151 follow-ups owed for #1065, #1066 and #1067. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-differentiation-requests-defer-the-ast-module))
+
+
+## `MAC-HOST-HYGIENE-2026-11-22`: sibling outcome — not applicable (test infrastructure)
+
+`tests/_support/backend_absence.py` now recognizes more "backend not built here" failures and converts them to skips:
+- an unregistered NVIDIA/ROCm pass, whether passed as an option, named in a textual pipeline, or present in a failed command's argv;
+- an unloaded `tessera_nvidia`/`tessera_rocm` dialect;
+- a missing AMD clang or hipcc.
+
+Each conversion requires a probe of the host to confirm the capability is absent. On a host that has the backend, the same message is still a failure, so this box's evidence is unchanged.
+
+The `TESSERA_LLVM_BIN` reads in the device and unit tests now go through `tests._support.environment.require_llvm_bin()`, which skips with a reason instead of raising `KeyError`. Apple gaps found by the same audit are APPLE-NTBI-1..4 in the Apple todo.

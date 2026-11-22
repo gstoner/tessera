@@ -13,6 +13,7 @@ from benchmarks.nvidia.benchmark_jit_attention_vjp import download
 from tests.device.nvidia.test_public_typed_attention_jvp import reference
 from tests.device.nvidia.test_saved_lse_half_backward_kernel import compare
 from tests.unit.test_saved_lse_half_backward import source
+from tests._support.environment import require_llvm_bin
 
 pytestmark = [pytest.mark.hardware_nvidia, pytest.mark.compiler_route]
 
@@ -53,7 +54,7 @@ def test_direct_tape_prepares_jvp_from_captured_storage(
                               **({"bias": roots["bias"]} if bias else {})) as frame:
                 digest = frame.prepare_jvp(source=forward_request,
                     compiler=Path(os.environ["TESSERA_OPT"]),
-                    llvm_bin=Path(os.environ["TESSERA_LLVM_BIN"]))
+                    llvm_bin=require_llvm_bin())
                 assert len(digest) == 64
                 def forbidden(*args, **kwargs):
                     pytest.fail("prepared direct tape JVP attempted compilation")

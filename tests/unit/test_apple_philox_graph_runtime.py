@@ -3,19 +3,16 @@
 from __future__ import annotations
 
 import ctypes
-import os
-from pathlib import Path
-
 import numpy as np
 import pytest
 
 from tessera.compiler import philox
+from tests._support.apple import require_apple_gpu_runtime_dylib
 
 
 @pytest.mark.hardware_apple_gpu
 def test_graph_philox_status_runs_metal_and_matches_counter_oracle():
-    library = os.environ.get("TESSERA_APPLE_GPU_RUNTIME_LIB")
-    assert library and Path(library).is_file(), "set TESSERA_APPLE_GPU_RUNTIME_LIB to a fresh Mac runtime"
+    library = require_apple_gpu_runtime_dylib()
     lib = ctypes.CDLL(library)
     call = lib.tessera_apple_gpu_ebm_langevin_step_philox_graph_f32_status
     pf = ctypes.POINTER(ctypes.c_float)
@@ -57,8 +54,7 @@ def test_graph_philox_status_runs_metal_and_matches_counter_oracle():
 
 @pytest.mark.hardware_apple_gpu
 def test_scaled_rope_graph_calls_execute_on_metal():
-    library = os.environ.get("TESSERA_APPLE_GPU_RUNTIME_LIB")
-    assert library and Path(library).is_file(), "set TESSERA_APPLE_GPU_RUNTIME_LIB to a fresh Mac runtime"
+    library = require_apple_gpu_runtime_dylib()
     lib = ctypes.CDLL(library)
     pf = ctypes.POINTER(ctypes.c_float)
     divide = lib.tessera_apple_gpu_mpsgraph_binary_f32_status

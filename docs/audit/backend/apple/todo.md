@@ -16470,3 +16470,45 @@ The conformance dashboard now proves its IR rungs on the traced module; the dash
 ## `E2E-REAL-6F-differentiation-deferral-2026-11-21`: sibling outcome — not applicable
 
 Differentiation-request decorations now defer the AST module; no apple lowering or runtime path changed. Evidence is the Mac unit suite only. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-differentiation-requests-defer-the-ast-module))
+
+
+## Needs To Be Implemented on Apple — 2026-11-22 Mac host-hygiene audit (sync `MAC-HOST-HYGIENE-2026-11-22`)
+
+A full Mac `tests/unit` sweep had 758 failures and errors. Most were tests of NVIDIA- or ROCm-only lowerings that failed instead of skipping, because the Mac's `tessera-opt` has neither backend.
+- **Platform-specific tests:** they now skip with a reason that names the missing backend and the box to run them on (`tests/_support/backend_absence.py`).
+- **Target-independent features with no Apple route:** the skip reason also names the item below, so a gap cannot hide among those skips. `tests/unit/test_backend_absence_skip.py` gates the file → ID map against this list.
+
+### APPLE-NTBI-1 — attention VJP consumer (highest value)
+- **Gap:** the native-VJP `attention_backward` plugin registers x86, ROCm and `nvidia_sm120` consumers but no `apple_gpu` consumer (`python/tessera/compiler/native_vjp_plugins.py`, `target_consumers`).
+- **What already exists:** the Metal backward kernels (APPLE-ATTN-BWD-1, `apple_native.package_scheduled_attention_backward`).
+- **To do:**
+  1. Register an Apple consumer over the existing Metal backward.
+  2. Add a source-program reverse route with an Apple-native portable restore.
+  3. Add bounded sequence capacities.
+- **Tests that name this item:** the `*source_attention_reverse*`, `test_native_sm120_source_reverse.py`, `test_sm120_bounded_attention_pullback.py` and `test_sm120_bounded_source_rows.py` families.
+
+### APPLE-NTBI-2 — native tensor DAG program
+- **Gap:** there is no general Graph → Schedule → Tile → Apple Target IR producer-DAG owner with owned intermediates, original-source replay, a shape plan and a Metal frame owner. `native_tensor_program.py` hard-codes sm_120 and PTX.
+- **What already exists:** Apple has only fixed-pattern packages (a private-heap composite package, MPSGraph `matmul_softmax`/`rmsnorm_matmul`, and an MSL arena with a host sizer).
+- **To do:** extend those three into a general owner.
+- **Tests that name this item:** the `test_native_tensor_*.py` and `test_native_semantic_dag_ownership.py` families.
+
+### APPLE-NTBI-3 — attention JVP (forward mode)
+- **Gap:** there is no Apple tangent consumer or Metal result lease; the attention tangent interface is gated to sm_120.
+- **Tests that name this item:** `test_native_bounded_attention_jvp_runtime.py`.
+
+### APPLE-NTBI-4 — block quantizer and quantized program composition (low priority, emulated only)
+- **Gap:** the NVFP4/MX quantizer and the quantized product / gate-up / MLP program composition have no Apple route.
+- **Hardware limit:** Apple7 has no FP4/FP8 tensor math; Metal 4.1 `matmul2d` emulates it. Any Apple route would be correctness-only and must not claim a speedup.
+- **Gated on:** APPLE-DTYPE-1 item 1 (a block-scaled consumer).
+- **Tests that name this item:** `test_rocm_block_quant_*.py` and `test_rocm_quantized_*_program.py`.
+
+### Platform-specific (no Apple item; the skip is the right outcome)
+These need nothing on Apple:
+- attention backward-row residual, row-correction and reverse-row schedules (NVVM; Apple keeps `apple7_recompute`, APPLE-ATTN-BWD-3);
+- norm-producer → saved-LSE prefix outlining and the bounded RMSNorm schedule (NVVM);
+- the warmed HIP binding cache;
+- RDNA4 WMMA parent views and folded MXFP4 row-pitch views;
+- FP8 cast lowering through ROCDL (Apple has its own Metal 4.1 pack/unpack, APPLE-DTYPE-1-REJECT).
+
+The sibling-refusal cases that name `apple_gpu` still run and pass on the Mac.

@@ -328,7 +328,32 @@ def _mlir_opt_path() -> Path | None:
         "/usr/lib/llvm-23/bin/mlir-opt",
         "/opt/rocm/core/lib/llvm/bin/mlir-opt",
         "/opt/homebrew/opt/llvm@23/bin/mlir-opt",
+        # Homebrew's production `llvm` keg is the Mac's canonical LLVM/MLIR 23.
+        "/opt/homebrew/opt/llvm/bin/mlir-opt",
     )
+
+
+def require_llvm_bin() -> Path:
+    """The selected LLVM/MLIR 23 ``bin`` directory, else skip with a reason.
+
+    Tests used to read ``os.environ["TESSERA_LLVM_BIN"]`` directly, so a host
+    that never exported it (every Mac sweep, a bare device-lane run) reported a
+    ``KeyError`` instead of saying the lane could not be evaluated. An explicit
+    ``TESSERA_LLVM_BIN``/``LLVM_BIN`` still wins and must hold ``mlir-opt``;
+    a misconfigured value skips rather than silently picking another toolchain.
+    """
+    import pytest
+
+    for name in ("TESSERA_LLVM_BIN", "LLVM_BIN"):
+        if configured := os.environ.get(name):
+            path = Path(configured).expanduser()
+            if (path / "mlir-opt").is_file():
+                return path
+            pytest.skip(f"{name}={configured} holds no mlir-opt; point it at an LLVM/MLIR 23 bin directory")
+    mlir_opt = _mlir_opt_path()
+    if mlir_opt is None:
+        pytest.skip("requires an LLVM/MLIR 23 toolchain (mlir-opt); set TESSERA_LLVM_BIN")
+    return mlir_opt.parent
 
 
 @dataclass(frozen=True)

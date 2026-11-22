@@ -208,7 +208,7 @@ def _cases(seed: int = 1701, *, scale: int = 1) -> list[Case]:
         "reduction", "retune_reduce_sum", f"{64 * scale}x{257 * scale}_axis1", "f32",
         Route(
             "mpsgraph", lambda: rt._apple_gpu_dispatch_reduce(
-                "tessera.reduce", [reduce_x], {"axis": 1}, np),
+                "tessera.reduce", [reduce_x], {"axis": 1, "kind": "sum"}, np),
             True, True, "MPSGraph.reductionSum"),
         Route("numpy_reference", lambda: np.sum(reduce_x, axis=1),
               False, False, "reference_cpu"),

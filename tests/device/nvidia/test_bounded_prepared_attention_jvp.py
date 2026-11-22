@@ -12,6 +12,7 @@ from tessera.compiler import native_attention_jvp_runtime as runtime
 from tests.device.nvidia.test_public_typed_attention_vjp import function
 from tests.device.nvidia.test_public_typed_attention_jvp import reference
 from tests.device.nvidia.test_saved_lse_half_backward_kernel import compare
+from tests._support.environment import require_llvm_bin
 
 pytestmark = [pytest.mark.hardware_nvidia, pytest.mark.compiler_route]
 
@@ -38,7 +39,7 @@ def test_bounded_prepared_host_reuses_capacity_owner(storage, saved, bias, subse
         function(saved, bias, True))
     program = fn.compile_native_attention_jvp(
         **traced, compiler=Path(os.environ["TESSERA_OPT"]),
-        llvm_bin=Path(os.environ["TESSERA_LLVM_BIN"]), sequence_bounds=(7, 9))
+        llvm_bin=require_llvm_bin(), sequence_bounds=(7, 9))
     names = [f"primal_{i}" for i in range(len(program.input_indices))]
     names += [f"tangent_{program.input_indices[i]}" for i in program.active]
     metadata = dict(program_json=program.to_json(), program_digest=program.program_digest,
@@ -181,7 +182,7 @@ def test_bounded_dynamic_bias_and_fp32_output(storage, layout, monkeypatch):
     original = original.replace('tessera.arch = "sm_120"',
         'tessera.arch = "sm_120", tessera.attention_sequence_bounds = array<i64: 7, 9>')
     program = compile_attention_program(original, (0, 1, 2, 3),
-        compiler=Path(os.environ["TESSERA_OPT"]), llvm_bin=Path(os.environ["TESSERA_LLVM_BIN"]))
+        compiler=Path(os.environ["TESSERA_OPT"]), llvm_bin=require_llvm_bin())
     metadata = dict(program_json=program.to_json(), program_digest=program.program_digest,
         arg_names=[f"primal_{i}" for i in range(4)] + [f"tangent_{i}" for i in range(4)])
     rng = np.random.default_rng(20261019)

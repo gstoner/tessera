@@ -127,4 +127,114 @@ static LogicalResult lowerNativePagedKV(ModuleOp mod) {
   }
   return success();
 }
+// AR-DECODE-PROGRAM-1 S1a: native bounded in-place paged write. The Graph
+// result aliases the pages argument; the Tile kernel writes through it.
+static FailureOr<NativePagedKV> pagedKVWriteContract(Operation *graph) {
+  auto fn = graph->getParentOfType<func::FuncOp>();
+  auto mod = graph->getParentOfType<ModuleOp>();
+  auto target = mod->getAttrOfType<StringAttr>("tessera.target");
+  auto arch = mod->getAttrOfType<StringAttr>("tessera.arch");
+  bool sm120 = target && arch && target.getValue() == "nvidia_sm120" && arch.getValue() == "sm_120";
+  if (!sm120)
+    return graph->emitError("paged write needs an owning Target consumer; only sm_120 has one"), failure();
+  if (!fn || !llvm::hasSingleElement(fn.getBody()) || fn.getNumArguments() != 4 ||
+      fn.getNumResults() != 1 || graph->getNumOperands() != 4 || graph->getNumResults() != 1 ||
+      graph->getResultTypes() != fn.getResultTypes())
+    return graph->emitError("paged write requires an isolated four-argument SM120 tensor entry"), failure();
+  for (unsigned i = 0; i < 4; ++i)
+    if (graph->getOperand(i) != fn.getArgument(i))
+      return graph->emitError("paged write operands must be the entry arguments in order "
+                              "(pages, page_table, values, position)"), failure();
+  for (unsigned i = 0; i < fn.getNumArguments(); ++i)
+    if (Attribute raw = fn.getArgAttr(i, "tessera.layout")) {
+      auto layout = dyn_cast<StringAttr>(raw);
+      if (!layout || layout.getValue() != "row_major")
+        return graph->emitError("paged write requires row_major pages and compact operands"), failure();
+    }
+  for (NamedAttribute attr : graph->getAttrs())
+    if (attr.getName() != "schedule.artifact_hash" &&
+        !(attr.getName() == "tessera.effect_kind" &&
+          attr.getValue() == StringAttr::get(graph->getContext(), "memory")))
+      return graph->emitError("paged write has an unsupported policy attribute"), failure();
+  auto pages = dyn_cast<RankedTensorType>(graph->getOperand(0).getType());
+  auto table = dyn_cast<RankedTensorType>(graph->getOperand(1).getType());
+  auto values = dyn_cast<RankedTensorType>(graph->getOperand(2).getType());
+  // Registered Graph verification has already established shapes and dtypes.
+  if (!pages || pages.getRank() != 4 || !table || table.getRank() != 1 || !values || values.getRank() != 3)
+    return graph->emitError("paged write lost its tensor contract"), failure();
+  auto names = fn->getAttrOfType<ArrayAttr>("tessera.bindings");
+  if (!names || names.size() != 4)
+    return graph->emitError("paged write requires four binding names"), failure();
+  llvm::SmallDenseSet<StringRef> seen;
+  for (Attribute attr : names) {
+    auto name = dyn_cast<StringAttr>(attr);
+    if (!name || name.getValue().empty() || !seen.insert(name.getValue()).second)
+      return graph->emitError("paged write binding names must be unique"), failure();
+  }
+  OpBuilder builder(graph->getContext());
+  auto dims = builder.getDenseI64ArrayAttr({pages.getDimSize(0), table.getDimSize(0),
+      pages.getDimSize(1), pages.getDimSize(2), pages.getDimSize(3), values.getDimSize(0)});
+  auto contract = builder.getDictionaryAttr({
+      builder.getNamedAttr("shape", dims), builder.getNamedAttr("bindings", names),
+      builder.getNamedAttr("target", target), builder.getNamedAttr("arch", arch),
+      builder.getNamedAttr("page_ownership", builder.getStringAttr("in_place")),
+      builder.getNamedAttr("table_bounds", builder.getStringAttr("kernel_checked_physical_page_indices")),
+      builder.getNamedAttr("position_bounds", builder.getStringAttr("kernel_checked_device_position")),
+      builder.getNamedAttr("refusal", builder.getStringAttr("i32_status_word")),
+      builder.getNamedAttr("layout", builder.getStringAttr("row_major"))});
+  std::string text; llvm::raw_string_ostream os(text); contract.print(os); os.flush();
+  return NativePagedKV{fn, contract, llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(text)), true)};
+}
+static LogicalResult scheduleNativePagedKVWrite(ModuleOp mod) {
+  SmallVector<Operation *> ops;
+  mod.walk([&](Operation *op) { if (op->getName().getStringRef() == "tessera.paged_kv_write") ops.push_back(op); });
+  for (Operation *graph : ops) {
+    auto c = pagedKVWriteContract(graph); if (failed(c)) return failure();
+    auto ret = dyn_cast<func::ReturnOp>(c->function.getBody().front().back());
+    if (c->function.getBody().front().getOperations().size() != 2 || !ret || ret.getOperands() != graph->getResults())
+      return graph->emitError("paged write must return its updated pages");
+    OpBuilder builder(graph); builder.setInsertionPointAfter(graph);
+    graph->setAttr("schedule.artifact_hash", builder.getStringAttr(c->hash));
+    OperationState state(graph->getLoc(), "schedule.paged_kv_write");
+    state.addOperands(graph->getResults()); state.addTypes(graph->getResultTypes());
+    state.addAttribute("artifact_hash", builder.getStringAttr(c->hash)); state.addAttribute("contract", c->contract);
+    auto scheduled = builder.create(state);
+    graph->getResult(0).replaceAllUsesExcept(scheduled->getResult(0), scheduled);
+  }
+  return success();
+}
+static LogicalResult lowerNativePagedKVWrite(ModuleOp mod) {
+  SmallVector<Operation *> ops;
+  mod.walk([&](Operation *op) { if (op->getName().getStringRef() == "schedule.paged_kv_write") ops.push_back(op); });
+  for (Operation *scheduled : ops) {
+    auto graph = scheduled->getOperand(0).getDefiningOp();
+    if (!graph || graph->getName().getStringRef() != "tessera.paged_kv_write")
+      return scheduled->emitError("paged write schedule requires retained native producer");
+    auto c = pagedKVWriteContract(graph); if (failed(c)) return failure();
+    auto hash = scheduled->getAttrOfType<StringAttr>("artifact_hash");
+    auto ret = dyn_cast<func::ReturnOp>(c->function.getBody().front().back());
+    if (!hash || hash.getValue() != c->hash || graph->getAttr("schedule.artifact_hash") != hash ||
+        scheduled->getAttr("contract") != c->contract || scheduled->getAttrs().size() != 2 ||
+        scheduled->getResultTypes() != graph->getResultTypes() || !ret || ret.getOperands() != scheduled->getResults() ||
+        c->function.getBody().front().getOperations().size() != 3)
+      return scheduled->emitError("paged write Schedule contract changed after hashing");
+    StringRef entry = "tessera_tile_paged_kv_write_f32_direct";
+    if (SymbolTable::lookupSymbolIn(mod, entry)) return scheduled->emitError("paged write entry collision");
+    OpBuilder builder(mod.getContext()); builder.setInsertionPointToEnd(mod.getBody());
+    SmallVector<Type> args(5, LLVM::LLVMPointerType::get(mod.getContext())); args.append(6, builder.getI64Type());
+    auto fn = LLVM::LLVMFuncOp::create(builder, scheduled->getLoc(), entry,
+        LLVM::LLVMFunctionType::get(LLVM::LLVMVoidType::get(mod.getContext()), args, false));
+    fn->setAttr("nvvm.kernel", builder.getUnitAttr());
+    fn->setAttr("tessera.schedule_hash", hash);
+    fn->setAttr("tessera.native_contract", c->contract);
+    auto block = fn.addEntryBlock(builder); builder.setInsertionPointToStart(block);
+    OperationState kernel(scheduled->getLoc(), "tile.paged_kv_write_kernel"); kernel.addOperands(block->getArguments());
+    kernel.addAttribute("storage", builder.getStringAttr("f32")); kernel.addAttribute("table_storage", builder.getStringAttr("i32"));
+    kernel.addAttribute("route", builder.getStringAttr("direct"));
+    kernel.addAttribute("page_ownership", builder.getStringAttr("in_place"));
+    builder.create(kernel);
+    LLVM::ReturnOp::create(builder, scheduled->getLoc(), ValueRange{}); c->function.erase();
+  }
+  return success();
+}
 } // namespace

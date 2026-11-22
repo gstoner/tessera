@@ -4061,6 +4061,96 @@ static LogicalResult materializeSm120PagedKVReadKernel(
   return success();
 }
 
+// AR-DECODE-PROGRAM-1 S1a: in-place paged write. One thread per value element.
+// The logical start position is read from device memory; every data-dependent
+// bound (signed position, logical capacity, physical page index) is checked
+// here, and a violation skips the element and sets status[0] = 1.
+static LogicalResult materializeSm120PagedKVWriteKernel(
+    tessera::tile::PagedKVWriteKernelOp kernel, OpBuilder &builder) {
+  Operation *op = kernel.getOperation();
+  ValueRange in = kernel.getInputs();
+  auto storage = op->getAttrOfType<StringAttr>("storage");
+  auto tableStorage = op->getAttrOfType<StringAttr>("table_storage");
+  auto route = op->getAttrOfType<StringAttr>("route");
+  auto ownership = op->getAttrOfType<StringAttr>("page_ownership");
+  if (in.size() != 11 || !storage || storage.getValue() != "f32" ||
+      !tableStorage || tableStorage.getValue() != "i32" || !route ||
+      route.getValue() != "direct" || !ownership || ownership.getValue() != "in_place") {
+    op->emitError("sm_120 paged_kv_write_kernel requires f32 pages, i32 table, "
+                  "route=direct, in-place ownership and the canonical eleven-operand ABI");
+    return failure();
+  }
+  Location loc = op->getLoc();
+  Type i32 = builder.getI32Type();
+  Type i64 = builder.getI64Type();
+  auto f32 = builder.getF32Type();
+  Value physicalPages = in[5], logicalPages = in[6], pageSize = in[7];
+  Value heads = in[8], dim = in[9], tokens = in[10];
+  Value block = arith::ExtUIOp::create(
+      builder, loc, i64, NVVM::BlockIdXOp::create(builder, loc, i32));
+  Value thread = arith::ExtUIOp::create(
+      builder, loc, i64, NVVM::ThreadIdXOp::create(builder, loc, i32));
+  Value z = addI64(builder, loc,
+      mulI64(builder, loc, block, i64Constant(builder, loc, 256)), thread);
+  Value total = mulI64(builder, loc, mulI64(builder, loc, tokens, heads), dim);
+  auto guarded = scf::IfOp::create(builder, loc, lessI64(builder, loc, z, total), false);
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(guarded.thenBlock());
+    Value d = arith::RemUIOp::create(builder, loc, z, dim);
+    Value t0 = arith::DivUIOp::create(builder, loc, z, dim);
+    Value h = arith::RemUIOp::create(builder, loc, t0, heads);
+    Value token = arith::DivUIOp::create(builder, loc, t0, heads);
+    Value position = arith::ExtSIOp::create(builder, loc, i64,
+        LLVM::LoadOp::create(builder, loc, i32, in[3], 4));
+    Value logical = addI64(builder, loc, position, token);
+    Value capacity = mulI64(builder, loc, logicalPages, pageSize);
+    Value positionOk = arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::sge,
+                                             position, i64Constant(builder, loc, 0));
+    Value inCapacity = arith::AndIOp::create(builder, loc, positionOk,
+                                             lessI64(builder, loc, logical, capacity));
+    auto bounded = scf::IfOp::create(builder, loc, inCapacity, true);
+    Value one = arith::ConstantIntOp::create(builder, loc, 1, 32);
+    {
+      OpBuilder::InsertionGuard inner(builder);
+      builder.setInsertionPointToStart(bounded.thenBlock());
+      Value logicalPage = arith::DivUIOp::create(builder, loc, logical, pageSize);
+      Value pageOffset = arith::RemUIOp::create(builder, loc, logical, pageSize);
+      Value tablePtr = LLVM::GEPOp::create(builder, loc, in[1].getType(), i32,
+                                           in[1], ValueRange{logicalPage});
+      // Sign-extend so a negative table entry fails the unsigned page check.
+      Value physical = arith::ExtSIOp::create(builder, loc, i64,
+          LLVM::LoadOp::create(builder, loc, i32, tablePtr, 4));
+      auto mapped = scf::IfOp::create(builder, loc,
+          lessI64(builder, loc, physical, physicalPages), true);
+      {
+        OpBuilder::InsertionGuard leaf(builder);
+        builder.setInsertionPointToStart(mapped.thenBlock());
+        Value pageIndex = addI64(builder, loc,
+            mulI64(builder, loc,
+                addI64(builder, loc,
+                    mulI64(builder, loc,
+                        addI64(builder, loc, mulI64(builder, loc, physical, pageSize), pageOffset),
+                        heads), h),
+                dim), d);
+        Value srcPtr = LLVM::GEPOp::create(builder, loc, in[2].getType(), f32,
+                                           in[2], ValueRange{z});
+        Value value = LLVM::LoadOp::create(builder, loc, f32, srcPtr, 4);
+        Value pagePtr = LLVM::GEPOp::create(builder, loc, in[0].getType(), f32,
+                                            in[0], ValueRange{pageIndex});
+        LLVM::StoreOp::create(builder, loc, value, pagePtr, 4);
+        builder.setInsertionPointToStart(mapped.elseBlock());
+        LLVM::StoreOp::create(builder, loc, one, in[4], 4);
+      }
+      builder.setInsertionPointToStart(bounded.elseBlock());
+      LLVM::StoreOp::create(builder, loc, one, in[4], 4);
+    }
+  }
+  builder.setInsertionPointAfter(guarded);
+  op->erase();
+  return success();
+}
+
 static LogicalResult materializeSm120PagedAttentionKernel(
     tessera::tile::PagedAttentionKernelOp kernel, OpBuilder &builder) {
   Operation *op = kernel.getOperation();
@@ -6215,6 +6305,7 @@ struct LowerTileToNVIDIAPass
           name == "tile.attention_backward_kernel" ||
           name == "tile.training_kernel" ||
           name == "tile.paged_kv_read_kernel" ||
+          name == "tile.paged_kv_write_kernel" ||
           name == "tile.nvfp4_expand_kernel" ||
           name == "tile.paged_attention_kernel" ||
           name == "tile.replay_ssm_decode_kernel" ||
@@ -6654,6 +6745,17 @@ struct LowerTileToNVIDIAPass
                 cast<tessera::tile::PagedKVReadKernelOp>(op), builder))) {
           if (smVersion < kConsumerBlackwellSM)
             op->emitError("tile.paged_kv_read_kernel currently requires sm_120");
+          signalPassFailure();
+          return;
+        }
+        continue;
+      }
+      if (isTileOp(op, "tile.paged_kv_write_kernel")) {
+        if (smVersion < kConsumerBlackwellSM ||
+            failed(materializeSm120PagedKVWriteKernel(
+                cast<tessera::tile::PagedKVWriteKernelOp>(op), builder))) {
+          if (smVersion < kConsumerBlackwellSM)
+            op->emitError("tile.paged_kv_write_kernel currently requires sm_120");
           signalPassFailure();
           return;
         }

@@ -5914,6 +5914,34 @@ LogicalResult PagedKVReadOp::verify() {
   return success();
 }
 
+LogicalResult PagedKVWriteOp::verify() {
+  auto pages = cast<RankedTensorType>(getPages().getType());
+  auto table = cast<RankedTensorType>(getPageTable().getType());
+  auto values = cast<RankedTensorType>(getValues().getType());
+  auto position = cast<RankedTensorType>(getPosition().getType());
+  auto updated = cast<RankedTensorType>(getUpdated().getType());
+  if (pages.getEncoding() || table.getEncoding() || values.getEncoding() ||
+      position.getEncoding() || pages.getRank() != 4 || table.getRank() != 1 ||
+      values.getRank() != 3 || position.getRank() != 1 ||
+      !pages.hasStaticShape() || !table.hasStaticShape() || !values.hasStaticShape() ||
+      !position.hasStaticShape() || !pages.getElementType().isF32() ||
+      !table.getElementType().isInteger(32) || !values.getElementType().isF32() ||
+      !position.getElementType().isInteger(32) || position.getDimSize(0) != 1)
+    return emitOpError("requires static f32 pages[P,PS,H,D], i32 table[LP], "
+                       "f32 values[T,H,D] and i32 position[1]");
+  for (auto type : {pages, table, values})
+    if (llvm::any_of(type.getShape(), [](int64_t d) { return d <= 0; }))
+      return emitOpError("requires positive page, table and value dimensions");
+  if (updated != pages)
+    return emitOpError("result must be the updated pages type (written in place)");
+  if (values.getDimSize(1) != pages.getDimSize(2) || values.getDimSize(2) != pages.getDimSize(3))
+    return emitOpError("value heads/head_dim disagree with the pages");
+  if (static_cast<__int128>(values.getDimSize(0)) >
+      static_cast<__int128>(table.getDimSize(0)) * pages.getDimSize(1))
+    return emitOpError("token count exceeds the logical page capacity");
+  return success();
+}
+
 LogicalResult CeilOp::verify() {
   if (getInput().getType() != getOutput().getType())
     return emitOpError("requires unchanged tensor shape and element type");

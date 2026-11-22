@@ -4109,8 +4109,9 @@ static LogicalResult materializeSm120PagedKVWriteKernel(
                                              position, i64Constant(builder, loc, 0));
     Value inCapacity = arith::AndIOp::create(builder, loc, positionOk,
                                              lessI64(builder, loc, logical, capacity));
-    auto bounded = scf::IfOp::create(builder, loc, inCapacity, true);
+    // Defined before the branch so it dominates both refusal stores.
     Value one = arith::ConstantIntOp::create(builder, loc, 1, 32);
+    auto bounded = scf::IfOp::create(builder, loc, inCapacity, true);
     {
       OpBuilder::InsertionGuard inner(builder);
       builder.setInsertionPointToStart(bounded.thenBlock());

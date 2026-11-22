@@ -89,8 +89,12 @@ def compiler_matmul_relu_target(
     )
 
 
-def _artifact_info(fn, op_name: str) -> dict[str, Any]:
+def _artifact_info(fn, op_name: str, example_args: tuple[Any, ...] = ()) -> dict[str, Any]:
     try:
+        # An unannotated kernel compiles per signature (JIT_UNSPECIALIZED_SIGNATURE):
+        # the example inputs name the one this artifact describes.
+        if example_args:
+            fn = fn.for_signature(*example_args)
         graph_ir = fn.ir_text()
     except Exception as exc:
         return {"available": False, "reason": str(exc), "op": op_name}
@@ -121,7 +125,8 @@ def compiler_flash_attention_ir() -> dict[str, Any]:
     def flash_attention_kernel(q, k, v):
         return tessera.ops.flash_attn(q, k, v)
 
-    return _artifact_info(flash_attention_kernel, "flash_attn")
+    q = np.zeros((1, 2, 16, 8), np.float32)
+    return _artifact_info(flash_attention_kernel, "flash_attn", (q, q, q))
 
 
 def compiler_conv2d_ir() -> dict[str, Any]:
@@ -133,7 +138,8 @@ def compiler_conv2d_ir() -> dict[str, Any]:
     def conv2d_kernel(x, w):
         return tessera.ops.conv2d(x, w, stride=1, padding=1)
 
-    return _artifact_info(conv2d_kernel, "conv2d")
+    return _artifact_info(conv2d_kernel, "conv2d", (
+        np.zeros((1, 8, 8, 4), np.float32), np.zeros((3, 3, 4, 4), np.float32)))
 
 
 def compiler_spectral_ir(op: str) -> dict[str, Any]:
@@ -141,17 +147,21 @@ def compiler_spectral_ir(op: str) -> dict[str, Any]:
     if tessera is None:
         return {"available": False, "reason": "tessera import failed", "op": op}
 
+    x = np.zeros((16, 16), np.float32)
     if op in {"fft1d", "fft2d", "spectrum"}:
         @tessera.jit
         def spectral_kernel(x):
             return tessera.ops.fft(x)
+        examples: tuple[Any, ...] = (x,)
     elif op == "dct2":
         @tessera.jit
         def spectral_kernel(x):
             return tessera.ops.dct(x, type=2)
+        examples = (x,)
     else:
         @tessera.jit
         def spectral_kernel(x, w):
             return tessera.ops.spectral_conv(x, w)
+        examples = (x, np.zeros((16, 9), np.float32))
 
-    return _artifact_info(spectral_kernel, op)
+    return _artifact_info(spectral_kernel, op, examples)

@@ -155,7 +155,8 @@ def test_public_trace_emits_the_dequantize_chain():
               rng.normal(0, 2, (1, 1, 5, 3)).astype(ml_dtypes.float8_e4m3fn),
               np.full((1, 1, 5, 1), .05, np.float32), np.full((1, 1, 1, 3), .07, np.float32))
     fn = ts.jit(target="nvidia_sm120")(scaled)
-    assert requests_scaled_kv_attention(fn.graph_ir)
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    assert requests_scaled_kv_attention(fn.specialize(*values).graph_ir)
     traced = fn._trace_frontend_capture(values, {})[0]
     assert supports_attention_scaled_kv(traced)
 

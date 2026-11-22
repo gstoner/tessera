@@ -27,6 +27,10 @@ def test_evaluate_nan_output_is_failure_not_unproven(monkeypatch):
     monkeypatch.setattr("tessera.runtime.launch", fake_launch)
 
     class FakeFn:
+        # evaluate() reads the artifact of the concrete signature it launches.
+        def for_signature(self, *args):
+            return self
+
         def runtime_artifact(self):
             return object()
 
@@ -45,6 +49,10 @@ def test_evaluate_wrong_shape_is_failure(monkeypatch):
     monkeypatch.setattr("tessera.runtime.launch", fake_launch)
 
     class FakeFn:
+        # evaluate() reads the artifact of the concrete signature it launches.
+        def for_signature(self, *args):
+            return self
+
         def runtime_artifact(self):
             return object()
 

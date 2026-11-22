@@ -210,6 +210,12 @@ def _record_lower(fn, prefer_abstract_trace: bool) -> None:
     if route == "ast":
         if not prefer_abstract_trace:
             why = "trace_not_preferred_effectful"
+            try:
+                from tessera.compiler.effect_scan import scan_call_effects
+                sc = scan_call_effects(fn)
+                why += f"|{getattr(sc.effect,"name",sc.effect)}|eff={','.join(sc.effectful_ops)}|unres={','.join(sc.unresolved[:4])}"
+            except Exception as e:
+                why += f"|err:{e!r}"
         else:
             try:
                 specs = _abstract_trace_specs(ir_args_from_signature(fn))
@@ -217,6 +223,21 @@ def _record_lower(fn, prefer_abstract_trace: bool) -> None:
                 specs = None
             if specs is None:
                 why = "signature_not_traceable"
+                try:
+                    sub = []
+                    for a in ir_args_from_signature(fn):
+                        t = a.ir_type
+                        if not t.shape:
+                            sub.append(f"{a.name}:noshape:{t}")
+                        elif "*" in t.shape:
+                            sub.append(f"{a.name}:unranked:{t}")
+                        elif t.dtype is None:
+                            sub.append(f"{a.name}:nodtype:{t}")
+                        elif a.layout or t.layout:
+                            sub.append(f"{a.name}:layout:{t}")
+                    why += "|" + ";".join(sub)
+                except Exception as e:
+                    why += f"|err:{e!r}"
             else:
                 why = f"trace_failed:{_STATE.trace_error or 'unknown'}"
     record = {"kind": "lower", "route": route, "why_ast": why,
@@ -296,6 +317,26 @@ def _recording_thunk(owner, thunk):
                 # _materialize_ast_emission, which the reader walk skips too.
                 facts = _stack_facts(skip=2)
                 facts.pop("_decorate")
+                try:
+                    from tessera.compiler.graph_ir import (
+                        _abstract_trace_specs, ir_args_from_signature)
+                    untraceable = _abstract_trace_specs(
+                        ir_args_from_signature(owner._fn)) is None
+                except Exception:
+                    untraceable = None
+                facts["calls_before"] = owner.__dict__.get("_census_calls", 0)
+                facts["untraceable_signature"] = untraceable
+                chain = []
+                fr = sys._getframe(1)
+                while fr is not None and len(chain) < 4:
+                    sh = _short(fr.f_code.co_filename)
+                    if sh != _JIT_FILE and "ast_lowering_census" not in sh and "functools" not in sh:
+                        chain.append(f"{sh}:{fr.f_code.co_name}")
+                    fr = fr.f_back
+                facts["entry_chain"] = chain
+                facts["authority"] = owner.__dict__.get("frontend_authority")
+                facts["authority_error"] = (owner.__dict__.get("frontend_authority_error") or "")[:120]
+                facts["effect"] = getattr(getattr(owner, "inferred_effect", None), "name", None)
                 _write({"kind": "materialize", "outcome": outcome,
                         "function": getattr(getattr(owner, "_fn", None),
                                             "__qualname__", None),
@@ -323,6 +364,16 @@ def pytest_configure(config) -> None:
     trace.trace = _wrap_trace_stage(trace.trace)
     trace.to_graph_ir_module = _wrap_trace_stage(trace.to_graph_ir_module)
     JitFn.__init__ = _wrap_init(JitFn.__init__)
+    JitFn.__call__ = _wrap_call(JitFn.__call__)
+
+
+def _wrap_call(original):
+    """Count calls per JitFn so a materialization says whether it was pre-call."""
+    @functools.wraps(original)
+    def __call__(self, *args, **kwargs):
+        self.__dict__["_census_calls"] = self.__dict__.get("_census_calls", 0) + 1
+        return original(self, *args, **kwargs)
+    return __call__
 
 
 # ── summary ────────────────────────────────────────────────────────────────

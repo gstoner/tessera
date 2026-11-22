@@ -17,8 +17,14 @@ def test_public_aliases_lower_to_canonical_graph_dialect_names():
     def aliased_conv(X, W):
         return ts.ops.conv2d(X, W, stride=1, padding=0)
 
-    gemm_ir = aliased_gemm.ir_text()
-    conv_ir = aliased_conv.ir_text()
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((4, 8)).astype(np.float32)
+    B = rng.standard_normal((8, 4)).astype(np.float32)
+    X = rng.standard_normal((1, 8, 8, 4)).astype(np.float32)
+    W = rng.standard_normal((3, 3, 4, 8)).astype(np.float32)
+    gemm_ir = aliased_gemm.specialize(A, B).ir_text()
+    conv_ir = aliased_conv.specialize(X, W).ir_text()
     assert "tessera.matmul" in gemm_ir
     assert "tessera.gemm" not in gemm_ir
     assert "tessera.conv2d_nhwc" in conv_ir
@@ -30,6 +36,9 @@ def test_cpu_artifacts_use_graph_schedule_tile_target_spine_names():
     def attention(q, k, v):
         return ts.ops.flash_attn(q, k, v, causal=True)
 
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    q = np.random.default_rng(0).standard_normal((1, 2, 16, 8)).astype(np.float32)
+    attention = attention.specialize(q, q, q)
     artifacts = {artifact.level: artifact.text for artifact in attention.lowering_artifacts()}
 
     assert "tessera.flash_attn" in artifacts["graph"]

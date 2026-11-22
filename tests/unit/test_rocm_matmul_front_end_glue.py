@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+
 from tests._support.compiler_tool import run_tessera_opt
 
 import tessera
@@ -30,10 +32,16 @@ def _rocm_mm(a, b):
     return tessera.ops.matmul(a, b)
 
 
+def _rocm_mm_target_ir() -> str:
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    a = np.zeros((32, 32), np.float16)
+    return _rocm_mm.specialize(a, a).target_ir
+
+
 def test_rocm_matmul_target_ir_emits_wmma_gemm_directive():
     """The IR stack lowers tessera.matmul -> ... -> the executable WMMA directive
     (not just the abstract tessera_rocm.mfma marker)."""
-    tir = _rocm_mm.target_ir
+    tir = _rocm_mm_target_ir()
     assert "tessera_rocm.wmma_gemm" in tir, "matmul Target IR lacks the directive"
     # The abstract matrix-core marker is still emitted (hardware-free contract).
     assert "tessera_rocm.mfma" in tir
@@ -48,7 +56,7 @@ def test_ir_stack_directive_is_consumable_by_generate_pass():
     """The directive the IR stack produced expands through the SAME
     generate-wmma-gemm-kernel pass into a fragment-materialized WMMA kernel —
     closing Graph matmul -> Target-IR directive -> generated kernel."""
-    tir = _rocm_mm.target_ir
+    tir = _rocm_mm_target_ir()
     line = next(l.strip() for l in tir.splitlines()
                 if '"tessera_rocm.wmma_gemm"' in l)
     module = "module {\n  " + line + "\n}\n"

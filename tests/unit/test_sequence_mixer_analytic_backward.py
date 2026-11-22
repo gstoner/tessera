@@ -57,7 +57,9 @@ def test_sequence_mixer_schedule_carries_forward_and_backward_state_contract():
             q, k, v, causal=True, erase=True
         )
 
-    text = mixer.schedule_ir
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    x = np.zeros((1, 2, 8, 4), np.float32)
+    text = mixer.specialize(x, x, x).schedule_ir
     assert 'schedule = "linear_recurrence"' in text
     assert 'carried_state = "B,H,Dk,Dv@fp32"' in text
     assert 'backward_form = "reverse_recurrence"' in text

@@ -29,6 +29,9 @@ import pytest
 def _decorate_via_jit(tmp_path, source: str, fn_name: str = "f"):
     """Build a temp module and import + decorate it. @tessera.jit requires
     introspectable source from a real file."""
+    # Sources annotate every parameter: an unannotated program has no compiled
+    # form until a call (JIT_UNSPECIALIZED_SIGNATURE), and these tests pin what
+    # decoration itself lowers and verifies.
     (tmp_path / "mod.py").write_text(source)
     import sys
     sys.path.insert(0, str(tmp_path))
@@ -60,7 +63,7 @@ def test_jit_decoration_succeeds_for_augassign(
         import tessera
 
         @tessera.jit
-        def f(a, b):
+        def f(a: tessera.Tensor["M", "N"], b: tessera.Tensor["M", "N"]):
             c = tessera.ops.relu(a)
             c {op_symbol} b
             return c
@@ -85,7 +88,7 @@ def test_aug_assign_rhs_reads_old_binding(tmp_path):
         import tessera
 
         @tessera.jit
-        def f(a, b):
+        def f(a: tessera.Tensor["M", "N"], b: tessera.Tensor["M", "N"]):
             c = tessera.ops.relu(a)
             c -= b
             return c
@@ -107,7 +110,7 @@ def test_jit_decoration_succeeds_for_plain_rebinding(tmp_path):
         import tessera
 
         @tessera.jit
-        def f(a, b):
+        def f(a: tessera.Tensor["M", "N"], b: tessera.Tensor["M", "N"]):
             c = tessera.ops.relu(a)
             c = c + b
             return c
@@ -123,7 +126,7 @@ def test_three_way_chain_versions_ssa_names_monotonically(tmp_path):
         import tessera
 
         @tessera.jit
-        def f(a, b):
+        def f(a: tessera.Tensor["M", "N"], b: tessera.Tensor["M", "N"]):
             c = tessera.ops.relu(a)
             c = c + b
             c = c + b
@@ -152,7 +155,7 @@ def test_to_mlir_with_verify_succeeds_after_rebinding(tmp_path):
         import tessera
 
         @tessera.jit
-        def f(a, b):
+        def f(a: tessera.Tensor["M", "N"], b: tessera.Tensor["M", "N"]):
             c = tessera.ops.relu(a)
             c -= b
             return c
@@ -174,7 +177,7 @@ def test_compile_result_executable_for_rebinding_cpu_path(tmp_path):
         import tessera
 
         @tessera.jit
-        def f(a, b):
+        def f(a: tessera.Tensor["M", "N"], b: tessera.Tensor["M", "N"]):
             c = tessera.ops.relu(a)
             c = c + b
             return c

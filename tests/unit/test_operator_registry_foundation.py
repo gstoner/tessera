@@ -160,7 +160,12 @@ def test_graph_ir_recognizes_new_operator_names():
         z = tessera.ops.dct(y, type=2)
         return tessera.ops.spectral_conv(z, w)
 
-    ir = spectral_kernel.ir_text()
+    # The subject is the AST frontend's op recognition, so lower it directly:
+    # unannotated programs have no pre-call module (JIT_UNSPECIALIZED_SIGNATURE),
+    # and this body does not trace (the reference fft -> dct -> spectral_conv
+    # chain is complex-valued, which spectral_conv's rfft refuses).
+    from tessera.compiler.graph_ir import GraphIRBuilder
+    ir = GraphIRBuilder().lower(spectral_kernel._fn).to_mlir()
     assert "tessera.fft" in ir
     assert "tessera.dct" in ir
     assert "type = 2" in ir
@@ -188,7 +193,8 @@ def test_graph_ir_recognizes_small_tsol_completion_slice():
         z = tessera.ops.silu(y)
         return tessera.ops.all_to_all(z, axis="tp")
 
-    ir = op_chain.ir_text()
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    ir = op_chain.specialize(np.ones((4, 8), dtype=np.float32)).ir_text()
     assert "tessera.rmsnorm" in ir
     assert "tessera.silu" in ir
     assert "tessera.all_to_all" in ir

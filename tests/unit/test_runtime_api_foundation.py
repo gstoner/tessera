@@ -60,7 +60,8 @@ def test_jit_cpu_runtime_artifact_launches_successfully():
     a = np.arange(6, dtype=np.float32).reshape(2, 3)
     b = np.arange(12, dtype=np.float32).reshape(3, 4)
 
-    artifact = mm.runtime_artifact()
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    artifact = mm.specialize(a, b).runtime_artifact()
     assert isinstance(artifact, RuntimeArtifact)
     assert artifact.metadata["executable"] is True
     assert artifact.metadata["compiler_path"] == "jit_cpu_numpy"
@@ -86,7 +87,8 @@ def test_jit_cpu_runtime_artifact_launch_supports_dict_args_and_stable_hash():
         return tessera.ops.softmax(tessera.ops.relu(x), axis=0)
 
     x = np.array([-1.0, 2.0], dtype=np.float32)
-    artifact = stable_probs.runtime_artifact()
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    artifact = stable_probs.specialize(x).runtime_artifact()
     assert artifact.artifact_hash == load_artifact(artifact.to_json()).artifact_hash
 
     result = launch(artifact, args={"x": x})
@@ -96,12 +98,16 @@ def test_jit_cpu_runtime_artifact_launch_supports_dict_args_and_stable_hash():
 
 
 def test_non_executable_runtime_artifact_keeps_structured_status():
+    # Annotated: the compiled form needs a declared signature
+    # (JIT_UNSPECIALIZED_SIGNATURE), and specialize() refuses an identity body
+    # the tracer cannot type.
     @tessera.jit
-    def unsupported(x):
+    def unsupported(x: tessera.Tensor[2]):
         return x
 
+    x = np.ones(2, dtype=np.float32)
     artifact = unsupported.runtime_artifact()
-    result = launch(artifact, args=(np.ones(2, dtype=np.float32),))
+    result = launch(artifact, args=(x,))
 
     assert artifact.metadata["executable"] is False
     assert result["ok"] is False

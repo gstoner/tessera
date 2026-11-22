@@ -24,6 +24,7 @@ from collections.abc import Callable
 from typing import Any, Optional
 
 import tessera as ts
+from tessera.cache import KVCacheHandle
 
 from tessera.compiler.evaluator import (
     BackendVerdict,
@@ -64,7 +65,11 @@ def _p_conv2d(x, w):
     return ts.ops.conv2d(x, w, stride=1, padding=0, layout="nhwc")
 
 
-def _p_kv_cache_read(cache, start, end):
+def _p_kv_cache_read(cache: KVCacheHandle, start: int, end: int):
+    # Declared, not traced: the tracer cannot take a cache handle as an
+    # argument, so this program's compiled form is the AST candidate over its
+    # declared signature (E2E-REAL-6F; JIT_UNSPECIALIZED_SIGNATURE refuses
+    # only an UNdeclared one).
     return ts.ops.kv_cache_read(cache, start, end)
 
 

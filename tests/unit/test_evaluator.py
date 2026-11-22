@@ -136,7 +136,9 @@ def test_nvidia_matmul_emits_wgmma_ptx_and_reports_emission_rung():
     matmul attaches structurally-valid WGMMA PTX to the artifact, and the
     Evaluator reports EMITS_ASM_TEXT (rung 2.5) — above artifact_only, but never
     claiming execution."""
-    fn = ts.jit(target="nvidia_sm90")(_mm)
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    a = np.ones((64, 64), dtype=np.float32)
+    fn = ts.jit(target="nvidia_sm90")(_mm).specialize(a, a)
     meta = fn.runtime_artifact().metadata
     assert "nvidia_ptx" in meta, "lowering did not attach emitted PTX"
     assert meta.get("nvidia_ptx_valid") is True
@@ -237,14 +239,15 @@ def test_fallback_lane_classified_honestly_no_silent_miscompile():
         if not v.provenance_ok:
             assert v.rung is Rung.ARTIFACT_ONLY and v.is_silent_fallback
 
-    # The Evaluator is genuinely distinguishing native from fallback — at least
-    # one of these envelope-adjacent ops is shown to NOT execute natively (the
-    # gap accelerator_proof's static `proven` would miss). If a future change
-    # wires them all to Metal, update this to assert HARDWARE_VERIFIED instead.
-    assert any(v.is_silent_fallback for v in verdicts), (
-        "expected the differential lane to expose at least one envelope-adjacent "
-        "op that falls back rather than executing natively"
-    )
+    # Every one of these envelope-adjacent ops now executes natively on Metal.
+    # They used to fall back because the evaluator launched the artifact of the
+    # decoration's AST module, typed over opaque tensors and so never
+    # executable; it now launches the program these inputs compile
+    # (``for_signature``, E2E-REAL-6F). As this test anticipated, the
+    # assertion becomes HARDWARE_VERIFIED -- and (a) above still guards that
+    # native execution never disagrees with the oracle.
+    assert verdicts and all(v.rung is Rung.HARDWARE_VERIFIED for v in verdicts), [
+        (v.execution_kind, v.rung.name) for v in verdicts]
 
 
 # ── E1b: horizontal-equivalence oracle (portable classifier) ─────────────────

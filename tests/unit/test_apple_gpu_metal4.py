@@ -495,14 +495,16 @@ def test_p6_linear_bias_act_fuses_to_epilogue(dtype, act):
         def f(x, W, b):
             return ts.ops.silu(ts.ops.add(ts.ops.matmul(x, W), b))
 
-    # compile-time chain recognition
-    expected_kind = "matmul_bias" if act == "none" else f"matmul_bias_{act}"
-    assert driver._apple_gpu_chain_kind(f.cpu_plan) == expected_kind
     rng = np.random.default_rng(_seed(dtype, act))
     M, N, K = 64, 96, 128
     x = (rng.standard_normal((M, K)) * 0.2).astype(cast)
     W = (rng.standard_normal((K, N)) * 0.1).astype(cast)
     b = (rng.standard_normal(N) * 0.3).astype(cast)
+    f = f.specialize(x, W, b)  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+
+    # compile-time chain recognition
+    expected_kind = "matmul_bias" if act == "none" else f"matmul_bias_{act}"
+    assert driver._apple_gpu_chain_kind(f.cpu_plan) == expected_kind
     Y = np.asarray(f(x, W, b))
     assert Y.dtype == cast  # fused result drops in at the chain's dtype
     ref = _epi_ref(x.astype(np.float64) @ W.astype(np.float64),

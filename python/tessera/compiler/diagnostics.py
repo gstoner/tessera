@@ -139,6 +139,11 @@ class JitDiagnosticCode(str, Enum):
     #: mirroring the source-unavailable refusal (Decision #21).
     UNLOWERED_OP_NATIVE_TARGET = "JIT_UNLOWERED_OP_NATIVE_TARGET"
 
+    #: The compiled form of a program with an unannotated parameter was read
+    #: outside a call. Its types come from a call; ``JitFn.specialize`` asks
+    #: for one signature explicitly (E2E-REAL-6F, Decision #21).
+    UNSPECIALIZED_SIGNATURE = "JIT_UNSPECIALIZED_SIGNATURE"
+
 
 class FrontendDiagnosticCode(str, Enum):
     """Textual-DSL frontend (``tessera.compiler.frontend.parser``).

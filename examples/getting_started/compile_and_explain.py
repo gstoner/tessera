@@ -105,11 +105,14 @@ def main() -> None:
     # ──────────────────────────────────────────────────────────
     # 5. Notebook-safe construction via ts.from_text(...).
     #    Useful when @tessera.jit can't read the source (REPL,
-    #    Jupyter heredoc, dynamically-generated code).
+    #    Jupyter heredoc, dynamically-generated code). The parameter
+    #    is annotated so explain() has a compiled form before any
+    #    call; an unannotated one compiles per call
+    #    (JIT_UNSPECIALIZED_SIGNATURE, or fn.specialize(*examples)).
     # ──────────────────────────────────────────────────────────
     print("\n[5] Notebook-safe construction via ts.from_text(...):")
     fn = ts.from_text("""
-        def gelu_then_norm(x):
+        def gelu_then_norm(x: ts.Tensor["B", "D"]):
             return ts.ops.layer_norm(ts.ops.gelu(x))
     """)
     print(fn.explain())

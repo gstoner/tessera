@@ -28,6 +28,8 @@ def test_cpu_non_native_plan_reports_reference_cpu():
     def relu(x):
         return ts.ops.relu(x)
 
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    relu = relu.specialize(np.ones((2, 3), dtype=np.float32))
     assert relu.execution_kind == "reference_cpu"
     assert relu.is_executable
     assert relu.is_reference_execution
@@ -59,6 +61,12 @@ def test_target_execution_kinds_cover_native_and_artifact_modes():
     def nvidia_mm(A, B):
         return ts.ops.matmul(A, B)
 
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    A = np.ones((2, 3), dtype=np.float32)
+    B = np.ones((3, 4), dtype=np.float32)
+    apple_cpu_mm = apple_cpu_mm.specialize(A, B)
+    apple_gpu_mm = apple_gpu_mm.specialize(A, B)
+    nvidia_mm = nvidia_mm.specialize(A, B)
     assert apple_cpu_mm.execution_kind == "native_cpu"
     assert apple_cpu_mm.is_native_execution
     assert apple_gpu_mm.execution_kind == "native_gpu"

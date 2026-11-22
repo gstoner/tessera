@@ -884,6 +884,32 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         status="implemented",
     ),
     DiagnosticCode(
+        code="JIT_UNSPECIALIZED_SIGNATURE",
+        pass_origin="tessera.compiler.JitDiagnosticCode",
+        severity="error",
+        summary=(
+            "Something read the compiled form of a @jit program (Graph IR, "
+            "compile bundle, CPU plan, runtime artifact, Target IR, explain) "
+            "outside a call, but a parameter has no annotation. The program "
+            "has no types until a call supplies them: tracing needs a rank and "
+            "dtype for every argument, so the only module available was a "
+            "second, AST-only lowering over opaque tensors that no call "
+            "executes once the trace owns it (E2E-REAL-6F). Decision #21: "
+            "refuse, naming the parameters, rather than answer with a module "
+            "of a different program."
+        ),
+        fix_hint=(
+            "Annotate every parameter (`x: Tensor[\"B\", \"D\"]`, "
+            "`ts.fp32[\"M\", \"K\"]`, or the handle type of a non-tensor "
+            "argument), read the field after a call, or ask for one concrete "
+            "signature with `fn.specialize(*example_args)`."
+        ),
+        spec="docs/spec/PYTHON_API_SPEC.md §2.1.2",
+        sprint="E2E-REAL-6F-specialize-at-call-2026-11-22",
+        language="python",
+        status="implemented",
+    ),
+    DiagnosticCode(
         code="JIT_APPLE_GPU_AUTO_BATCH",
         pass_origin="tessera.compiler.JitDiagnosticCode",
         # Registry severity is warning per the registry's accepted set; the

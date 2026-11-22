@@ -70,7 +70,10 @@ def test_ast_frontend_marks_the_same_operands():
     def f(a, w, b):
         return ops.matmul(a, w, bias=b)
 
-    text = f.graph_ir.to_mlir()
+    # The subject is the AST frontend itself; an unannotated program has no
+    # pre-call module (JIT_UNSPECIALIZED_SIGNATURE), so lower it directly.
+    from tessera.compiler.graph_ir import GraphIRBuilder
+    text = GraphIRBuilder().lower(f._fn).to_mlir()
     line = next(l for l in text.splitlines() if "tessera.matmul" in l)
     assert 'bias = "bias"' in line and "residual" not in line
 

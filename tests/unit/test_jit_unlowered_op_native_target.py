@@ -66,11 +66,15 @@ def _nested_in_catalogued(a):
     return ts.ops.relu(ts.ops.jepa_l2_loss(a, a + 1))
 
 
-def _catalogued_only(a):
+# The negative fixtures read ``graph_ir`` at decoration, so they annotate
+# their parameters: an unannotated program has no compiled form before a call
+# (JIT_UNSPECIALIZED_SIGNATURE). The refusal fixtures stay unannotated -- the
+# dropped-call refusal must fire for either signature.
+def _catalogued_only(a: ts.Tensor["M", "N"]):
     return ts.ops.relu(a)
 
 
-def _uninvoked_nested_def(a):
+def _uninvoked_nested_def(a: ts.Tensor["M", "N"]):
     def helper(x):
         return ts.ops.jepa_l2_loss(x, x + 1)
 
@@ -94,7 +98,7 @@ def _invoked_two_level_helper(a):
     return outer(a)
 
 
-def _uninvoked_lambda(a):
+def _uninvoked_lambda(a: ts.Tensor["M", "N"]):
     helper = lambda x: ts.ops.jepa_l2_loss(x, x + 1)  # noqa: E731
     return ts.ops.relu(a)
 
@@ -104,19 +108,19 @@ def _invoked_lambda(a):
     return helper(a)
 
 
-def _brier(p, y):
+def _brier(p: ts.Tensor["M", "N"], y: ts.Tensor["M", "N"]):
     return ts.ops.brier_loss(p, y)
 
 
-def _binary_brier(p, y):
+def _binary_brier(p: ts.Tensor["M", "N"], y: ts.Tensor["M", "N"]):
     return ts.ops.binary_brier_loss(p, y)
 
 
-def _ordinal_logistic(p, y):
+def _ordinal_logistic(p: ts.Tensor["M", "N"], y: ts.Tensor["M", "N"]):
     return ts.ops.ordinal_logistic_loss(p, y)
 
 
-def _soft_binned_ece(p, y):
+def _soft_binned_ece(p: ts.Tensor["M", "N"], y: ts.Tensor["M", "N"]):
     return ts.ops.soft_binned_ece(p, y)
 
 

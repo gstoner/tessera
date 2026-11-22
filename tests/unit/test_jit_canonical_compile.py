@@ -35,8 +35,11 @@ import tessera
 from tessera.compiler.canonical_compile import CompileResult
 
 
+# Annotated: the decoration-time compile_result exists for a declared
+# signature; an unannotated one has none before a call
+# (JIT_UNSPECIALIZED_SIGNATURE).
 @tessera.jit
-def _cpu_eager_demo(a, b):  # noqa: D401 — fixture for tests
+def _cpu_eager_demo(a: tessera.Tensor["M", "K"], b: tessera.Tensor["K", "N"]):  # noqa: D401 — fixture for tests
     return a @ b
 
 
@@ -80,7 +83,7 @@ def test_jit_target_nvidia_surfaces_toolchain_gate_at_decoration_time(tmp_path):
         textwrap.dedent("""
         import tessera
         @tessera.jit(target="nvidia_sm90")
-        def f(a, b):
+        def f(a: tessera.Tensor["M", "K"], b: tessera.Tensor["K", "N"]):
             return a @ b
     """).strip()
         + "\n"
@@ -142,7 +145,9 @@ def test_generic_rocm_cache_tracks_resolved_architecture(monkeypatch, storage, a
 
     dtype = np.float16 if storage == "fp16" else pytest.importorskip("ml_dtypes").bfloat16
     public = tessera.from_text(
-        'def product(a, b):\n    return tessera.ops.matmul(a, b, output_dtype="fp32")\n',
+        # Annotated so the probe's pre-call module read is a declared
+        # signature (JIT_UNSPECIALIZED_SIGNATURE otherwise).
+        'def product(a: tessera.Tensor["M", "K"], b: tessera.Tensor["K", "N"]):\n    return tessera.ops.matmul(a, b, output_dtype="fp32")\n',
         target="rocm",
     )
     selected = {"arch": architectures[0]}

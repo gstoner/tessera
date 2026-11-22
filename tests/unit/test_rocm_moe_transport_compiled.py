@@ -225,7 +225,10 @@ def test_jit_grouped_gemm_stamps_native_rocm_lane(monkeypatch):
     def grouped(x, weights, group_sizes):
         return ts.ops.grouped_gemm(x, weights, group_sizes)
 
-    artifact = grouped.runtime_artifact()
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    artifact = grouped.specialize(
+        np.zeros((5, 7), np.float32), np.zeros((3, 7, 6), np.float32),
+        np.array([2, 0, 3], np.int64)).runtime_artifact()
     assert artifact.metadata["compiler_path"] == "rocm_moe_transport_compiled"
     assert artifact.metadata["grouped_argument_layout"] == "device_offsets[E+1]"
     assert artifact.metadata["ops"][0]["op_name"] == "tessera.grouped_gemm"

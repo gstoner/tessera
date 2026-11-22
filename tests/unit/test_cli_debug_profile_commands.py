@@ -4,7 +4,7 @@ from pathlib import Path
 from tessera.cli import mlir, prof, runtime
 
 
-def _write_model(tmp_path: Path) -> Path:
+def _write_model(tmp_path: Path, signature: str = "x") -> Path:
     model = tmp_path / "my_model.py"
     model.write_text(
         "\n".join(
@@ -12,7 +12,7 @@ def _write_model(tmp_path: Path) -> Path:
                 "import tessera as ts",
                 "",
                 "@ts.jit",
-                "def loss(x):",
+                f"def loss({signature}):",
                 "    return ts.ops.softmax(x)",
                 "",
                 "class TinyModel:",
@@ -84,7 +84,9 @@ def test_tessera_mlir_emit_all_writes_artifact_bundle(tmp_path, capsys):
 
 
 def test_tessera_mlir_compile_artifact_mode_uses_jit_symbol(tmp_path, capsys):
-    model = _write_model(tmp_path)
+    # compile_artifact reads runtime_artifact() with no inputs, so the symbol
+    # must declare its signature (JIT_UNSPECIALIZED_SIGNATURE).
+    model = _write_model(tmp_path, signature="x: ts.Tensor[4, 8]")
     artifacts_dir = tmp_path / "compiled_debug"
 
     assert mlir.main([

@@ -23,6 +23,14 @@ def _body(x, y):
     return tessera.ops.relu(tessera.ops.add(x, y))
 
 
+# The same programs with a declared signature. A pre-call read of an
+# undeclared program's compiled form is refused (JIT_UNSPECIALIZED_SIGNATURE),
+# so the tests of what a pre-call read builds use these; the emission they
+# defer is the same one.
+def _body_declared(x: ts.Tensor["N"], y: ts.Tensor["N"]):
+    return tessera.ops.relu(tessera.ops.add(x, y))
+
+
 def _x() -> np.ndarray:
     return np.array([-1.0, 2.0, 0.5, -3.0], dtype=np.float32)
 
@@ -72,7 +80,13 @@ def test_a_legacy_candidate_call_builds_it_and_both_plans_keep_running():
 
 
 def test_reading_graph_ir_builds_the_ast_module():
-    fn = ts.jit(_body)
+    # An undeclared program refuses the pre-call read and stays deferred; a
+    # call's own reads (and specialize) are what compile it.
+    undeclared = ts.jit(_body)
+    with pytest.raises(TesseraJitError, match="JIT_UNSPECIALIZED_SIGNATURE"):
+        _ = undeclared.graph_ir
+    assert undeclared.ast_emission_pending
+    fn = ts.jit(_body_declared)
     module = fn.graph_ir
     assert not fn.ast_emission_pending
     assert [op.op_name for op in module.functions[0].body] == ["tessera.add", "tessera.relu"]
@@ -87,7 +101,7 @@ def test_a_differentiation_request_defers_and_writes_its_intent_on_emission():
     from tessera.compiler.autodiff_request import BackwardStatus
 
     eager = ts.jit(autodiff="reverse", wrt=["x"])
-    lazy = ts.jit(autodiff="reverse", wrt=["x"])(_body)
+    lazy = ts.jit(autodiff="reverse", wrt=["x"])(_body_declared)
     assert lazy.ast_emission_pending
     assert "_differentiation_provenance" not in lazy.__dict__
     backward = lazy.backward_provenance
@@ -101,7 +115,7 @@ def test_a_differentiation_request_defers_and_writes_its_intent_on_emission():
     assert any("tessera.autodiff" in attrs for attrs in fn_attrs), fn_attrs
 
     # Reading the module first resolves the same provenance afterwards.
-    module_first = eager(_body)
+    module_first = eager(_body_declared)
     assert "tessera.autodiff" in module_first.graph_ir.to_mlir()
     assert module_first.backward_provenance.status is backward.status
 
@@ -109,7 +123,7 @@ def test_a_differentiation_request_defers_and_writes_its_intent_on_emission():
 def test_a_forward_request_defers_with_not_requested_backward():
     from tessera.compiler.autodiff_request import BackwardStatus
 
-    jvp = ts.jit(autodiff="forward", wrt=["x"])(_body)
+    jvp = ts.jit(autodiff="forward", wrt=["x"])(_body_declared)
     assert jvp.ast_emission_pending
     assert jvp.backward_provenance.status is BackwardStatus.NOT_REQUESTED
     assert jvp.differentiation_provenance.status is not BackwardStatus.NOT_REQUESTED
@@ -172,8 +186,8 @@ def test_apple_gpu_package_and_auto_batch_routes_keep_the_eager_emission(options
 
 
 def test_a_deferred_apple_gpu_decoration_recognizes_its_package_on_demand():
-    eager = ts.jit(target="apple_gpu", dispatch_via_package=True)(_body)
-    deferred = ts.jit(target="apple_gpu")(_body)
+    eager = ts.jit(target="apple_gpu", dispatch_via_package=True)(_body_declared)
+    deferred = ts.jit(target="apple_gpu")(_body_declared)
     assert deferred.ast_emission_pending
     assert deferred.recognized_package == eager.recognized_package
     assert not deferred.ast_emission_pending
@@ -181,7 +195,7 @@ def test_a_deferred_apple_gpu_decoration_recognizes_its_package_on_demand():
 
 def test_a_deferred_apple_gpu_emission_failure_still_routes_to_the_tracer():
     # The gate's one remaining cause, known only once the emission runs.
-    fn = ts.jit(target="apple_gpu")(_drops_a_statement)
+    fn = ts.jit(target="apple_gpu")(_drops_a_statement_declared)
     assert fn.ast_emission_pending
     assert fn._needs_trace is True
     assert not fn.ast_emission_pending
@@ -197,8 +211,13 @@ def _passthrough(v):
     return v
 
 
+def _drops_a_statement_declared(x: ts.Tensor["N"]):
+    y = _passthrough(x)
+    return tessera.ops.relu(y)
+
+
 def test_an_emission_failure_reaches_every_reader():
-    fn = ts.jit(_drops_a_statement)
+    fn = ts.jit(_drops_a_statement_declared)
     x = np.array([1.0, -2.0], np.float32)
     np.testing.assert_array_equal(fn(x), np.maximum(x, 0.0))
     # ``graph_ir`` is the traced module now; the decoration plan is the AST's.
@@ -213,7 +232,7 @@ def test_an_emission_failure_reaches_every_reader():
 def test_concurrent_first_readers_all_get_the_module():
     # Both readers find the slot unset; the second waits on the lock while the
     # first emits, and must then read the field rather than fail.
-    fn = ts.jit(_body)
+    fn = ts.jit(_body_declared)
     emit = fn._ast_emission
     calls = []
 
@@ -338,6 +357,10 @@ def _matmul(a, b):
     return a @ b
 
 
+def _matmul_declared(a: ts.Tensor["M", "K"], b: ts.Tensor["K", "N"]):
+    return a @ b
+
+
 def test_a_deferred_emission_keeps_the_decoration_host_mode(monkeypatch):
     # A host with nvcc (Super-Bear) passes the real toolchain gate, so the
     # dashboard's generic-host rendering is the only reason it fails.
@@ -348,12 +371,12 @@ def test_a_deferred_emission_keeps_the_decoration_host_mode(monkeypatch):
                         lambda name, *a, **k: "/usr/bin/nvcc" if name == "nvcc"
                         else real_which(name, *a, **k))
     with pg.deterministic_host_for_dashboard():
-        fn = ts.jit(target="nvidia_sm90")(_matmul)
+        fn = ts.jit(target="nvidia_sm90")(_matmul_declared)
     assert fn.ast_emission_pending
     assert fn.compile_result.first_failing_gate.gate == "toolchain"
     assert not pg._DASHBOARD_DETERMINISTIC
     # Outside the block the same decoration sees the toolchain.
-    assert ts.jit(target="nvidia_sm90")(_matmul).compile_result.first_failing_gate.gate != "toolchain"
+    assert ts.jit(target="nvidia_sm90")(_matmul_declared).compile_result.first_failing_gate.gate != "toolchain"
 
 
 def _prefix_attention_with_eps(q, k, v, eps=1e-5):

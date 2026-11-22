@@ -28,6 +28,9 @@ def test_jit_gemm_lowering_artifacts_cover_all_compiler_layers():
     def gemm(A, B):
         return ts.ops.gemm(A, B)
 
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    gemm = gemm.specialize(np.ones((4, 8), dtype=np.float32),
+                           np.ones((8, 4), dtype=np.float32))
     artifacts = {artifact.level: artifact.text for artifact in gemm.lowering_artifacts()}
 
     assert set(artifacts) == {"graph", "schedule", "tile", "target"}
@@ -296,11 +299,12 @@ def test_jit_target_apple_cpu_with_explicit_source_compiles():
 
     mm = ts.jit(ns["dynamic_mm"], target="apple_cpu", source=source)
 
-    assert mm.is_executable is True
-    assert mm.runtime_artifact().metadata["compiler_path"] == "apple_cpu_accelerate"
-
     A = np.eye(3, dtype=np.float32)
     B = np.ones((3, 4), dtype=np.float32)
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    spec = mm.specialize(A, B)
+    assert spec.is_executable is True
+    assert spec.runtime_artifact().metadata["compiler_path"] == "apple_cpu_accelerate"
     np.testing.assert_allclose(mm(A, B), A @ B)
 
 
@@ -315,6 +319,8 @@ def test_jit_target_apple_cpu_with_source_path_compiles(tmp_path):
     exec(src.read_text(encoding="utf-8"), {"ts": ts}, ns)
 
     mm = ts.jit(ns["dynamic_mm"], target="apple_cpu", source_path=str(src))
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    mm = mm.specialize(np.eye(3, dtype=np.float32), np.ones((3, 4), dtype=np.float32))
 
     assert mm.is_executable is True
     assert mm.runtime_artifact().metadata["compiler_path"] == "apple_cpu_accelerate"

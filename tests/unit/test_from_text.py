@@ -6,10 +6,15 @@ with a single blessed call.
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 import tessera as ts
 from tessera.compiler.diagnostics import JitDiagnosticCode
+
+# Unannotated programs have a compiled form only per signature
+# (JIT_UNSPECIALIZED_SIGNATURE): explain the signature of these inputs.
+_X = np.ones((4, 8), dtype=np.float32)
 
 
 class TestSingleDef:
@@ -19,7 +24,7 @@ class TestSingleDef:
                 return ts.ops.add(x, y)
         """)
         # The function compiles end-to-end; explain() succeeds.
-        ex = f.explain()
+        ex = f.specialize(_X, _X).explain()
         assert "f" in ex.function_name
 
     def test_single_def_emits_source_provided_diagnostic(self) -> None:
@@ -27,7 +32,7 @@ class TestSingleDef:
             def f(x):
                 return ts.ops.relu(x)
         """)
-        codes = [d.code_value for d in f.explain().diagnostics]
+        codes = [d.code_value for d in f.specialize(_X).explain().diagnostics]
         # The JIT pipeline emits JIT_SOURCE_PROVIDED when source= is
         # passed explicitly — that's the contract from_text relies on.
         assert JitDiagnosticCode.SOURCE_PROVIDED.value in codes
@@ -53,7 +58,7 @@ class TestMultiDef:
             def main(x, y):
                 return helper(ts.ops.add(x, y))
         """, name="main")
-        assert "main" in f.explain().function_name
+        assert "main" in f.specialize(_X, _X).explain().function_name
 
 
 class TestErrors:
@@ -120,8 +125,10 @@ class TestNotebookHappyPath:
     def test_minimal_quickstart_from_README(self) -> None:
         """The exact pattern documented in the API reference must work."""
 
+        # The documented pattern declares its signature, so explain() needs
+        # no example inputs (JIT_UNSPECIALIZED_SIGNATURE).
         f = ts.from_text("""
-            def f(x):
+            def f(x: ts.Tensor[4, 8]):
                 return ts.ops.relu(x)
         """)
         ex = f.explain()

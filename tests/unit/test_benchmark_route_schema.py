@@ -53,8 +53,12 @@ def test_route_is_read_from_the_runtime_artifact():
     def mm(a, b):
         return tessera.ops.matmul(a, b)
 
-    route = route_from_runtime_artifact(mm.runtime_artifact())
-    assert route.route == mm.runtime_artifact().metadata["compiler_path"]
+    import numpy as np
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    a = np.ones((4, 8), dtype=np.float32)
+    spec = mm.specialize(a, a.T.copy())
+    route = route_from_runtime_artifact(spec.runtime_artifact())
+    assert route.route == spec.runtime_artifact().metadata["compiler_path"]
     assert route.source == "runtime_artifact.metadata.compiler_path"
 
 

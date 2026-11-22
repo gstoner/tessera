@@ -254,8 +254,9 @@ def _jit_layer_norm(x):
 
 
 def test_jit_tier1_ops_are_runtime_executable():
+    x = np.random.RandomState(11).randn(8, 64).astype(np.float32)
     for fn in (_jit_silu, _jit_layer_norm):
-        meta = fn.runtime_artifact().metadata
+        meta = fn.specialize(x).runtime_artifact().metadata  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
         assert meta["compiler_path"] == "apple_gpu_mps"
         assert meta["runtime_status"] == "ready"
         assert meta["execution_mode"] in ("metal_runtime", "metal_artifact")

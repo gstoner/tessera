@@ -62,16 +62,19 @@ def vmap(
     leading dim is a Phase G follow-up.
     """
     from tessera.compiler.jit import JitFn
-    if (isinstance(fn, JitFn) and len(fn.graph_ir.functions) == 1
+    # Route by op structure; an unannotated program has no compiled module
+    # before a call, so read the structural one (E2E-REAL-6F).
+    structure = fn._structure_module() if isinstance(fn, JitFn) else None
+    if (structure is not None and len(structure.functions) == 1
             and any(op.kwargs.get("physical_contract") == "nvidia_sm120_nvfp4_blockscale_v1"
-                    for op in fn.graph_ir.functions[0].body)):
+                    for op in structure.functions[0].body)):
         from tessera.compiler.native_vmap import native_nvfp4_vmap
         return native_nvfp4_vmap(fn, in_axes, out_axes)
 
     if isinstance(fn, JitFn):
         from tessera.compiler.rocm_typed_scaled_native import requests_typed_scaled, requests_composed_typed_scaled, requests_floating_scaled
-        if (requests_typed_scaled(fn.graph_ir) or requests_composed_typed_scaled(fn.graph_ir)
-                or requests_floating_scaled(fn.graph_ir)):
+        if (requests_typed_scaled(structure) or requests_composed_typed_scaled(structure)
+                or requests_floating_scaled(structure)):
             from tessera.compiler.native_vmap import native_typed_scaled_vmap
             return native_typed_scaled_vmap(fn, in_axes, out_axes)
 

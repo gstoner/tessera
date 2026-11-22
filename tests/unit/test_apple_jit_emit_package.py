@@ -95,17 +95,23 @@ def test_jit_non_apple_gpu_target_has_no_recognized_package():
     assert _mm_cpu.recognized_package is None
 
 
+_SYM_MK = Tensor["M", "K"]
+_SYM_KN = Tensor["K", "N"]
+_SYM_MN = Tensor["M", "N"]
+
+
 def test_emit_package_without_examples_symbolic_returns_none():
     """A symbolic-shape function can't be authored without concrete example
     shapes — emit returns None rather than guessing. (Defined inside the test
     so the symbolic Tensor types are bound to local names — the string dim
-    labels aren't seen as forward refs by the linter.)"""
-    MK = Tensor["M", "K"]
-    KN = Tensor["K", "N"]
-    MN = Tensor["M", "N"]
+    labels aren't seen as forward refs by the linter.) The names are module
+    globals, not test locals: under ``from __future__ import annotations`` a
+    local alias leaves an unresolvable annotation that types nothing, and an
+    undeclared signature has no compiled form before a call
+    (JIT_UNSPECIALIZED_SIGNATURE)."""
 
     @tessera.jit(target="apple_gpu")
-    def _sym(A: MK, B: KN) -> MN:
+    def _sym(A: _SYM_MK, B: _SYM_KN) -> _SYM_MN:
         return tessera.ops.matmul(A, B)
 
     assert _sym.recognized_package is not None  # op recognized

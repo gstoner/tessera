@@ -160,8 +160,16 @@ def test_rl_api_losses_and_jvp_vjp_registry():
 
 
 def test_graph_ir_recognizes_promoted_wrapper_names():
+    # Annotated so decoration lowers it (JIT_UNSPECIALIZED_SIGNATURE refuses an
+    # unannotated program's pre-call ir_text()).
     @ts.jit
-    def wrappers(q, k, v, x, theta):
+    def wrappers(
+        q: ts.Tensor["B", "Hq", "S", "D"],
+        k: ts.Tensor["B", "Hkv", "S", "D"],
+        v: ts.Tensor["B", "Hkv", "S", "D"],
+        x: ts.Tensor["B", "Hq", "S", "D"],
+        theta: ts.Tensor["D"],
+    ):
         a = ts.ops.gqa_attention(q, k, v, num_query_heads=2, num_kv_heads=1)
         b = ts.ops.ntk_rope(x, theta, scale=2.0)
         return ts.ops.add(a, b)

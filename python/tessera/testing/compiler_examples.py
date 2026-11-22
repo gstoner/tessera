@@ -220,6 +220,10 @@ def __getattr__(name):  # noqa: F811 (PEP 562 module __getattr__)
 def qualify_compiler_example(example: CompilerExample, target: str, *, run: bool = False) -> CompilerExampleResult:
     target_kind = normalize_target_kind(target)
     compiled = jit(example.fn, target=target_kind)
+    if example.runtime_args:
+        # The example's own inputs fix the signature an unannotated program
+        # compiles for (E2E-REAL-6F).
+        compiled = compiled.for_signature(*example.runtime_args)
     artifact = compiled.runtime_artifact()
     claimed = tuple(example.stages_by_target[target])
     _assert_claimed_stages(compiled, artifact, claimed)

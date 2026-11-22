@@ -29,33 +29,39 @@ _PKG = Path(ts.__file__).resolve().parent
 
 # ── Finding 1e — zero TRACE_DEFERRED on the known-good corpus ────────────────
 
-def _matmul(x, w):
+# Annotated so decoration runs the AST lowering + compile this guard locks: an
+# unannotated body defers that emission to a concrete call
+# (JIT_UNSPECIALIZED_SIGNATURE), and TRACE_DEFERRED is recorded only by it.
+_T = ts.Tensor
+
+def _matmul(x: _T["M", "K"], w: _T["K", "N"]):
     return ts.ops.matmul(x, w)
 
 
-def _matmul_softmax(a, b):
+def _matmul_softmax(a: _T["M", "K"], b: _T["K", "N"]):
     return ts.ops.softmax(ts.ops.matmul(a, b))
 
 
-def _matmul_gelu(x, w):
+def _matmul_gelu(x: _T["M", "K"], w: _T["K", "N"]):
     return ts.ops.gelu(ts.ops.matmul(x, w))
 
 
-def _matmul_rmsnorm(x, w):
+def _matmul_rmsnorm(x: _T["M", "K"], w: _T["K", "N"]):
     return ts.ops.rmsnorm(ts.ops.matmul(x, w))
 
 
-def _attention_block(q, k, v):
+def _attention_block(q: _T["M", "K"], k: _T["K", "N"], v: _T["N", "P"]):
     return ts.ops.matmul(ts.ops.softmax(ts.ops.matmul(q, k)), v)
 
 
-def _swiglu(x, wg, wu, wd):
+def _swiglu(x: _T["M", "K"], wg: _T["K", "H"], wu: _T["K", "H"],
+            wd: _T["H", "N"]):
     gate = ts.ops.matmul(x, wg)
     up = ts.ops.matmul(x, wu)
     return ts.ops.matmul(ts.ops.silu_mul(gate, up), wd)
 
 
-def _unary_chain(x):
+def _unary_chain(x: _T["M", "N"]):
     return ts.ops.rmsnorm(ts.ops.silu(x))
 
 

@@ -84,7 +84,8 @@ CASES = {
 @pytest.mark.parametrize("kernel", list(CASES))
 def test_authoritative_plan_fires(kernel):
     fn_builder, args = CASES[kernel]
-    fn = ts.jit(target="apple_gpu")(fn_builder)
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    fn = ts.jit(target="apple_gpu")(fn_builder).specialize(*args)
     md = fn.runtime_artifact().metadata
     ops = md.get("ops") or []
     plan = rt._apple_gpu_resolve_authoritative_plan(md, len(ops))
@@ -101,7 +102,8 @@ def test_authoritative_plan_fires(kernel):
 def test_authoritative_matches_rematcher(kernel):
     """The 0c gate: authoritative dispatch == structural re-matcher, same input."""
     fn_builder, args = CASES[kernel]
-    fn = ts.jit(target="apple_gpu")(fn_builder)
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    fn = ts.jit(target="apple_gpu")(fn_builder).specialize(*args)
     md = fn.runtime_artifact().metadata
     ops = md.get("ops") or []
     if rt._apple_gpu_resolve_authoritative_plan(md, len(ops)) is None:
@@ -129,8 +131,8 @@ def test_authoritative_attention_matches_numpy():
 def test_missing_roles_falls_back_to_cascade():
     """Stripping dispatch roles must not break execution — the cascade still
     runs. (Legacy-artifact safety: 0b is additive.)"""
-    fn = ts.jit(target="apple_gpu")(_mm_softmax)
     a, b = _mat(4, 8), _mat(8, 6)
+    fn = ts.jit(target="apple_gpu")(_mm_softmax).specialize(a, b)  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     md = _strip_dispatch(fn.runtime_artifact().metadata)
     assert rt._apple_gpu_resolve_authoritative_plan(md, len(md.get("ops"))) is None
     out = np.asarray(rt._execute_apple_gpu_mps_metadata(md, [a, b]))

@@ -217,7 +217,9 @@ def test_s8_compiler_artifacts_for_foundation_targets():
         if spec.model_id not in representative:
             continue
         for target in FOUNDATION_TARGETS:
-            compiled = jit(spec.compile_fn, target=target)
+            # The spec's compile inputs fix the signature it compiles for
+            # (JIT_UNSPECIALIZED_SIGNATURE).
+            compiled = jit(spec.compile_fn, target=target).for_signature(*spec.compile_inputs)
             artifact = compiled.runtime_artifact()
             assert artifact.graph_ir
             assert artifact.schedule_ir

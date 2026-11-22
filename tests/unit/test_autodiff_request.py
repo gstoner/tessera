@@ -182,8 +182,9 @@ def test_forward_provenance_rejects_family_without_tangent_interface():
 
 # ── @jit integration ───────────────────────────────────────────────────────
 
+# Annotated: an unannotated program has no compiled form before a call (JIT_UNSPECIALIZED_SIGNATURE).
 @tessera.jit(autodiff="reverse", wrt=("x", "w"))
-def _loss(x, w):
+def _loss(x: tessera.Tensor["M", "K"], w: tessera.Tensor["K", "N"]):
     return tessera.ops.matmul(x, w)
 
 
@@ -215,8 +216,13 @@ def test_jit_mirrors_backward_facet_onto_compile_result():
         assert cr.backward.status is BackwardStatus.IR_TRANSFORMED
 
 
+# Annotated: an unannotated program has no compiled form before a call (JIT_UNSPECIALIZED_SIGNATURE).
 @tessera.jit(autodiff="reverse", wrt=("q", "k", "v"), target="rocm")
-def _fa_rocm(q, k, v):
+def _fa_rocm(
+    q: tessera.Tensor["B", "H", "S", "D"],
+    k: tessera.Tensor["B", "H", "S", "D"],
+    v: tessera.Tensor["B", "H", "S", "D"],
+):
     return tessera.ops.flash_attn(q, k, v)
 
 
@@ -233,15 +239,16 @@ def test_jit_rocm_flash_attn_backward_is_native_executable():
 
 def test_jit_without_autodiff_has_no_request():
     @tessera.jit
-    def plain(x, w):
+    def plain(x: tessera.Tensor["M", "K"], w: tessera.Tensor["K", "N"]):  # annotated: read pre-call
         return tessera.ops.matmul(x, w)
     assert plain.differentiation_request is None
     assert plain.backward_provenance.status is BackwardStatus.NOT_REQUESTED
     assert "tessera.autodiff" not in plain.graph_ir.module_attrs
 
 
+# Annotated: an unannotated program has no compiled form before a call (JIT_UNSPECIALIZED_SIGNATURE).
 @tessera.jit(autodiff="jvp", wrt=("w",))
-def _forward_loss(x, w):
+def _forward_loss(x: tessera.Tensor["M", "K"], w: tessera.Tensor["K", "N"]):
     return tessera.ops.matmul(x, w)
 
 

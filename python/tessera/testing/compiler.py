@@ -27,8 +27,11 @@ def compile_and_maybe_launch(
     """Compile a function, capture its runtime artifact, and optionally launch it."""
 
     compiled = jit(fn, **(jit_kwargs or {}))
-    artifact = compiled.runtime_artifact()
     launch_payload = launch_args if launch_args is not None else args
+    # An unannotated program compiles per signature; the payload names it.
+    if isinstance(launch_payload, (tuple, list)) and launch_payload:
+        compiled = compiled.for_signature(*launch_payload)
+    artifact = compiled.runtime_artifact()
     launch_result = launch(artifact, launch_payload) if run else None
     return CompilerHarnessResult(
         compiled=compiled,

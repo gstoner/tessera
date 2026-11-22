@@ -88,7 +88,8 @@ def test_prefill_write_crosses_a_page_boundary(oracle):
     table = np.array([1, 3, 0, 2], np.int32)
     flat = k_logical.reshape(-1, *k_logical.shape[2:])
     pages = np.zeros_like(k_logical)
-    result, status = _write(pages, table, np.ascontiguousarray(flat[0:20]), 0)  # page 0 -> 1
+    # All live rows in one launch (T = 24): crosses the page 0 -> 1 boundary.
+    result, status = _write(pages, table, np.ascontiguousarray(flat[0:live]), 0)
     assert result.get("ok") is True and status[0] == 0, result
     np.testing.assert_array_equal(pages, _physical(k_logical, table))
 

@@ -12704,3 +12704,7 @@ A host-independent cache-key fix; no x86 lowering or kernel path changed, and no
 ## `E2E-REAL-6F-conformance-traced-proof-2026-11-21`: sibling outcome — not applicable
 
 The conformance dashboard now proves its IR rungs on the traced module; the dashboard output is unchanged and no x86 lowering or runtime path changed. Evidence is the Mac unit suite only. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-the-conformance-matrix-proves-its-ir-rungs-on-the-traced-module))
+
+## `E2E-REAL-6F-differentiation-deferral-2026-11-21`: sibling outcome — not applicable
+
+Differentiation-request decorations now defer the AST module; no x86 lowering or kernel path changed, and no x86 device lane was run. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-differentiation-requests-defer-the-ast-module))

@@ -17,8 +17,18 @@ module {
 
 // CHECK-LABEL: llvm.func @paged_write
 // CHECK: nvvm.read.ptx.sreg.ctaid.x
-// CHECK: llvm.load %{{.*}} : !llvm.ptr -> i32
-// CHECK: llvm.icmp "sge"
-// CHECK: llvm.store %{{.*}}, %{{.*}} : f32, !llvm.ptr
-// CHECK: llvm.store %{{.*}}, %{{.*}} : i32, !llvm.ptr
+// CHECK: arith.cmpi ult
+// CHECK: scf.if
+// The logical position is read from device memory and checked as signed.
+// CHECK: llvm.load %arg3 {{.*}} : !llvm.ptr -> i32
+// CHECK: arith.cmpi sge
+// CHECK: scf.if
+// CHECK: llvm.load {{.*}} : !llvm.ptr -> i32
+// CHECK: arith.cmpi ult, %{{.*}}, %arg5 : i64
+// CHECK: scf.if
+// CHECK: llvm.load {{.*}} : !llvm.ptr -> f32
+// CHECK: llvm.store {{.*}} : f32, !llvm.ptr
+// Physical page out of range, then position out of range: both set status.
+// CHECK: llvm.store %{{.*}}, %arg4 {{.*}} : i32, !llvm.ptr
+// CHECK: llvm.store %{{.*}}, %arg4 {{.*}} : i32, !llvm.ptr
 // CHECK-NOT: tile.paged_kv_write_kernel

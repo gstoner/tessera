@@ -1,4 +1,6 @@
-"""Owning ROCm native SwiGLU math; full NVFP4 MLP composition is separate."""
+"""Owning ROCm native SwiGLU math on gfx1151 and gfx1201; each arch proves itself.
+
+Full NVFP4 MLP composition is separate."""
 
 import os
 import subprocess
@@ -96,9 +98,7 @@ def test_native_silu_jit_changed_inputs_replay_and_retained_output(target, stora
 
 @pytest.mark.parametrize("storage", ["f16", "bf16"])
 @pytest.mark.parametrize("shape", [(1,), (257,)])
-def test_gfx1201_rank_one_widening_has_native_silu_execution(target, storage, shape):
-    if target != "rocm_gfx1201":
-        pytest.skip("new rank-one cast admission is gfx1201-only; sibling proof required")
+def test_rank_one_widening_has_native_silu_execution(target, storage, shape):
     dtype = np.float16 if storage == "f16" else ml_dtypes.bfloat16
     a = np.linspace(-5, 5, np.prod(shape)).reshape(shape).astype(dtype)
     b = np.full(shape, 0.75, dtype)

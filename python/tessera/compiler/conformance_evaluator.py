@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Optional
 
 import tessera as ts
 
@@ -153,6 +153,21 @@ def _build(op: str, rng: Any) -> tuple[tuple[Any, ...], Any, bool, dict[str, flo
 
 def has_builder(op: str) -> bool:
     return op in _BASE_FN
+
+
+def corroboration_inputs(op: str) -> Optional[tuple[Any, ...]]:
+    """The curated program's corroboration inputs, or ``None`` if it has none.
+
+    A fixed seed, so the inputs -- and anything traced from them -- are the
+    same on every call. ``kv_cache_read`` has no builder here: its stateful
+    cache is corroborated by ``_corroborate_kv_cache_read``.
+    """
+    import numpy as np
+
+    try:
+        return _build(op, np.random.default_rng(0))[0]
+    except KeyError:
+        return None
 
 
 def _corroborate_kv_cache_read(target: str, rng: Any) -> BackendVerdict:

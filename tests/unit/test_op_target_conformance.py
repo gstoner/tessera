@@ -235,3 +235,43 @@ def test_complete_cells_have_no_failure_and_open_cells_name_first_rung():
                 "target_legal", "backend_compile", "runtime_execute",
                 "numerical_check",
             }
+
+
+def _fresh_proof_state():
+    from tessera.compiler import conformance_evaluator as ce
+    ce._JIT_CACHE.clear()
+    cm._ir_proof.cache_clear()
+    return ce
+
+
+def test_ir_proof_compiles_the_traced_module_without_the_ast_one():
+    # E2E-REAL-6F: the rungs are proven on the module the compiler executes,
+    # so a pure curated program never builds the decoration-time AST module.
+    ce = _fresh_proof_state()
+    try:
+        proof = cm._ir_proof("matmul_relu", "rocm")
+        assert proof.target_legal == cm.PROOF_COMPLETE
+        assert ce._jitted("matmul_relu", "rocm").ast_emission_pending
+    finally:
+        _fresh_proof_state()
+
+
+def test_ir_proof_reports_a_failed_trace_as_missing(monkeypatch):
+    ce = _fresh_proof_state()
+    from tessera.compiler.jit import JitFn
+
+    def refuse(self, args, kwargs, **_):
+        raise RuntimeError("trace refused")
+
+    monkeypatch.setattr(JitFn, "_trace_frontend_capture", refuse)
+    try:
+        proof = cm._ir_proof("softmax", "cpu")
+        assert proof.graph_emitted == cm.PROOF_MISSING
+        assert "trace refused" in proof.detail
+        # The stateful accessor has no corroboration inputs and keeps the
+        # decoration-time module.
+        assert ce.corroboration_inputs("kv_cache_read") is None
+        assert cm._ir_proof("kv_cache_read", "cpu").graph_emitted == cm.PROOF_COMPLETE
+    finally:
+        monkeypatch.undo()
+        _fresh_proof_state()

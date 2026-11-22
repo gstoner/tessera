@@ -19242,6 +19242,8 @@ Native-owner follow-through: the existing FP32 C staging ABI is preserved; an ad
 
 Public selector review: gfx1201 alone admits the new native SiLU JIT route. gfx1151 retains its existing route selection until its independent native device proof; shared compiler artifact admission does not intercept public sibling calls.
 
+gfx1151 public SiLU proof (2026-11-22, Princess-Luna, LLVM 23.1.1, ROCm 10.0 / HIP 7.15): with the selector and a `rocm_gfx1151` `tessera.silu_mul` capability row (ranks 1–3, f32/f16/bf16; `tessera.cast` widened to rank one as a SiLU producer), `tests/device/rocm/test_native_silu_math_jit.py` passes 45/45 on the live gfx1151 device — changed-input replay with retained output, IEEE classes and signed zero, compiler-free fresh-process replay, matching-half default store, rank-one widening and shape-free image reuse. The tests fail on any eager arithmetic, so the pass is native execution. The public selector now admits both arches; gfx1201 evidence was not reused. Still separate on gfx1151: the quantized program's SiLU parent-view member (slice 4), timing/promotion, and full NVFP4 MLP composition.
+
 Review follow-through (PR962): SiLU shape-only capture is restricted to matching canonical FP16/BF16/FP32 storage, including concrete dtype metadata. Other concrete inputs retain the registered eager result promotion; abstract integer/mixed promotion requires concrete values. The new gfx1201 public selector, support predicate and portable package validator agree on ranks 1–3. No sibling dtype or execution promotion follows. Existing shared integer-ingress spelling gaps remain a separate frontend foundation follow-up.
 
 
@@ -19591,3 +19593,7 @@ Native scaled programs on `rocm_gfx1201` are tracer-owned at decoration and thei
 ## `E2E-REAL-6F-decoration-cache-call-abi-2026-11-20`: sibling outcome — parity validated on gfx1201; gfx1151 follow-up owed
 
 The decoration-time Graph IR cache now keys on the resolved argument annotations; no ROCm lowering changed. Tajasarus unit and `tests/device/rocm` failing node IDs match main. Princess-Luna was unreachable, so gfx1151 is owed. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-20--e2e-real-6f-the-decoration-time-graph-ir-cache-keys-on-the-call-abi))
+
+## `E2E-REAL-6F-conformance-traced-proof-2026-11-21`: sibling outcome — not applicable
+
+The conformance dashboard now proves its IR rungs on the traced module; the dashboard output is unchanged and no rocm lowering or runtime path changed. Evidence is the Mac unit suite only. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-the-conformance-matrix-proves-its-ir-rungs-on-the-traced-module))

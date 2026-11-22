@@ -13,6 +13,15 @@ from tessera import runtime as rt
 from tests.unit.test_rocm_block_quant_frontend import make_quantizer
 
 
+@pytest.fixture(autouse=True)
+def _owning_gfx1201():
+    """Skip, naming the host arch, on a sibling ROCm host: gfx1201 proof never
+    transfers to gfx1151, so a red row there must mean a gfx1151 defect."""
+    from tests._support.rocm_build import require_rocm_host_arch
+
+    require_rocm_host_arch("gfx1201", live=True, why="authored block quantizer is promoted only on gfx1201 (gfx1151 slice 4 owed)")
+
+
 def oracle(x):
     wide=x.astype(np.float32).reshape(-1,16)
     scale=np.maximum(np.max(np.abs(wide),axis=1,keepdims=True)/np.float32(448),np.finfo(np.float32).tiny)

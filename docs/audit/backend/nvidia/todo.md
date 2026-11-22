@@ -17096,3 +17096,7 @@ No NVIDIA lowering changed; decorations now trace against their own target's leg
 ## `E2E-REAL-6F-decoration-cache-call-abi-2026-11-20`: sibling outcome — parity validated on sm_120 (RTX 5070)
 
 The decoration-time Graph IR cache now keys on the resolved argument annotations; no NVIDIA lowering changed. The-Super-Bear unit and `tests/device/nvidia` failing node IDs match main; 8 setup errors from `nvidia-smi` timeouts passed on rerun. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-20--e2e-real-6f-the-decoration-time-graph-ir-cache-keys-on-the-call-abi))
+
+## `E2E-REAL-6F-conformance-traced-proof-2026-11-21`: sibling outcome — not applicable
+
+The conformance dashboard now proves its IR rungs on the traced module; the dashboard output is unchanged and no nvidia lowering or runtime path changed. Evidence is the Mac unit suite only. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-the-conformance-matrix-proves-its-ir-rungs-on-the-traced-module))

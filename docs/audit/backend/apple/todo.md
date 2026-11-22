@@ -16462,3 +16462,7 @@ The decoration-time trace now verifies against `apple_gpu`/`apple_cpu` legality,
 ## `E2E-REAL-6F-decoration-cache-call-abi-2026-11-20`: sibling outcome — parity validated on the Mac (M1 Max)
 
 A host-independent cache-key fix; the Mac unit sweep's failing node IDs match main (one wall-clock test aside, which passes alone). ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-20--e2e-real-6f-the-decoration-time-graph-ir-cache-keys-on-the-call-abi))
+
+## `E2E-REAL-6F-conformance-traced-proof-2026-11-21`: sibling outcome — not applicable
+
+The conformance dashboard now proves its IR rungs on the traced module; the dashboard output is unchanged and no apple lowering or runtime path changed. Evidence is the Mac unit suite only. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-the-conformance-matrix-proves-its-ir-rungs-on-the-traced-module))

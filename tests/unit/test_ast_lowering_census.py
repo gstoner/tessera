@@ -47,7 +47,9 @@ def test_the_census_attributes_every_build_it_records(tmp_path: Path) -> None:
     # The file's eager cases name these readers (see test_lazy_ast_emission).
     assert "apple_gpu:body_may_need_tracer" in reasons
     assert all(r["eager_reasons"] for r in eager), "every eager decoration names why"
-    assert "differentiation_request" in reasons
+    # A differentiation request defers since 2026-11-21; its decorations in
+    # the target file must appear as deferred, never as an eager reason.
+    assert "differentiation_request" not in reasons
 
     lowers = [r for r in records if r["kind"] == "lower"]
     assert lowers and all(r["route"] in {"ast", "trace"} for r in lowers)

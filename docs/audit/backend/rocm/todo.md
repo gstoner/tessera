@@ -19597,3 +19597,7 @@ The decoration-time Graph IR cache now keys on the resolved argument annotations
 ## `E2E-REAL-6F-conformance-traced-proof-2026-11-21`: sibling outcome — not applicable
 
 The conformance dashboard now proves its IR rungs on the traced module; the dashboard output is unchanged and no rocm lowering or runtime path changed. Evidence is the Mac unit suite only. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-the-conformance-matrix-proves-its-ir-rungs-on-the-traced-module))
+
+## `E2E-REAL-6F-differentiation-deferral-2026-11-21`: sibling outcome — parity validated on gfx1201 and gfx1151
+
+Differentiation-request decorations now defer the AST module; no ROCm lowering changed. Tajasarus and Princess-Luna unit and `tests/device/rocm` failing node IDs match dfebdc397. The Luna chain also closes the gfx1151 follow-ups owed for #1065, #1066 and #1067. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-differentiation-requests-defer-the-ast-module))

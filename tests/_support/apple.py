@@ -130,24 +130,23 @@ def require_apple_gpu_memory_abi() -> None:
 def require_apple_gpu_runtime_dylib() -> str:
     """Path of the Apple GPU runtime dylib under test, or skip.
 
-    An explicit ``TESSERA_APPLE_GPU_RUNTIME_LIB`` must exist (a typo fails
-    rather than silently testing another dylib). Without it, this tree's
-    ``build/`` dylib is used; a host with neither cannot evaluate the lane --
-    rebuild with ``ninja -C build TesseraAppleRuntimeShared`` before citing it.
+    Resolved through ``build_artifacts.built_artifact``: an explicit
+    ``TESSERA_APPLE_GPU_RUNTIME_LIB`` or ``TESSERA_BUILD_DIR`` selection is
+    honored and never falls back to another tree, so a stale ``build/`` dylib
+    cannot stand in for the selected build. A host with no runtime cannot
+    evaluate the lane -- rebuild with ``ninja -C build
+    TesseraAppleRuntimeShared`` before citing it.
     """
-    import os
+    from tests._support.build_artifacts import built_artifact
 
-    explicit = os.environ.get("TESSERA_APPLE_GPU_RUNTIME_LIB")
-    if explicit:
-        assert Path(explicit).is_file(), (
-            f"TESSERA_APPLE_GPU_RUNTIME_LIB={explicit} does not exist")
-        return explicit
-    built = (Path(__file__).resolve().parents[2] / "build/src/compiler/codegen"
-             / "Tessera_Apple_Backend/libTesseraAppleRuntime.dylib")
-    if not built.is_file():
-        pytest.skip("no Apple GPU runtime dylib: build TesseraAppleRuntimeShared "
-                    "or set TESSERA_APPLE_GPU_RUNTIME_LIB")
-    return str(built)
+    found = built_artifact(
+        "src/compiler/codegen/Tessera_Apple_Backend/libTesseraAppleRuntime.dylib",
+        env=("TESSERA_APPLE_GPU_RUNTIME_LIB",),
+    )
+    if found is None:
+        pytest.skip("no Apple GPU runtime dylib in the selected build: build "
+                    "TesseraAppleRuntimeShared or set TESSERA_APPLE_GPU_RUNTIME_LIB")
+    return str(found)
 
 
 def require_apple_accelerate() -> None:

@@ -222,3 +222,7 @@ AD/workload status excerpts are archived; they are not additional queues.
 ## Public native JVP integration
 
 - `native_public_jvp_integration_plan.md`: [scoped acceptance plan](native_public_jvp_integration_plan.md) for public native Graph AD ownership and saved-LSE JVP integration; global order remains in the integrated plan.
+
+## Compiled autoregressive decode
+
+- `AR_DECODE_PROGRAM_PLAN.md`: [scoped acceptance plan](AR_DECODE_PROGRAM_PLAN.md) (`AR-DECODE-PROGRAM-1`, proposed) for compiling an AR decode step, then the generate loop, as one compiler-owned program with a device-resident KV cache; sm_120 first, siblings by their own proof. Global order remains in the integrated plan.

@@ -839,6 +839,29 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         status="implemented",
     ),
     DiagnosticCode(
+        code="AR_DECODE_CONTRACT_INVALID",
+        pass_origin="tessera.models.ar_decode.validate_decode_contract",
+        severity="error",
+        summary=(
+            "An autoregressive decode-step contract is missing a semantic key "
+            "(storage/accumulator dtype, RoPE variant/theta, RMSNorm eps, EOS, "
+            "sampling, tie-break, page size, capacity), disagrees with the "
+            "model config, or leaves the AR-DECODE-PROGRAM-1 S0 envelope "
+            "(dense GQA, full attention, greedy, fp32 accumulation). "
+            "Decision #21a: semantic keys never default."
+        ),
+        fix_hint=(
+            "Read the named field: pass every DecodeStepContract key "
+            "explicitly (eos_token_id=None states 'no EOS'), make rope_theta / "
+            "rms_norm_eps match the model, and keep max_seq_len a multiple of "
+            "page_size within context_length."
+        ),
+        spec="docs/audit/compiler/AR_DECODE_PROGRAM_PLAN.md",
+        sprint="AR-DECODE-PROGRAM-1",
+        language="python",
+        status="implemented",
+    ),
+    DiagnosticCode(
         code="JIT_UNLOWERED_OP_NATIVE_TARGET",
         pass_origin="tessera.compiler.JitDiagnosticCode",
         severity="error",

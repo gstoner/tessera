@@ -109,7 +109,7 @@ def rocm_host_arch() -> "str | None":
         return None
 
 
-def require_rocm_host_arch(arch: str, why: str) -> str:
+def require_rocm_host_arch(arch: str, why: str, *, live: bool = False) -> str:
     """Skip unless this host launches on exactly ``arch``.
 
     For a test that asserts an arch-specific *record* (a certificate naming
@@ -118,10 +118,21 @@ def require_rocm_host_arch(arch: str, why: str) -> str:
     stamps is still chip-named; that gap is owed by name, not hidden by a
     wider assertion. Unlike the report hook, this is an explicit pin: the
     skip reason names both archs and the owning item.
+
+    ``live=True`` asks the selected HIP device itself (`runtime._rocm_live_arch`)
+    instead of `rocm_host_arch`, which needs a working GEMM probe and honors the
+    ``TESSERA_ROCM_CHIP`` pin. Use it for an exact-device proof that already
+    asserts the live arch: such a test must neither lose coverage to an unrelated
+    GEMM prerequisite nor follow a chip pin onto hardware it does not own.
     """
     import pytest
 
-    host = rocm_host_arch()
+    if live:
+        from tessera import runtime as rt
+
+        host = rt._rocm_live_arch()
+    else:
+        host = rocm_host_arch()
     if host is None:
         pytest.skip("no ROCm device on this host")
     if host != arch:

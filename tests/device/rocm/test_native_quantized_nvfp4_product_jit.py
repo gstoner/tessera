@@ -13,6 +13,15 @@ from benchmarks.rocm.benchmark_public_quantized_nvfp4_product import make_produc
 pytestmark=[pytest.mark.hardware_rocm,pytest.mark.compiler_route]
 
 
+@pytest.fixture(autouse=True)
+def _owning_gfx1201():
+    """Skip, naming the host arch, on a sibling ROCm host: gfx1201 proof never
+    transfers to gfx1151, so a red row there must mean a gfx1151 defect."""
+    from tests._support.rocm_build import require_rocm_host_arch
+
+    require_rocm_host_arch("gfx1201", live=True, why="three-member NVFP4 product program is promoted only on gfx1201")
+
+
 @pytest.mark.parametrize("m,n,k",[(1,1,16),(3,17,32),(19,33,64),(256,128,12288)])
 def test_public_three_member_program_and_portable_replay(m,n,k,monkeypatch):
     assert rt._rocm_live_arch()=="gfx1201","owning gfx1201 required"

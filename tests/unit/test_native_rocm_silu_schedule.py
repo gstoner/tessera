@@ -294,7 +294,7 @@ def test_gfx1201_silu_capability_tracks_native_storage_and_rank(dtype):
     assert row.ranks == (1, 2, 3)
 
 
-@pytest.mark.parametrize("target,admitted", [("rocm_gfx1201", True), ("rocm_gfx1151", False), ("rocm", False), ("nvidia_sm120", False)])
+@pytest.mark.parametrize("target,admitted", [("rocm_gfx1201", True), ("rocm_gfx1151", True), ("rocm", False), ("nvidia_sm120", False)])
 def test_public_silu_selection_does_not_preempt_unproved_sibling_route(target, admitted):
     from tessera.compiler import rocm_math_native as native
 

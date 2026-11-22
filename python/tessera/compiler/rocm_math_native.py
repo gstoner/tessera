@@ -58,10 +58,13 @@ def _silu_public_rank_envelope(module):
 
 
 def requests_public_math(module, target):
-    """Select only owning-device-proved public routes; compiler admission is separate."""
+    """Select only owning-device-proved public routes; compiler admission is separate.
+
+    Public SiLU is proved on both gfx1151 and gfx1201 (ranks 1-3); each
+    architecture carries its own exact-device proof."""
     return (target in {"rocm_gfx1151", "rocm_gfx1201"} and requests_math(module)
             and (module.functions[0].body[-1].op_name != "tessera.silu_mul"
-                 or (target == "rocm_gfx1201" and _silu_public_rank_envelope(module))))
+                 or _silu_public_rank_envelope(module)))
 
 
 def supports_math(module):

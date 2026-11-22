@@ -74,9 +74,9 @@ The runtime owns storage/launch only; arithmetic remains in the compiled image.
 Malformed width/span/alias tests check rejection before GPU synchronization,
 and existing allocation/copy/completion/lease fault injection remains green.
 
-Rank-one half widening admission is new only on gfx1201. Its exact-device
-fixture passes rank-one widening; gfx1151 retains its previous rank-two/
-rank-three widening envelope. Core compiler tests on a named target do not
+Rank-one half widening admission is proved on gfx1201 and, since 2026-11-22,
+on gfx1151 as a SiLU producer; gfx1151 widening into its other math consumers
+keeps the rank-two/rank-three envelope. Core compiler tests on a named target do not
 substitute for numerical execution on that target's owning hardware.
 
 Remaining gates include benchmark interpretation, generated registries and exact
@@ -84,7 +84,12 @@ PR checks. Owning tests cover IEEE/signed-zero, ordinary JIT/changed-input/
 compiler-free replay and shape-independent images. Full resident gate/up views/lifetimes, activation quantization and
 down projection remain part of the full five-slice objective.
 
-Public SiLU selection is gfx1201-only until independent gfx1151 execution proof.
+Public SiLU selection is admitted on gfx1201 and, since 2026-11-22, on
+gfx1151. The gfx1151 admission rests on its own exact-device run of
+`tests/device/rocm/test_native_silu_math_jit.py` on Princess-Luna (45 passed:
+changed-input replay, IEEE classes and signed zero, compiler-free fresh-process
+replay, matching-half default store, rank-one widening and shape-free image
+reuse); gfx1201 evidence was not reused.
 The shared low-level compiler admission remains available for artifact testing;
 it does not preempt the sibling public route. Broad host validation found one
 missing benchmark citation; that citation and its unchanged gate now pass.

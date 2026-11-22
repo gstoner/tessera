@@ -2842,7 +2842,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op,"rocm_gfx1201"):"tests/device/rocm/test_native_block_quant_jit.py"
        for op in ("reshape","cast","absolute","reduce","maximum","expand")},
     ("slice", "rocm_gfx1201"): "tests/device/rocm/test_native_parent_view_jit.py",
-    ("silu_mul", "rocm_gfx1201"): "tests/device/rocm/test_native_silu_math_jit.py",
+    **{("silu_mul", target): "tests/device/rocm/test_native_silu_math_jit.py"
+       for target in ("rocm_gfx1151", "rocm_gfx1201")},
     ("softmax_safe", "nvidia_sm120"): "tests/device/nvidia/test_scheduled_semantic_kernels.py",
     ("scaled_matmul", "nvidia_sm120"): "tests/device/nvidia/test_nvfp4_transpose_jit.py",
     **{("cast",target): "tests/device/rocm/test_native_math_widening.py"

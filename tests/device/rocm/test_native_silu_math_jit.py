@@ -1,4 +1,6 @@
-"""Owning ROCm native SwiGLU math; full NVFP4 MLP composition is separate."""
+"""Owning ROCm native SwiGLU math on gfx1151 and gfx1201; each arch proves itself.
+
+Full NVFP4 MLP composition is separate."""
 
 import os
 import subprocess
@@ -46,23 +48,9 @@ def target():
     return _target_fixture.__wrapped__()
 
 
-@pytest.fixture
-def public_silu_route():
-    """The public `@jit` SiLU route is gfx1201-only by contract
-    (`docs/spec/NATIVE_ROCM_SILU_MATH_CONTRACT.md`: "Public SiLU selection is
-    gfx1201-only until independent gfx1151 execution proof"). On gfx1151 the
-    selector keeps the existing route, so these tests skip there, naming the
-    host, instead of failing on the eager fallback. Compile-only cases do not
-    request this fixture and still run on gfx1151."""
-    from tests._support.rocm_build import require_rocm_host_arch
-
-    require_rocm_host_arch("gfx1201", live=True, why="public SiLU JIT selection awaits gfx1151 execution proof")
-
-
 @pytest.mark.parametrize("storage", ["f32", "f16", "bf16"])
 @pytest.mark.parametrize("reverse", [False, True])
 @pytest.mark.parametrize("shape", [(257,), (3, 17), (2, 3, 257)])
-@pytest.mark.usefixtures("public_silu_route")
 def test_native_silu_jit_changed_inputs_replay_and_retained_output(target, storage, reverse, shape, monkeypatch):
     dtype = {"f32": np.float32, "f16": np.float16, "bf16": ml_dtypes.bfloat16}[storage]
     rng = np.random.default_rng(1610)
@@ -110,9 +98,7 @@ def test_native_silu_jit_changed_inputs_replay_and_retained_output(target, stora
 
 @pytest.mark.parametrize("storage", ["f16", "bf16"])
 @pytest.mark.parametrize("shape", [(1,), (257,)])
-def test_gfx1201_rank_one_widening_has_native_silu_execution(target, storage, shape):
-    if target != "rocm_gfx1201":
-        pytest.skip("new rank-one cast admission is gfx1201-only; sibling proof required")
+def test_rank_one_widening_has_native_silu_execution(target, storage, shape):
     dtype = np.float16 if storage == "f16" else ml_dtypes.bfloat16
     a = np.linspace(-5, 5, np.prod(shape)).reshape(shape).astype(dtype)
     b = np.full(shape, 0.75, dtype)
@@ -124,7 +110,6 @@ def test_gfx1201_rank_one_widening_has_native_silu_execution(target, storage, sh
 
 
 @pytest.mark.parametrize("storage", ["f32", "f16", "bf16"])
-@pytest.mark.usefixtures("public_silu_route")
 def test_native_silu_preserves_ieee_classes_and_zero_sign(target, storage):
     dtype = {"f32": np.float32, "f16": np.float16, "bf16": ml_dtypes.bfloat16}[storage]
     a = np.resize(np.array([-np.inf, -100, -5, -0.0, 0.0, 1, 50, np.inf, np.nan]), (3, 17)).astype(dtype)
@@ -158,7 +143,6 @@ def test_native_silu_reuses_shape_free_images(target, storage):
 
 
 @pytest.mark.parametrize("storage,matching_store", [("f32", False), ("f16", False), ("bf16", False), ("f16", True), ("bf16", True)])
-@pytest.mark.usefixtures("public_silu_route")
 def test_native_silu_fresh_process_replay_without_compiler_or_eager(target, storage, matching_store, tmp_path):
     dtype = {"f32": np.float32, "f16": np.float16, "bf16": ml_dtypes.bfloat16}[storage]
     rng = np.random.default_rng(1710)
@@ -220,7 +204,6 @@ print("native SiLU fresh replay passed")
 @pytest.mark.parametrize("storage", ["f16", "bf16"])
 @pytest.mark.parametrize("reverse", [False, True])
 @pytest.mark.parametrize("shape", [(257,), (3, 17), (2, 3, 257)])
-@pytest.mark.usefixtures("public_silu_route")
 def test_default_half_silu_uses_native_matching_store(target, storage, reverse, shape, monkeypatch):
     dtype = np.float16 if storage == "f16" else ml_dtypes.bfloat16
     finfo = np.finfo(np.float16) if storage == "f16" else ml_dtypes.finfo(ml_dtypes.bfloat16)

@@ -6741,6 +6741,25 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                   "no general uint8 promotion",
         ))
 
+    # AR-DECODE-PROGRAM-1 S1a: the internal Graph op ``tessera.paged_kv_write``
+    # (the write counterpart of ``tessera.paged_kv_read``, which the public
+    # ``kv_cache.read`` lowers into) executes natively on sm_120. The public
+    # handle-level ``kv_cache.append`` does not route to it yet, so this row is
+    # ``planned`` for the public primitive: the internal device proof is named,
+    # never transferred to the public op (AGENTS.md cross-registry rule).
+    if op_name == "kv_cache_append":
+        entries.append(BackendKernelEntry(
+            target="nvidia_sm120", status=_PLANNED_STATUS, dtypes=("fp32",),
+            feature_flags=("kv_cache", "paged", "in_place", "cuda"),
+            shape_envelope="pages[P,PS,H,D] f32, i32 page_table[LP], values[T,H,D], "
+                "device i32 position; T <= LP*PS; written logical pages map to distinct physical pages",
+            cuda_arch_min="sm_120",
+            notes="Public kv_cache.append routing is planned (AR-DECODE S1b). The internal "
+                  "Graph->Schedule->Tile->NVVM tessera.paged_kv_write lane is device-proved on "
+                  "the RTX 5070 by tests/device/nvidia/test_paged_kv_write.py, refusing "
+                  "out-of-range positions/pages and aliased physical pages through a status word.",
+        ))
+
     # x86 AMX / AVX-512
     x86 = _X86_KERNELS.get(op_name)
     if x86 is not None:

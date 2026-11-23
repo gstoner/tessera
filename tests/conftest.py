@@ -276,10 +276,12 @@ def pytest_runtest_makereport(item, call):
         # confirms the capability is missing (tests/_support/backend_absence.py).
         from tests._support.backend_absence import backend_absence_reason
 
+        from tests._support.backend_absence import apple_gap_note
+
         absent = backend_absence_reason(text)
         if not absent:
             return
-        reason = f"{absent}: {first}"
+        reason = f"{absent}{apple_gap_note(str(item.fspath))}: {first}"
     report.outcome = "skipped"
     # Never touch `wasxfail`: pytest keys xfail on the attribute's *presence*, so
     # even `wasxfail = None` reported these as xfailed (153 of them on Tajasarus).

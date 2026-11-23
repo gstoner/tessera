@@ -338,3 +338,97 @@ def project_paged_host_storage(module, ordered):
     source = copy.deepcopy(module)
     source.functions[0].args[position].layout = "strided"
     return source
+
+
+# ── AR-DECODE-PROGRAM-1 S1a: in-place paged write (sm_120) ────────────────────
+PAGED_KV_WRITE_ENTRY = "tessera_tile_paged_kv_write_f32_direct"
+_WRITE_CONTRACT_KEYS = frozenset({
+    "arch", "bindings", "layout", "page_ownership", "position_bounds", "refusal",
+    "shape", "table_bounds", "target"})
+
+
+@dataclass(frozen=True)
+class ScheduledPagedKVWriteArtifact:
+    """Graph -> Schedule -> Tile replay of one in-place paged write.
+
+    ``names`` are (pages, page_table, values, position); ``dims`` are
+    (P, LP, PageSize, H, D, Tokens). Every field is re-read from the replayed
+    ``tessera.native_contract`` by :meth:`validate`; nothing is trusted from
+    the caller.
+    """
+
+    graph_ir: str
+    schedule_ir: str
+    tile_ir: str
+    schedule_digest: str
+    names: tuple[str, str, str, str]
+    dims: tuple[int, int, int, int, int, int]
+    entry: str = PAGED_KV_WRITE_ENTRY
+
+    def validate(self) -> None:
+        tool = find_tessera_opt()
+        if tool is None:
+            raise RuntimeError("paged write requires native Schedule replay")
+        if run_tessera_opt(tool, self.graph_ir, "--tessera-graph-to-schedule") != self.schedule_ir:
+            raise ValueError("paged write Schedule IR disagrees with Graph replay")
+        if run_tessera_opt(tool, self.schedule_ir, "--tessera-schedule-to-tile") != self.tile_ir:
+            raise ValueError("paged write Tile IR disagrees with native Schedule replay")
+        contracts = re.findall(r"tessera\.native_contract = \{([^{}]*)\}", self.tile_ir)
+        functions = re.findall(r"llvm\.func @(\w+)\(([^)]*)\)", self.tile_ir)
+        kernels = re.findall(r"tile\.paged_kv_write_kernel ([^{]*)\{([^}]*)\}", self.tile_ir)
+        if len(contracts) != 1 or len(functions) != 1 or len(kernels) != 1:
+            raise ValueError("paged write Tile IR must carry one native contract and kernel")
+        fields = _parse_native_contract(contracts[0])
+        if set(fields) != _WRITE_CONTRACT_KEYS:
+            raise ValueError("paged write native contract has unexpected fields")
+        if (fields["target"], fields["arch"], fields["layout"], fields["page_ownership"]) != (
+                "nvidia_sm120", "sm_120", "row_major", "in_place"):
+            raise ValueError("paged write native contract leaves the sm_120 in-place envelope")
+        if fields["bindings"] != tuple(self.names) or fields["shape"] != tuple(self.dims):
+            raise ValueError("paged write artifact fields disagree with its native Tile contract")
+        entry, parameters = functions[0]
+        operands, attr_text = kernels[0]
+        attrs = dict(re.findall(r'(\w+) = "([^"]*)"', attr_text))
+        if (entry != self.entry or parameters.count(": !llvm.ptr") != 5
+                or parameters.count(": i64") != 6 or operands.count("%") != 11
+                or attrs != {"page_ownership": "in_place", "route": "direct",
+                             "storage": "f32", "table_storage": "i32"}):
+            raise ValueError("paged write Tile kernel disagrees with its runtime ABI")
+        if re.findall(r'tessera.schedule_hash = "([0-9a-f]{64})"', self.tile_ir) != [self.schedule_digest]:
+            raise ValueError("paged write schedule hash disagrees")
+
+
+def lower_scheduled_paged_kv_write(
+    names: tuple[str, str, str, str], dims: tuple[int, ...]
+) -> ScheduledPagedKVWriteArtifact:
+    """Replay one isolated sm_120 ``tessera.paged_kv_write`` through native passes."""
+    if len(dims) != 6 or any(type(d) is not int or d <= 0 for d in dims):
+        raise ValueError("paged write dimensions must be six positive integers")
+    if len(names) != 4 or len(set(names)) != 4 or any(
+            not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", n) for n in names):
+        raise ValueError("paged write bindings must be four unique identifiers")
+    p, lp, ps, h, d, tokens = dims
+    if tokens > lp * ps:
+        raise ValueError("paged write token count exceeds the logical page capacity")
+    pages_t = f"tensor<{p}x{ps}x{h}x{d}xf32>"
+    graph = f"""module attributes {{tessera.target = "nvidia_sm120", tessera.arch = "sm_120"}} {{
+      func.func @paged_write(%pages: {pages_t}, %table: tensor<{lp}xi32>,
+                             %values: tensor<{tokens}x{h}x{d}xf32>, %position: tensor<1xi32>) -> {pages_t}
+          attributes {{tessera.bindings = {json.dumps(list(names))}}} {{
+        %updated = tessera.paged_kv_write %pages, %table, %values, %position
+          : ({pages_t}, tensor<{lp}xi32>, tensor<{tokens}x{h}x{d}xf32>, tensor<1xi32>) -> {pages_t}
+        return %updated : {pages_t}
+      }}
+    }}"""
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("paged write requires production tessera-opt")
+    schedule = run_tessera_opt(tool, graph, "--tessera-graph-to-schedule")
+    tile = run_tessera_opt(tool, schedule, "--tessera-schedule-to-tile")
+    hashes = re.findall(r'tessera.schedule_hash = "([0-9a-f]{64})"', tile)
+    if len(hashes) != 1:
+        raise RuntimeError("paged write lowering lost its unique schedule hash")
+    artifact = ScheduledPagedKVWriteArtifact(graph, schedule, tile, hashes[0],
+                                             tuple(names), tuple(dims))  # type: ignore[arg-type]
+    artifact.validate()
+    return artifact

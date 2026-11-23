@@ -4142,6 +4142,7 @@ struct GraphToSchedulePass
         failed(scheduleNativeAttentionRecompute(mod))) return signalPassFailure();
     if (failed(scheduleNativeNVFP4Ingest(mod)) || failed(scheduleNativeMXFP4StorageIngest(mod))) return signalPassFailure();
     if (failed(scheduleNativePagedKV(mod))) return signalPassFailure();
+    if (failed(scheduleNativePagedKVWrite(mod))) return signalPassFailure();
     if (failed(scheduleNativeMoeDispatch(mod))) return signalPassFailure();
 
     SmallVector<Operation *> tridiagonalSolves;
@@ -5331,6 +5332,7 @@ struct ScheduleToTilePass
         failed(lowerNativeCheckpoints(mod))) return signalPassFailure();
     if (failed(lowerNativeNVFP4Ingest(mod)) || failed(lowerNativeMXFP4StorageIngest(mod))) return signalPassFailure();
     if (failed(lowerNativePagedKV(mod))) return signalPassFailure();
+    if (failed(lowerNativePagedKVWrite(mod))) return signalPassFailure();
     if (failed(lowerNativeMoeDispatch(mod))) return signalPassFailure();
     if (failed(lowerNativeSSD(mod))) return signalPassFailure();
 

@@ -12,6 +12,7 @@ from tessera.compiler.native_attention_program import NativeAttentionJVPProgram
 from tests.device.nvidia.test_public_typed_attention_vjp import function
 from tests.device.nvidia.test_saved_lse_half_backward_kernel import compare
 from benchmarks.nvidia.benchmark_jit_attention_vjp import download
+from tests._support.environment import require_llvm_bin
 
 pytestmark = [pytest.mark.hardware_nvidia, pytest.mark.compiler_route]
 
@@ -50,7 +51,7 @@ def test_public_typed_jvp_portable_resident_replay(storage, saved, bias, causal,
     directions = {n: rng.normal(0, .2, x.shape).astype(x.dtype) for n, x in values.items()}
     fn = ts.jit(target="nvidia_sm120", autodiff="forward", wrt=active)(function(saved, bias, causal))
     program = fn.compile_native_attention_jvp(**values, compiler=Path(os.environ["TESSERA_OPT"]),
-                                            llvm_bin=Path(os.environ["TESSERA_LLVM_BIN"]))
+                                            llvm_bin=require_llvm_bin())
     program = NativeAttentionJVPProgram.from_json(program.to_json(), expected_digest=program.program_digest)
     def forbidden(*args, **kwargs):
         pytest.fail("portable resident replay attempted compilation")
@@ -196,7 +197,7 @@ def test_bounded_typed_jvp_reuses_one_portable_image_from_trace_at_one(storage, 
     active = tuple(traced)
     fn = ts.jit(target="nvidia_sm120", autodiff="forward", wrt=active)(function(saved, bias, True))
     program = fn.compile_native_attention_jvp(**traced, compiler=Path(os.environ["TESSERA_OPT"]),
-        llvm_bin=Path(os.environ["TESSERA_LLVM_BIN"]), sequence_bounds=(7, 9))
+        llvm_bin=require_llvm_bin(), sequence_bounds=(7, 9))
     program = NativeAttentionJVPProgram.from_json(program.to_json(), expected_digest=program.program_digest)
     identity = (program.program_digest, program.tangent.binding_digest,
                 program.pair.forward.image.image_digest)
@@ -250,7 +251,7 @@ def test_public_typed_jvp_fresh_process_has_no_compiler_dependency(storage, save
     fn = ts.jit(target="nvidia_sm120", autodiff="forward", wrt=("q", "k", "v"))(
         function(saved, False, True))
     program = fn.compile_native_attention_jvp(**traced, compiler=Path(os.environ["TESSERA_OPT"]),
-        llvm_bin=Path(os.environ["TESSERA_LLVM_BIN"]), sequence_bounds=(7, 9) if bounded else None)
+        llvm_bin=require_llvm_bin(), sequence_bounds=(7, 9) if bounded else None)
     path = tmp_path/"program.json"
     path.write_text(program.to_json())
     payload = {n: x.view(np.uint16) for n, x in values.items()}
@@ -283,7 +284,7 @@ def test_textual_typed_jvp_with_fp32_output_reaches_public_owner(storage, saved,
     directions = {n: rng.normal(0, .1, x.shape).astype(x.dtype) for n, x in values.items()}
     original = source(storage, saved=saved, bias=bias, output="f32").replace('"reverse"', '"forward"')
     program = compile_attention_program(original, tuple(range(len(values))),
-        compiler=Path(os.environ["TESSERA_OPT"]), llvm_bin=Path(os.environ["TESSERA_LLVM_BIN"]),
+        compiler=Path(os.environ["TESSERA_OPT"]), llvm_bin=require_llvm_bin(),
         input_names=tuple(values))
     artifact = rt.RuntimeArtifact(graph_ir=original, target_ir=program.tangent.arena_ir,
         metadata=dict(target="nvidia_sm120", compiler_path="nvidia_sm120_attention_jvp_compiled",

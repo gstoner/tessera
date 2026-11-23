@@ -1241,6 +1241,20 @@ def Tile_PagedKVReadKernelOp : Tile_Op<"paged_kv_read_kernel"> {
   let hasVerifier = 1;
 }
 
+// AR-DECODE-PROGRAM-1 S1a: in-place logical-to-physical paged write. Inputs
+// are pages (read-write), i32 page table, f32 values[T,H,D], i32 position[1],
+// i32 status[1], then P/LP/page-size/H/D/token-count dimensions. The kernel
+// reads the logical start position from device memory, writes token t at
+// logical row position+t, and sets status[0] = 1 (skipping the element)
+// whenever the position or a physical page index is out of range.
+def Tile_PagedKVWriteKernelOp : Tile_Op<"paged_kv_write_kernel"> {
+  let summary = "Launch-level typed in-place paged-KV logical-to-physical write";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
 // Compiler-owned fused paged attention. Inputs are Q, K pages, V pages, i32
 // logical-to-physical page table, i64 logical token indices, O, followed by
 // P/LP/page-size/H/Q/T/D/causal-offset. The offset is an explicit absolute

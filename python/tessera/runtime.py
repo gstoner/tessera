@@ -3206,6 +3206,7 @@ def _submit_nvidia_sm120_native(
         SM120_MOE_ABIS,
         SM120_PAGED_ATTN_F32_ABI,
         SM120_PAGED_KV_F32_ABI,
+        SM120_PAGED_KV_WRITE_F32_ABI,
         SM120_NVFP4_ABI,
         SM120_NVFP4_BATCH_ABI,
         SM120_REDUCE_F16_ABI,
@@ -3298,6 +3299,7 @@ def _submit_nvidia_sm120_native(
         SM120_PACKED_DECODE_ABI,
         SM120_MXFP4_ABI,
         SM120_PAGED_KV_F32_ABI,
+        SM120_PAGED_KV_WRITE_F32_ABI,
         SM120_PAGED_ATTN_F32_ABI,
         SM120_REDUCE_F16_ABI,
         SM120_REDUCE_BF16_ABI,
@@ -3812,6 +3814,26 @@ def _submit_nvidia_sm120_native(
                 raise RuntimeError("SM120 paged-KV table contains an invalid physical page")
         except AttributeError as exc:
             raise RuntimeError("SM120 paged-KV table must support array validation") from exc
+    elif descriptor.abi_id == SM120_PAGED_KV_WRITE_F32_ABI:
+        dimensions = tuple(
+            int(cast(int, scalars[name])) for name in ("P", "LP", "PageSize", "H", "D", "Tokens")
+        )
+        p, logical_pages, page_size, heads, dim, tokens = dimensions
+        pages, page_table, values, position, status = raw
+        if (
+            tuple(pages.shape) != (p, page_size, heads, dim)
+            or tuple(page_table.shape) != (logical_pages,)
+            or tuple(values.shape) != (tokens, heads, dim)
+            or tuple(position.shape) != (1,)
+            or tuple(status.shape) != (1,)
+            or tokens > logical_pages * page_size
+        ):
+            raise RuntimeError("SM120 paged-KV write shapes disagree with descriptor scalars")
+        if not pages.flags.c_contiguous or not pages.flags.writeable:
+            raise RuntimeError("SM120 paged-KV write pages must be writable contiguous host storage")
+        # Position and physical page bounds are data-dependent: the kernel checks
+        # them on the device and reports a refusal through ``status``.
+        output = pages
     elif descriptor.abi_id in SM120_ATTN_LSE_SCALED_KV_ABIS:
         # SM120-SAVED-LSE-SCALED-FP8-KV-20261025: Q, K/V codes, [bias], K/V
         # scales, O, LSE; scalars B..Dv, [bias extents], eight scale extents.
@@ -4175,6 +4197,7 @@ def _submit_nvidia_sm120_native(
         or descriptor.abi_id
         in {
             SM120_PAGED_KV_F32_ABI,
+            SM120_PAGED_KV_WRITE_F32_ABI,
             SM120_PAGED_ATTN_F32_ABI,
             SM120_DYNAMIC_SMEM_ABI,
             SM120_DYNAMIC_EXPR_SMEM_ABI,
@@ -6975,6 +6998,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_MOE_ABIS,
         SM120_PAGED_ATTN_F32_ABI,
         SM120_PAGED_KV_F32_ABI,
+        SM120_PAGED_KV_WRITE_F32_ABI,
         SM120_NVFP4_ABI,
         SM120_NVFP4_BATCH_ABI,
         SM120_REDUCE_F16_ABI,
@@ -7056,6 +7080,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 SM120_PACKED_DECODE_ABI,
                 SM120_MXFP4_ABI,
                 SM120_PAGED_KV_F32_ABI,
+                SM120_PAGED_KV_WRITE_F32_ABI,
                 SM120_PAGED_ATTN_F32_ABI,
                 SM120_REDUCE_F16_ABI,
                 SM120_REDUCE_BF16_ABI,

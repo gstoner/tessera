@@ -9,6 +9,7 @@ import tessera as ts
 
 from tessera.compiler import native_attention_jvp_runtime as runtime
 from tessera.compiler.scheduled_matmul import find_tessera_opt
+from tests._support.environment import require_llvm_bin
 
 def attention(q, k, v):
     return ts.ops.flash_attn(q, k, v, causal=True, lse_checkpoint="saved")
@@ -26,7 +27,7 @@ def bounded_program(request):
     fn = ts.jit(target="nvidia_sm120", autodiff="forward", wrt=("q", "k", "v"))(
         attention)
     program = fn.compile_native_attention_jvp(
-        **roots, compiler=Path(compiler), llvm_bin=Path(os.environ["TESSERA_LLVM_BIN"]),
+        **roots, compiler=Path(compiler), llvm_bin=require_llvm_bin(),
         sequence_bounds=(7, 9))
     metadata = dict(program_json=program.to_json(), program_digest=program.program_digest,
                     arg_names=["primal_0", "primal_1", "primal_2",

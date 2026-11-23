@@ -160,7 +160,7 @@ every other target needs its own proof.
 | Slice | Deliverable | Start | Acceptance (all fail closed outside the envelope) |
 |---|---|---|---|
 | **S0** (landed, §4a) | Oracle and fixture. Freeze a tiny dense config (2 layers, d=64, GQA 4/2 heads, vocab 256, page 16) and a seeded weight set; declare `moe_transformer_runtime` greedy decode the #31(a) oracle; write the Graph-level `decode_step` contract and envelope. | host-free | Oracle reproduces cached ≡ recompute on the fixture; contract doc names every semantic attribute; negative fixtures for missing dtype/policy/EOS. |
-| **S1** | Three missing ops on sm_120 through Graph→Schedule→Tile→Target: row **argmax** (first-occurrence tie-break, i32 index), **embedding gather**, **kv_cache.append** into paged storage (in-place, DPS). | device (sm_120) | Bitwise equality with the oracle per op; append+read round-trip across a page boundary; lit fixtures for each lowering; execution-matrix rows. |
+| **S1** (S1a landed, §4b) | Three missing ops on sm_120 through Graph→Schedule→Tile→Target: row **argmax** (first-occurrence tie-break, i32 index), **embedding gather**, **kv_cache.append** into paged storage (in-place, DPS). | device (sm_120) | Bitwise equality with the oracle per op; append+read round-trip across a page boundary; lit fixtures for each lowering; execution-matrix rows. |
 | **S2** | **One decoder layer** at M=1 as a native tensor program: RMSNorm, QKV matmul, RoPE, append, paged attention read, O-proj, residual, MLP — one Graph function, one retained frame. | device (sm_120) | Per-layer output and updated KV pages match the oracle (f32 bitwise or declared f16/bf16 tolerance with fp32 accumulation); zero host contact inside the layer; replay byte-identity of the package. |
 | **S3** | **Whole decode step**: L layers + final norm + LM head + argmax; `DecodeState` resident across calls; host loop calls the step program. | device (sm_120) | Token sequence identical to the oracle for 64 steps; per-step logits parity (not only argmax, so ties cannot hide errors); host contact per step = one submit + completion (+ optional token readback), counted by the frame. |
 | **S4** | **Device-resident loop**: `generate` as a compiled bounded `while` over `decode_step` with EOS early exit. Widen the control-flow lane from rank-1 f32 state to structured state; an explicit, IR-visible graph-capture ABI is an acceptable physical route if it is declared, not hidden. | device (sm_120) | One program invocation produces N tokens identical to S3; no host round-trip between steps; EOS stops the loop on device. |
@@ -208,6 +208,41 @@ every other target needs its own proof.
   returns `x·W_kr` unrotated. MLA also has no RoPE-base parameter. Cached ≡
   recompute cannot see this, because both sides are equally position-blind on
   keys. It needs its own fix before any MLA slice uses this oracle.
+
+### 4b. S1a — in-place paged KV write on sm_120 (2026-11-22)
+
+S1 is split into sub-slices because §2a showed the append was the hard part.
+S1a lands the physical write; S1b (argmax), S1c (embedding gather) and S1d
+(admitting a resource-scoped memory effect into the native tensor program)
+follow.
+
+- **Op design.** `tessera.paged_kv_write(pages, page_table, values, position)
+  -> pages` is a raw-tensor op, the write-side twin of `tessera.paged_kv_read`.
+  - The result type must equal the pages type. Native lowering binds it to the
+    input pages buffer, so the write is destination-passing and copies no page.
+  - `position` is an `i32[1]` tensor read on the device, not a static
+    attribute, so a decode loop can advance it without a host round trip.
+  - The handle-level `tessera.kv_cache.append` is unchanged.
+- **Route.** `pagedKVWriteContract` (in `NativePagedKV.h`) hashes the contract.
+  The route then runs Graph → `schedule.paged_kv_write` → `tile.paged_kv_write_kernel` → `materializeSm120PagedKVWriteKernel`.
+  The Python side (`scheduled_paged_kv.lower_scheduled_paged_kv_write`,
+  `nvidia_native.package_paged_kv_write`) only binds and replays; every launch
+  field is re-read from the replayed Tile contract. Only sm_120 is admitted;
+  any other target refuses at Schedule by name.
+- **Fail closed on device data.** The kernel checks the signed position, the
+  logical capacity and each physical page index. A violation skips that
+  element and sets an `i32` status word. The launcher then returns
+  `paged KV write refused`, does not copy the pages back, and leaves the
+  caller's cache untouched.
+- **Evidence** (The-Super-Bear, RTX 5070, NDEBUG LLVM 23.1.1, worktree at the branch head):
+  - Lit: three `tests/tessera-ir/ar_decode` fixtures (schedule/tile, five verifier refusals, ROCm refusal) and `sm120_paged_kv_write_kernel.mlir`.
+  - `tests/unit/test_paged_kv_write_contract.py`: 9 passed (replay, tamper and relabel refusal, envelope refusals).
+  - `tests/device/nvidia/test_paged_kv_write.py`: 7 passed.
+    - 24 token-by-token writes through a permuted page table, bitwise against `paged_kv_pages` of the S0 oracle.
+    - One 24-token prefill write across a page boundary.
+    - An in-place write touches only its rows.
+    - Five refused writes (negative position, past capacity, physical page out of range, negative page, two written logical pages aliasing one physical page) each leave the pages bitwise unchanged with status 1; an alias outside the written range is not refused (review on #1073).
+- **Host-copy ABI, not yet resident.** This launcher still copies pages host↔device per call, like the read. Resident pages, a device-side position across calls, and composition with the paged read inside one program are S1d/S2 work.
 
 Performance is out of scope until S4 passes. Timing rows follow the
 device-clock admission rules and must carry their route (Decision #12); no

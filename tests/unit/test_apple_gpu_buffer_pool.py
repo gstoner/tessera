@@ -107,6 +107,11 @@ def test_no_raw_newbuffer_in_dispatchers(runtime_src: str) -> None:
         # needed, no buffer-pool aliasing risk). Direct allocation
         # is correct here.
         _fn_range(r"tessera_apple_gpu_mlpkg_prepare_tensors\s*\("),
+        # APPLE-NTBI-2 frame owner: program-owned intermediates are
+        # MTLStorageModePrivate (device-only) buffers, which the shared-storage
+        # host pool cannot provide; the frame's command buffer retains them.
+        # Its inputs and output still come from metal_buffer_acquire*.
+        _fn_range(r"tessera_apple_gpu_tensor_frame_execute\s*\("),
     ]
     offending = [
         m for m in raw

@@ -16497,7 +16497,71 @@ A full Mac `tests/unit` sweep had 758 failures and errors. Most were tests of NV
 - **Gap:** there is no general Graph → Schedule → Tile → Apple Target IR producer-DAG owner with owned intermediates, original-source replay, a shape plan and a Metal frame owner. `native_tensor_program.py` hard-codes sm_120 and PTX.
 - **What already exists:** Apple has only fixed-pattern packages (a private-heap composite package, MPSGraph `matmul_softmax`/`rmsnorm_matmul`, and an MSL arena with a host sizer).
 - **To do:** extend those three into a general owner.
-- **Tests that name this item:** the `test_native_tensor_*.py` and `test_native_semantic_dag_ownership.py` families.
+- **Tests that name this item:** the `test_native_tensor_*.py` and `test_native_semantic_dag_ownership.py` families. They are sm_120 compiler-route tests (`--tessera-lower-to-nvidia-sm120`); an Apple owner needs its own.
+
+#### APPLE-NTBI-2 design (2026-11-22, code read; matmul DAGs first by owner decision)
+
+What the sm_120 owner is, by stage, and what each stage needs on Apple:
+
+| Stage | sm_120 today | Apple |
+|---|---|---|
+| Graph → Schedule admission (`NativeTensorProgram.h`, `outline`) | Gated to `tessera.target = "nvidia_sm120"`. The DAG checks (one function, matmul product, semantic producers, static or bounded rows) are target-neutral; member geometry comes from `selectMatmulKernel` (16×8 typed / 32×32 macro MMA) and `semanticGeometry` (128-thread blocks), checked against CUDA launch limits. | Admit `apple_gpu`/`apple7` under an explicit request until every later stage exists (existing Apple lanes, such as fused matmul+relu, must not be rerouted to a half-built owner). Geometry comes from the Apple scheduled contracts: the `simdgroup_matrix` f16→f32 tile (APPLE-TILE-1) and the f32 batch-1 BMM for matmul members, and the Apple row kernels for producers. |
+| Schedule → Tile (`PMPasses.cpp`, `tessera-schedule-to-tile`) | Reruns the ordinary scheduled pipeline per member, then requires exactly one `nvvm.kernel` LLVM function carrying `tessera.native.program_geometry`/`_scalars`, rewrites each `tile.program_invoke` to it, and exports the frame (`exportFrame`). | A member ends at the launch-level Tile carrier the Apple scheduled packagers already consume (`apple_native.package_scheduled_matmul`, `package_softmax`, …); the invoke binds that carrier. `exportFrame` is structurally target-neutral (buffers with roles input/private/output, stages with member/entry/inputs/output/scalars/geometry) and needs only its target fields parameterized. |
+| Target / member images | `--tessera-lower-to-nvidia-sm120` per member → PTX images. | Each member packages to a declared `tessera_apple.gpu.kernel_call` over the pinned runtime dylib (the Tier-3 delegate form the scheduled packages use today). Compiler-emitted MSL members (`AppleArenaMSL.h` generalized past one kernel/one arena) are a later step. |
+| Frame owner | `PreparedNativeTensorFrame` (CUDA). | New: a Metal owner that allocates the `private` buffers and encodes every stage into one command buffer. Most runtime kernels commit their own command buffer today, so the members need encode-only entry points; `apple_gpu_ops.run_trace` (one command buffer per encode segment) is prior art. |
+| Python binding | `native_tensor_program.py` (source replay, member/image re-derivation, `runtime_artifact`). | The same contract with an Apple branch: replay the original Graph, re-derive every member and package, refuse any drift. |
+
+Slices, in order: (1) admission + frame export for `apple_gpu` under the request, with Schedule → Tile refusing an Apple member by a stable diagnostic until (2) lands; (2) Apple member carriers and packages for `relu`/`add`/`rmsnorm` → `matmul` (f16 storage, f32 accumulate); (3) the Metal frame owner and encode-only member entry points; (4) the Python binding and a Mac device proof that one command buffer ran the whole frame and matches the reference.
+
+**Status (2026-11-23, sync `APPLE-NTBI-2-members-2026-11-23`).**
+- **Slice 1 landed** (`7cd912906`): admission + frame export under `tessera.native.apple_tensor_program_request`. The first profile is `softmax` → `matmul` (f16 storage, f32 accumulate), static shapes. `relu`/`add` have no Apple scheduled kernel and the norms no Apple scheduled carrier, so they wait for their own packages.
+- **Slice 2 landed** (`python/tessera/compiler/apple_tensor_program.py`):
+  - Every frame stage is bound to the traced Graph op it came from: buffer ids, carrier and result type are all checked.
+  - Each op is lowered on its own and packaged by the existing Apple scheduled packager, giving `apple_softmax_native_library` and `apple_gpu_simdgroup_gemm_f16`.
+  - The package's Tile carrier must equal the member the program projects (`tensor-member=<i>`), content-addressed schedule digest included.
+  - `validate()` replays the source and re-derives every member and package.
+- **Slice 1 fix carried here:** under the request, a DAG the owner cannot form now refuses with `APPLE_TENSOR_PROGRAM_UNSUPPORTED` instead of declining silently. Affected: a lone product, a product that is not last, and a product with no program producer. The code is now registered in `diagnostic_codes.py`; slice 1 had left it unregistered, failing `test_every_cpp_code_is_registered`.
+- **Mac proof** (M1 Max, Metal, unsandboxed): `tests/unit/test_apple_native_tensor_program.py` runs the member packages one after another. The receipt is labelled `frame_owned = False`: one runtime launch per member, with the private intermediate round-tripping through host memory. The output matches a numpy softmax → matmul reference within 2e-3 absolute.
+  - This is **not** the frame owner and not one command buffer; that is slice 3.
+- **Sibling outcome:**
+  - NVIDIA sm_120: not applicable. The shared `outline` change refuses only for an Apple program; `decline` returns success for every other target, so sm_120 admission is unchanged.
+  - ROCm and x86: not applicable (no tensor-program owner).
+- **Slice 3 landed (frame owner), sync `APPLE-NTBI-2-frame-2026-11-23`.**
+  - `tessera_apple_gpu_tensor_frame_execute` in `apple_gpu_runtime.mm` executes the exported frame in **one command buffer with one serial compute encoder**.
+  - The members are encoded by encode-only entry points factored out of the existing standalone ABIs, so one kernel has two submission owners: `encode_softmax_f16` from `tessera_apple_gpu_softmax_f16_status`, and `encode_tile_simdgroup_gemm` from `tessera_apple_gpu_tile_simdgroup_gemm_f16`.
+  - Program-owned intermediates are `MTLStorageModePrivate` (device-only). Inputs are copied in once and the output is copied out once.
+  - The runtime re-checks the frame contract (roles, byte sizes against each stage's extents, write-once / read-after-write) and refuses with a negative code. It never runs a reference path.
+  - Python: `apple_tensor_program.execute_frame`. It refuses unless every member was packaged against the runtime image that will run it (payload digest). The GEMM's MSL comes from the same materialization the standalone package launch uses.
+  - **Mac proof** (M1 Max, Metal, unsandboxed), `test_apple_native_tensor_program.py` (14 pass):
+    - The frame output equals the per-member launches **bit for bit** at 64×32×48 and ragged 100×37×53.
+    - The receipt reports 1 command buffer, 2 dispatches, 1 private device buffer and a positive GPU time.
+    - The receipt is owner-reported: the owner creates exactly one command buffer by construction. No independent per-process command-buffer counter exists.
+  - The GPU time is one command buffer's clock, not a performance claim.
+  - The sealed Apple GPU E2E packet is re-recorded from this runtime source (`156f42ed6`, tested commit `681ad9ca2`). Every row has GPU placement proven, and the routes are unchanged.
+  - Re-sealing first needed a recorder fix (`681ad9ca2`). The recorder built the matmul fixture as a rank-3 `tessera.matmul`, which the Graph verifier now rejects, and passed it to `package_native`, which no longer owns plain matmul. So **no** Apple GPU runtime edit on `main` could have been re-sealed. The plan is now a rank-2 scheduled matmul with the same `apple_gpu_bmm_f32_batch1` route.
+  - Slice 3 left the public `@jit` binding and `RuntimeArtifact` restoration to slice 4. Both landed below.
+- **Slice 4 landed (public `@jit` + `RuntimeArtifact`), sync `APPLE-NTBI-2-jit-2026-11-23`.**
+  - `@jit(target="apple_gpu")` now tries the tensor program route (`JitFn._try_apple_tensor_program_call`) after the sm_120 one. A traced f16 `softmax` → `matmul` body runs through the frame owner in one command buffer. Warm calls reuse the compiled program per input signature (shape, dtype), without tracing or compiling again.
+  - **This reroutes a live lane, and the old one was wrong.** Before, this body ran on `apple_gpu_mps` and returned **fp16**, silently dropping the requested `output_dtype="fp32"`. The tensor program returns fp32. The MPS lane's dtype drop is not fixed for bodies the program declines.
+  - **Declines before admission; raises after.** The route steps aside, leaving the existing Apple lanes eligible, when:
+    - the compiler or runtime is missing;
+    - any input is not 2-D f16;
+    - the tracer cannot represent the body;
+    - the traced body is not a softmax/matmul chain ending in its product;
+    - the compiler refuses with `APPLE_TENSOR_PROGRAM_UNSUPPORTED`.
+    Any failure once the compiler has formed the program raises. Declines are cached per signature.
+  - `JitFn.runtime_artifact()` exports `compiler_path = "canonical_apple_tensor_program"`, a new execution-matrix row with executor `apple_tensor_program`. The artifact carries:
+    - the program's Graph as a narrow data record (ops, operands, types, scalar keywords, source locations);
+    - the source, Schedule and Tile text;
+    - a digest of every member package (ABI, route, Target IR sha256, image digest).
+    It carries **no executable payload**. Restoration (`restore_runtime_artifact`) requires the same compiler identity, rebuilds the Graph, requires it to print the recorded source byte for byte, recompiles, and refuses unless Schedule, Tile, every member record and the Target IR all match. Export refuses a Graph whose record would not rebuild its source.
+  - **Mac proof** (M1 Max, Metal, unsandboxed), `test_apple_native_tensor_program.py` (24 pass):
+    - public `@jit` at ragged 100×37×53: 1 command buffer, 2 dispatches, 1 private buffer; bit-identical to `execute_frame`; within 2e-3 of the numpy reference;
+    - a warm call that does not recompile;
+    - `runtime.launch(artifact)` replays bit for bit;
+    - four tampered artifacts refused (Tile, member digest, compiler identity, Graph record);
+    - fp32 inputs and a `relu` producer decline to the existing lanes.
+  - **Not yet:** members beyond softmax / f16 simdgroup GEMM (`relu`/`add` need an Apple scheduled kernel, the norms a scheduled carrier), dynamic shapes, AD through the program, and a resident (device-buffer) input ABI.
 
 ### APPLE-NTBI-3 — attention JVP (forward mode)
 - **Gap:** there is no Apple tangent consumer or Metal result lease; the attention tangent interface is gated to sm_120.

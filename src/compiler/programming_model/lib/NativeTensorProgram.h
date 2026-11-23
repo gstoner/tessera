@@ -82,18 +82,29 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
   if (module->hasAttr("tessera.native.tensor_program") ||
       module->hasAttr("tessera.native.tensor_program_member"))
     return success();
-  auto target = module->getAttrOfType<StringAttr>("tessera.target");
-  auto arch = module->getAttrOfType<StringAttr>("tessera.arch");
-  if (!target || target.getValue() != "nvidia_sm120" || !arch ||
-      arch.getValue() != "sm_120") return success();
+  auto programKind = tessera::native_tensor_program::programTarget(module);
+  // APPLE-NTBI-2: an apple7 program is admitted only on an explicit request
+  // until its member packages and Metal frame owner exist end to end; without
+  // one, Apple programs keep their existing (fused or per-op) lanes.
+  bool apple = programKind == tessera::native_tensor_program::ProgramTarget::Apple7;
+  if (programKind == tessera::native_tensor_program::ProgramTarget::None ||
+      (apple && !module->hasAttr("tessera.native.apple_tensor_program_request")))
+    return success();
+  // A requested Apple program the owner cannot form refuses; it never falls
+  // back silently to a lane the request asked not to use (Decision #21).
+  auto decline = [&](const char *why) -> LogicalResult {
+    if (!apple) return success();
+    return module.emitError("APPLE_TENSOR_PROGRAM_UNSUPPORTED: ") << why;
+  };
   SmallVector<func::FuncOp> functions(module.getOps<func::FuncOp>());
   if (functions.size() != 1 || !functions[0].getBody().hasOneBlock())
-    return success();
+    return decline("the Apple native tensor program owns one single-block function");
   auto root = functions[0];
   SmallVector<Operation *> operations;
   for (auto &op : root.getBody().front().without_terminator())
     operations.push_back(&op);
-  if (operations.size() < 2) return success();
+  if (operations.size() < 2)
+    return decline("the Apple native tensor program needs a producer and a matrix product");
   auto product = operations.back();
   // The existing matmul epilogue lowering owns matrix-result consumers.
   // Do not replace a fused native image with separate program launches.
@@ -101,13 +112,35 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
     return op->getName().getStringRef() == "tessera.matmul";
   });
   if (hasMatmul && product->getName().getStringRef() != "tessera.matmul")
-    return success();
+    return decline("the Apple native tensor program must end in its matrix product");
   // SM120-W11-FP8-RHS-20261026: matmul(A, dequantize_scaled(Bq, s)) is one
   // scheduled matmul whose B gather decodes the codes; it is not a DAG.
   if (operations.size() == 2 && product->getNumOperands() == 2)
     if (Operation *rhs = product->getOperand(1).getDefiningOp())
       if (rhs->getName().getStringRef() == "tessera.dequantize_scaled")
-        return success();
+        return decline("an Apple member must be tessera.matmul or tessera.softmax");
+  // The first Apple profile (APPLE-NTBI-2 slice 1): a matrix product whose
+  // producers are Apple-scheduled semantic kernels, static shapes only. relu
+  // and add have no Apple scheduled kernel yet; rmsnorm/layer_norm no Apple
+  // scheduled carrier.
+  if (apple) {
+    auto reject = [&](const char *why) {
+      return root.emitError("APPLE_TENSOR_PROGRAM_UNSUPPORTED: ") << why;
+    };
+    if (!hasMatmul)
+      return reject("the Apple native tensor program owns matrix-product DAGs only");
+    if (module->hasAttr("tessera.native.tensor_program_shape_bounds_request") ||
+        module->hasAttr("tessera.native.tensor_program_row_bound_request"))
+      return reject("the Apple native tensor program supports static shapes only");
+    for (Operation *op : operations) {
+      auto name = op->getName().getStringRef();
+      if (name != "tessera.matmul" && name != "tessera.softmax")
+        return reject("an Apple member must be tessera.matmul or tessera.softmax");
+      for (Type type : llvm::concat<Type>(op->getOperandTypes(), op->getResultTypes()))
+        if (!cast<RankedTensorType>(type).hasStaticShape())
+          return reject("the Apple native tensor program supports static shapes only");
+    }
+  }
   // Claim only the semantic families this native owner can lower. Other
   // source-program families retain their registered consumers.
   if (!hasMatmul && !llvm::all_of(operations, [](Operation *op) {
@@ -118,7 +151,7 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
       })) return success();
   if (!llvm::any_of(product->getOperands(), [](Value input) {
         return input.getDefiningOp() != nullptr;
-      })) return success();
+      })) return decline("the Apple matrix product must consume a program producer");
   auto reject = [&]() {
     return root.emitError("Graph->Schedule native tensor program requires a compact typed "
                           "producer DAG with verified static or bounded leading rows");
@@ -415,11 +448,27 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
     Operation *cloned = leaf.clone(*op);
     cloned->setOperands(block->getArguments());
     bool matrix = op->getName().getStringRef() == "tessera.matmul";
-    if (matrix)
+    // The row-major RHS view is the sm_120 typed matmul contract; the Apple
+    // scheduled matmul states its own layouts (a row-major, b col-major view).
+    if (matrix && !apple)
       cloned->setAttr("rhs_storage_order", builder.getStringAttr("row_major"));
     func::ReturnOp::create(leaf, op->getLoc(), cloned->getResults());
     SmallVector<int64_t> geometry;
-    if (matrix) {
+    if (apple) {
+      // An Apple member's dispatch belongs to the runtime route its package
+      // binds (a runtime geometry policy, not a fixed grid), so admission
+      // proves only that the Apple schedule for the member exists.
+      if (matrix) {
+        auto schedule = getMatmulSchedule(cloned);
+        if (failed(schedule) || schedule->storage != "f16" || schedule->accum != "f32" ||
+            schedule->output != "f32")
+          return root.emitError("APPLE_TENSOR_PROGRAM_UNSUPPORTED: an Apple matrix member "
+                                "requires the apple7 f16 storage / f32 accumulate product");
+      } else if (failed(getSemanticKernelSchedule(cloned))) {
+        return root.emitError("APPLE_TENSOR_PROGRAM_UNSUPPORTED: no apple7 scheduled kernel "
+                              "for this producer");
+      }
+    } else if (matrix) {
       auto schedule = getMatmulSchedule(cloned);
       if (failed(schedule)) return reject();
       geometry = selectMatmulKernel(*schedule).geometry;
@@ -428,7 +477,7 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
       if (failed(schedule)) return reject();
       geometry = semanticGeometry(*schedule);
     }
-    if (!tessera::native_tensor_program::isLaunchGeometry(geometry))
+    if (!apple && !tessera::native_tensor_program::isLaunchGeometry(geometry))
       return root.emitError("Graph->Schedule launch geometry exceeds the native frame CUDA limits");
     members.push_back(std::move(owner));
   }
@@ -572,6 +621,8 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
 }
 // Read-only transport projected from actual typed memory SSA.
 inline mlir::LogicalResult exportFrame(mlir::ModuleOp module) {
+  const bool apple = tessera::native_tensor_program::programTarget(module) ==
+      tessera::native_tensor_program::ProgramTarget::Apple7;
   using namespace mlir;
   auto schema = module->getAttrOfType<IntegerAttr>("tessera.native.tensor_program");
   if (!schema || !schema.getType().isInteger(64) ||
@@ -641,16 +692,25 @@ inline mlir::LogicalResult exportFrame(mlir::ModuleOp module) {
     if (auto *invoke = &operation; native_tensor_program::isInvocation(invoke)) {
       llvm::json::Array inputs, scalars, geometry;
       for (Value buffer : invoke->getOperands().drop_back()) inputs.push_back(ids.lookup(buffer));
-      for (int64_t value : invoke->getAttrOfType<DenseI64ArrayAttr>("scalars").asArrayRef())
-        scalars.push_back(value);
-      for (int64_t value : invoke->getAttrOfType<DenseI64ArrayAttr>("geometry").asArrayRef())
-        geometry.push_back(value);
       auto symbol = invoke->getAttrOfType<SymbolRefAttr>("callee");
       llvm::json::Object stage{
         {"member",symbol.getRootReference().getValue().str()},
         {"entry",symbol.getNestedReferences().back().getValue().str()},
-        {"inputs",std::move(inputs)},{"output",ids.lookup(invoke->getOperands().back())},
-        {"scalars",std::move(scalars)},{"geometry",std::move(geometry)}};
+        {"inputs",std::move(inputs)},{"output",ids.lookup(invoke->getOperands().back())}};
+      if (apple) {
+        // The member's package owns its dispatch (a runtime geometry policy)
+        // and its launch scalars (the carrier's extents): name the carrier.
+        auto carrier = invoke->getAttrOfType<StringAttr>("carrier");
+        if (!carrier) return invoke->emitOpError("Apple program stage lost its Tile carrier");
+        stage["carrier"] = carrier.getValue().str();
+      } else {
+        for (int64_t value : invoke->getAttrOfType<DenseI64ArrayAttr>("scalars").asArrayRef())
+          scalars.push_back(value);
+        for (int64_t value : invoke->getAttrOfType<DenseI64ArrayAttr>("geometry").asArrayRef())
+          geometry.push_back(value);
+        stage["scalars"] = std::move(scalars);
+        stage["geometry"] = std::move(geometry);
+      }
       if (bounded) {
         for (StringRef key : {"scalar_row_multipliers", "grid_row_multipliers", "grid_row_divisors"}) {
           llvm::json::Array values;
@@ -664,7 +724,8 @@ inline mlir::LogicalResult exportFrame(mlir::ModuleOp module) {
   }
   llvm::json::Object frame{
     {"schema", shaped ? "tessera.native.tensor_program_frame.v3" : bounded ? "tessera.native.tensor_program_frame.v2" : "tessera.native.tensor_program_frame.v1"},
-    {"target","nvidia_sm120"},{"architecture","sm_120"},
+    {"target", apple ? "apple_gpu" : "nvidia_sm120"},
+    {"architecture", apple ? "apple7" : "sm_120"},
     {"function",host.getName().str()},{"buffers",std::move(buffers)},
     {"roots",std::move(roots)},{"stages",std::move(stages)},
     {"output",ids.lookup(ret.getOperand(0))}};

@@ -2,7 +2,7 @@
   "device": {
     "cpu_brand": "Apple M1 Max",
     "model": "MacBookPro18,2",
-    "os": "27.0"
+    "os": "27.2.1"
   },
   "lane": "apple_gpu",
   "metal": {
@@ -48,7 +48,7 @@
       },
       "source_fingerprint": {
         "state": "measured",
-        "value": "sha256:3c07a7fb23352e66b5fd9186820725f82df79df5af4811ac61643979847df67e"
+        "value": "sha256:d05c440543c1f594320c93b2a7650117d97a272130eceeb984c80938e5d895ba"
       },
       "spill_count": {
         "state": "no_public_api",
@@ -66,17 +66,15 @@
       "family": "matmul",
       "fixture_operand_shapes": [
         [
-          1,
           2,
           3
         ],
         [
-          1,
           3,
           2
         ]
       ],
-      "image_digest": "c15d527cc0e9a88b5005bbf1e1fe2e54185c99e637ad47051bff706140d1349d",
+      "image_digest": "d3347a191fefd998e211d66bf9f5748ea794ca294c9d454aaaca5e4add5afe4d",
       "placement": {
         "fixture": {
           "gpu_placement_proven": true,
@@ -89,10 +87,9 @@
           "status_symbol": "tessera_apple_gpu_bmm_f32_status"
         }
       },
-      "resource_fingerprint": "198c974b221e951dede156285bf7b18b324039d12c236e72c21938a73f3c844c",
+      "resource_fingerprint": "610563d996cf7f90d46b9668540bb598df50c80dba3f85a3a15ccd5021bee5c2",
       "route": "apple_gpu_bmm_f32_batch1",
       "timing_shape": [
-        1,
         256,
         256,
         256
@@ -107,7 +104,7 @@
           2
         ]
       ],
-      "image_digest": "24e3ba968e8a3b90577fe2cce261f10f892804b966af8c8a5d686b479749edac",
+      "image_digest": "d507881ca3ab8522a2fd7a52066e8e2cdf5561c4d62dfde73d5e680361c4e04e",
       "placement": {
         "fixture": {
           "execution_width": 32,
@@ -136,7 +133,7 @@
           ]
         }
       },
-      "resource_fingerprint": "e405a953b7a7538f26706089250437edb228902f7c0a30622090c8d42d44c379",
+      "resource_fingerprint": "ead99c6ddce68e846eb193f7617c1144d68c6b85afff6e66b1b88075f236972b",
       "route": "apple_gpu_msl_softmax_f32",
       "timing_shape": [
         64,

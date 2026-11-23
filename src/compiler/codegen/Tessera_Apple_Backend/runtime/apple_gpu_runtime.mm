@@ -8190,8 +8190,9 @@ extern "C" int32_t tessera_apple_gpu_softmax_f32_status(
 
 namespace {
 
-bool dispatch_softmax_msl_f16(MetalDeviceContext &ctx, const uint16_t* X,
-                              uint16_t* Out, int32_t M, int32_t K) {
+// The fp16 softmax pipeline, shared by the standalone status ABI and the
+// APPLE-NTBI-2 tensor frame owner (one kernel, two submission owners).
+id<MTLComputePipelineState> softmax_f16_pipeline(MetalDeviceContext &ctx) {
   static NSString *const kSoftmaxSourceF16 = @R"MSL(
 #include <metal_stdlib>
 using namespace metal;
@@ -8225,10 +8226,29 @@ kernel void softmax_f16(
     }
 }
 )MSL";
+  return compile_msl_kernel(ctx, kSoftmaxSourceF16, @"softmax_f16");
+}
 
+// Encode-only: one row per thread over X[M,K] -> Out[M,K]; no commit.
+void encode_softmax_f16(id<MTLComputeCommandEncoder> enc,
+                        id<MTLComputePipelineState> pso, id<MTLBuffer> bufX,
+                        id<MTLBuffer> bufO, int32_t M, int32_t K) {
+  [enc setComputePipelineState:pso];
+  [enc setBuffer:bufX offset:0 atIndex:0];
+  [enc setBuffer:bufO offset:0 atIndex:1];
+  [enc setBytes:&M length:sizeof(int32_t) atIndex:2];
+  [enc setBytes:&K length:sizeof(int32_t) atIndex:3];
+  MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(M), 1, 1);
+  NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(M),
+                                         pso.maxTotalThreadsPerThreadgroup);
+  if (tg_x == 0) tg_x = 1;
+  [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+}
+
+bool dispatch_softmax_msl_f16(MetalDeviceContext &ctx, const uint16_t* X,
+                              uint16_t* Out, int32_t M, int32_t K) {
   @autoreleasepool {
-    id<MTLComputePipelineState> pso =
-        compile_msl_kernel(ctx, kSoftmaxSourceF16, @"softmax_f16");
+    id<MTLComputePipelineState> pso = softmax_f16_pipeline(ctx);
     if (!pso) return false;
 
     NSUInteger byteCount = sizeof(uint16_t) * static_cast<NSUInteger>(M) *
@@ -8239,18 +8259,7 @@ kernel void softmax_f16(
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
-    [enc setComputePipelineState:pso];
-    [enc setBuffer:bufX offset:0 atIndex:0];
-    [enc setBuffer:bufO offset:0 atIndex:1];
-    [enc setBytes:&M length:sizeof(int32_t) atIndex:2];
-    [enc setBytes:&K length:sizeof(int32_t) atIndex:3];
-
-    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(M), 1, 1);
-    NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(M),
-                                           pso.maxTotalThreadsPerThreadgroup);
-    if (tg_x == 0) tg_x = 1;
-    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
-    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    encode_softmax_f16(enc, pso, bufX, bufO, M, K);
     [enc endEncoding];
     // Migration batch 3 (2026-06-01) — softmax MSL (f32/f16).
     if (!commit_and_wait_with_timeout(ctx, cb, 30000,
@@ -10746,6 +10755,29 @@ extern "C" int32_t tessera_apple_gpu_metallib_matmul_epilogue_coopmat(
   }
 }
 
+namespace {
+// Encode-only TILE-1 dispatch (buffers 0=A, 1=B, 2=O, 3..5=M,N,K); no commit.
+// Shared by the standalone ABI below and the APPLE-NTBI-2 tensor frame owner.
+void encode_tile_simdgroup_gemm(id<MTLComputeCommandEncoder> enc,
+                                id<MTLComputePipelineState> pso,
+                                id<MTLBuffer> bufA, id<MTLBuffer> bufB,
+                                id<MTLBuffer> bufO, int32_t M, int32_t N,
+                                int32_t K, int32_t bm, int32_t bn,
+                                int32_t threads_per_threadgroup) {
+  [enc setComputePipelineState:pso];
+  [enc setBuffer:bufA offset:0 atIndex:0];
+  [enc setBuffer:bufB offset:0 atIndex:1];
+  [enc setBuffer:bufO offset:0 atIndex:2];
+  [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
+  [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
+  [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
+  MTLSize grid = MTLSizeMake(((NSUInteger)N + (NSUInteger)bn - 1) / (NSUInteger)bn,
+                             ((NSUInteger)M + (NSUInteger)bm - 1) / (NSUInteger)bm, 1);
+  [enc dispatchThreadgroups:grid
+      threadsPerThreadgroup:MTLSizeMake((NSUInteger)threads_per_threadgroup, 1, 1)];
+}
+} // namespace
+
 // TILE-1 — source-backed Apple7+ simdgroup-matrix GEMM. Unlike the older
 // cooperative-matmul ABI above, this contract is deliberately one simdgroup
 // (32 threads) per emitted steel fragment tile. The caller supplies MSL that
@@ -10776,18 +10808,9 @@ extern "C" int32_t tessera_apple_gpu_tile_simdgroup_gemm_f16(
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     id<MTLCounterSampleBuffer> samples = ts_make_tile_timestamp_samples(ctx);
-    [enc setComputePipelineState:pso];
-    [enc setBuffer:bufA offset:0 atIndex:0];
-    [enc setBuffer:bufB offset:0 atIndex:1];
-    [enc setBuffer:bufO offset:0 atIndex:2];
-    [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
-    [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
-    [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
     if (samples) [enc sampleCountersInBuffer:samples atSampleIndex:0 withBarrier:YES];
-    MTLSize grid = MTLSizeMake(((NSUInteger)N + (NSUInteger)bn - 1) / (NSUInteger)bn,
-                               ((NSUInteger)M + (NSUInteger)bm - 1) / (NSUInteger)bm, 1);
-    [enc dispatchThreadgroups:grid
-        threadsPerThreadgroup:MTLSizeMake((NSUInteger)threads_per_threadgroup, 1, 1)];
+    encode_tile_simdgroup_gemm(enc, pso, bufA, bufB, bufO, M, N, K, bm, bn,
+                               threads_per_threadgroup);
     if (samples) [enc sampleCountersInBuffer:samples atSampleIndex:1 withBarrier:YES];
     [enc endEncoding];
     if (!commit_and_wait_with_timeout(ctx, cb, 60000, "tile_simdgroup_gemm_f16"))
@@ -10808,6 +10831,155 @@ extern "C" int32_t tessera_apple_gpu_tile_simdgroup_gemm_bf16(
     int32_t bm, int32_t bn, int32_t threads_per_threadgroup) {
   return tessera_apple_gpu_tile_simdgroup_gemm_f16(
       msl_source, entry, A, B, O, M, N, K, bm, bn, threads_per_threadgroup);
+}
+
+//===---------------------------------------------------------------------===//
+// APPLE-NTBI-2 slice 3 — native tensor program frame owner.
+//
+// Executes a compiler-exported apple7 tensor frame in ONE command buffer with
+// ONE serial compute encoder: every stage is encoded by its member's
+// encode-only entry point and nothing is committed until the last stage.
+// Program-owned intermediates (role private) are MTLStorageModePrivate device
+// buffers, so they are never host-visible; inputs are copied in once and the
+// single output is copied out once after completion.
+//
+// Flat ABI (all int64):
+//   buffers[2*i]   = role (0 input, 1 private, 2 output)
+//   buffers[2*i+1] = bytes
+//   hosts[i]       = input source / output destination (NULL for private)
+//   stages[10*j]   = kind (1 softmax f16, 2 TILE-1 simdgroup GEMM f16->f32),
+//                    in0, in1 (-1 when unused), out, M, N, K, bm, bn, threads
+//   sources/entries[j] = MSL source + entry for kind 2 (NULL for kind 1)
+//   receipt[0..3]  = command buffers, dispatches, private buffers, GPU ns
+// Returns 1 on success, or a negative code: -1 frame contract, -2 no Metal
+// device, -3 pipeline, -4 allocation, -5 command buffer failed or timed out.
+// A failure never runs a reference path and never writes the output host.
+//===---------------------------------------------------------------------===//
+
+extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
+    const int64_t* buffers, const void* const* hosts, int32_t buffer_count,
+    const int64_t* stages, const char* const* sources,
+    const char* const* entries, int32_t stage_count, int64_t* receipt) {
+  constexpr int64_t kInput = 0, kPrivate = 1, kOutput = 2;
+  constexpr int64_t kSoftmax = 1, kGemm = 2;
+  if (!buffers || !hosts || !stages || !sources || !entries || !receipt ||
+      buffer_count < 2 || buffer_count > 128 || stage_count < 1 ||
+      stage_count > 64)
+    return -1;
+  for (int i = 0; i < 4; ++i) receipt[i] = 0;
+  // Contract: roles, sizes, hosts, single output, write-once / read-after-write.
+  std::vector<int8_t> written(static_cast<size_t>(buffer_count), 0);
+  int outputs = 0;
+  for (int32_t i = 0; i < buffer_count; ++i) {
+    const int64_t role = buffers[2 * i], bytes = buffers[2 * i + 1];
+    if ((role != kInput && role != kPrivate && role != kOutput) || bytes <= 0 ||
+        bytes > (int64_t(1) << 40))
+      return -1;
+    if ((role == kPrivate) != (hosts[i] == nullptr)) return -1;
+    if (role == kInput) written[i] = 1;
+    if (role == kOutput) ++outputs;
+  }
+  if (outputs != 1) return -1;
+  auto in_range = [&](int64_t id) { return id >= 0 && id < buffer_count; };
+  for (int32_t j = 0; j < stage_count; ++j) {
+    const int64_t *st = stages + 10 * j;
+    const int64_t kind = st[0], in0 = st[1], in1 = st[2], out = st[3];
+    const int64_t M = st[4], N = st[5], K = st[6];
+    if (M <= 0 || N <= 0 || K <= 0 || M > INT32_MAX || N > INT32_MAX ||
+        K > INT32_MAX || !in_range(in0) || !in_range(out) ||
+        buffers[2 * out] == kInput || written[out] || !written[in0])
+      return -1;
+    if (kind == kSoftmax) {
+      // X[M,K] -> Out[M,K], f16; N is unused and must be 1.
+      if (in1 != -1 || N != 1 || sources[j] || entries[j] ||
+          buffers[2 * in0 + 1] != 2 * M * K || buffers[2 * out + 1] != 2 * M * K)
+        return -1;
+    } else if (kind == kGemm) {
+      if (!in_range(in1) || !written[in1] || !sources[j] || !entries[j] ||
+          st[7] <= 0 || st[8] <= 0 || st[9] != 32 ||
+          buffers[2 * in0 + 1] != 2 * M * K || buffers[2 * in1 + 1] != 2 * K * N ||
+          buffers[2 * out + 1] != 4 * M * N)
+        return -1;
+    } else {
+      return -1;
+    }
+    written[out] = 1;
+  }
+  for (int32_t i = 0; i < buffer_count; ++i)
+    if (buffers[2 * i] == kOutput && !written[i]) return -1;
+
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return -2;
+  @autoreleasepool {
+    std::vector<id<MTLComputePipelineState>> psos(static_cast<size_t>(stage_count), nil);
+    for (int32_t j = 0; j < stage_count; ++j) {
+      if (stages[10 * j] == kSoftmax) {
+        psos[j] = softmax_f16_pipeline(ctx);
+      } else {
+        psos[j] = compile_msl_kernel(ctx, [NSString stringWithUTF8String:sources[j]],
+                                     [NSString stringWithUTF8String:entries[j]]);
+        if (psos[j] && psos[j].maxTotalThreadsPerThreadgroup < 32) psos[j] = nil;
+      }
+      if (!psos[j]) return -3;
+    }
+    NSMutableArray<id<MTLBuffer>> *metal = [NSMutableArray arrayWithCapacity:buffer_count];
+    // Inputs and the output come from the shared host pool (released, or
+    // quarantined after a timeout, by their guards). Private intermediates are
+    // device-only MTLStorageModePrivate buffers, which that pool does not hold;
+    // the command buffer retains them until it completes.
+    std::vector<MetalBufferGuard> pooled;
+    pooled.reserve(static_cast<size_t>(buffer_count));
+    int64_t private_count = 0;
+    for (int32_t i = 0; i < buffer_count; ++i) {
+      const int64_t role = buffers[2 * i];
+      const NSUInteger bytes = static_cast<NSUInteger>(buffers[2 * i + 1]);
+      id<MTLBuffer> buffer = nil;
+      if (role == kPrivate) {
+        buffer = [ctx.device newBufferWithLength:bytes
+                                         options:MTLResourceStorageModePrivate];
+        ++private_count;
+      } else {
+        pooled.emplace_back(ctx, role == kInput
+            ? metal_buffer_acquire_with_bytes(ctx, hosts[i], bytes)
+            : metal_buffer_acquire(ctx, bytes), bytes);
+        buffer = pooled.back().buf;
+      }
+      if (!buffer) return -4;
+      [metal addObject:buffer];
+    }
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    if (!cb) return -5;
+    // Serial dispatch: each stage observes every earlier stage's writes.
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    if (!enc) return -5;
+    for (int32_t j = 0; j < stage_count; ++j) {
+      const int64_t *st = stages + 10 * j;
+      const int32_t M = (int32_t)st[4], N = (int32_t)st[5], K = (int32_t)st[6];
+      if (st[0] == kSoftmax)
+        encode_softmax_f16(enc, psos[j], metal[st[1]], metal[st[3]], M, K);
+      else
+        encode_tile_simdgroup_gemm(enc, psos[j], metal[st[1]], metal[st[2]],
+                                   metal[st[3]], M, N, K, (int32_t)st[7],
+                                   (int32_t)st[8], (int32_t)st[9]);
+    }
+    [enc endEncoding];
+    // prefer_command_buffer: when dispatch telemetry is on, the bounded helper
+    // records this buffer's GPU interval (the documented completed-buffer mode).
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "tensor_frame_execute",
+                                      /*prefer_command_buffer=*/true))
+      return -5;
+    for (int32_t i = 0; i < buffer_count; ++i)
+      if (buffers[2 * i] == kOutput)
+        std::memcpy(const_cast<void *>(hosts[i]), [metal[i] contents],
+                    static_cast<size_t>(buffers[2 * i + 1]));
+    receipt[0] = 1;
+    receipt[1] = stage_count;
+    receipt[2] = private_count;
+    // Opt-in like every dispatch clock: -1 unless dispatch telemetry is enabled.
+    receipt[3] = g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)
+        ? g_last_dispatch_device_time_ns : -1;
+    return 1;
+  }
 }
 
 // COOPERATIVE-MATRIX matmul + fused row REDUCTION (Optimizing-Compiler Plan

@@ -309,8 +309,26 @@ def test_public_jit_runs_the_program_in_one_command_buffer(monkeypatch):
     assert np.asarray(launched["output"]).tobytes() == output.tobytes()
 
 
+_SIDE_EFFECTS: list = []
+
+
+def _logged_attention(s, v):
+    _SIDE_EFFECTS.append(s.shape)
+    return ts.ops.matmul(ts.ops.softmax(s, axis=-1), v, output_dtype="fp32")
+
+
+def _attention_and_probabilities(s, v):
+    probabilities = ts.ops.softmax(s, axis=-1)
+    return probabilities, ts.ops.matmul(probabilities, v, output_dtype="fp32")
+
+
 @pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("fn, arrays", [
+    # A host side effect the Graph cannot carry: declined before tracing, so
+    # warm calls keep running it.
+    (_logged_attention, (_half(64, 32), _half(32, 48))),
+    # Two results; the program has one: declined before admission.
+    (_attention_and_probabilities, (_half(64, 32), _half(32, 48))),
     # Inputs outside the profile's f16 storage: declined before tracing.
     (lambda s, v: ts.ops.matmul(ts.ops.softmax(s, axis=-1), v),
      (_half(64, 32).astype(np.float32), _half(32, 48).astype(np.float32))),
@@ -327,3 +345,16 @@ def test_public_jit_leaves_programs_outside_the_profile_to_other_routes(fn, arra
     assert program._apple_tensor_last_receipt is None
     assert program._apple_tensor_program_cache and set(program._apple_tensor_program_cache.values()) == {None}
     assert program.runtime_artifact().metadata.get("compiler_path") != "canonical_apple_tensor_program"
+
+
+@pytest.mark.hardware_apple_gpu
+def test_public_jit_declines_an_effectful_body_before_tracing(monkeypatch):
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    program = ts.jit(target="apple_gpu")(_logged_attention)
+    # The scan, not the trace, decides: tracing would run the side effect once
+    # and cache a program that never runs it again.
+    monkeypatch.setattr(type(program), "_traced_autodiff_module",
+                        lambda *_: pytest.fail("an effectful body was traced"))
+    assert program._compile_apple_tensor_program((_half(64, 32), _half(32, 48))) is None

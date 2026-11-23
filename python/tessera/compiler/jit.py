@@ -3928,6 +3928,12 @@ class JitFn:
 
         if any(value.dtype.name != "float16" or value.ndim != 2 for value in ordered):
             return None
+        # A cached program replays only the traced Graph. A host side effect
+        # (``log.append``, I/O) executes while tracing and is absent from the
+        # Graph, so warm calls would skip it. The call-site scan keeps any
+        # unresolved call at ``top``; only a pure body may be admitted.
+        if self.inferred_effect != Effect.pure:
+            return None
         tool = find_tessera_opt()
         if (tool is None or not apple_native.tools_available()
                 or not descriptor.apple_gpu_value_lowering_available(str(tool))):
@@ -3944,6 +3950,14 @@ class JitFn:
         body = module.functions[0].body
         if (len(body) < 2 or any(op.op_name not in atp._CARRIERS for op in body)
                 or body[-1].op_name != "tessera.matmul"):
+            return None
+        # The program has exactly one result: the final product. Any other
+        # return contract (a tuple, an intermediate) is refused by the
+        # compiler with a generic diagnostic, so decline it here, before
+        # admission, and leave it to the other Apple routes.
+        product = body[-1].result
+        if (product is None or [name.lstrip("%") for name in module.functions[0].return_values]
+                != [product.lstrip("%")]):
             return None
         try:
             program = atp.compile_apple_tensor_program(module)

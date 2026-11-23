@@ -3207,6 +3207,7 @@ def _submit_nvidia_sm120_native(
         SM120_PAGED_ATTN_F32_ABI,
         SM120_PAGED_KV_F32_ABI,
         SM120_PAGED_KV_WRITE_F32_ABI,
+        SM120_ARGREDUCE_F32_ABI,
         SM120_NVFP4_ABI,
         SM120_NVFP4_BATCH_ABI,
         SM120_REDUCE_F16_ABI,
@@ -3300,6 +3301,7 @@ def _submit_nvidia_sm120_native(
         SM120_MXFP4_ABI,
         SM120_PAGED_KV_F32_ABI,
         SM120_PAGED_KV_WRITE_F32_ABI,
+        SM120_ARGREDUCE_F32_ABI,
         SM120_PAGED_ATTN_F32_ABI,
         SM120_REDUCE_F16_ABI,
         SM120_REDUCE_BF16_ABI,
@@ -3834,6 +3836,19 @@ def _submit_nvidia_sm120_native(
         # Position and physical page bounds are data-dependent: the kernel checks
         # them on the device and reports a refusal through ``status``.
         output = pages
+    elif descriptor.abi_id == SM120_ARGREDUCE_F32_ABI:
+        # AR-DECODE-PROGRAM-1 S1b: x is the [Rows, Cols] row view of the
+        # source, indices one i32 per row; the logical shapes are guarded above.
+        dimensions = tuple(int(cast(int, scalars[name])) for name in ("Rows", "Cols"))
+        rows, columns = dimensions
+        x, indices = raw
+        if (rows <= 0 or columns <= 0 or rows * columns > 2**31 - 1
+                or int(x.size) != rows * columns or int(indices.size) != rows
+                or str(x.dtype) != "float32" or str(indices.dtype) != "int32"
+                or not x.flags.c_contiguous or not indices.flags.c_contiguous
+                or not indices.flags.writeable):
+            raise RuntimeError("SM120 argreduce buffers disagree with descriptor scalars")
+        output = indices
     elif descriptor.abi_id in SM120_ATTN_LSE_SCALED_KV_ABIS:
         # SM120-SAVED-LSE-SCALED-FP8-KV-20261025: Q, K/V codes, [bias], K/V
         # scales, O, LSE; scalars B..Dv, [bias extents], eight scale extents.
@@ -4198,6 +4213,7 @@ def _submit_nvidia_sm120_native(
         in {
             SM120_PAGED_KV_F32_ABI,
             SM120_PAGED_KV_WRITE_F32_ABI,
+            SM120_ARGREDUCE_F32_ABI,
             SM120_PAGED_ATTN_F32_ABI,
             SM120_DYNAMIC_SMEM_ABI,
             SM120_DYNAMIC_EXPR_SMEM_ABI,
@@ -6999,6 +7015,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_PAGED_ATTN_F32_ABI,
         SM120_PAGED_KV_F32_ABI,
         SM120_PAGED_KV_WRITE_F32_ABI,
+        SM120_ARGREDUCE_F32_ABI,
         SM120_NVFP4_ABI,
         SM120_NVFP4_BATCH_ABI,
         SM120_REDUCE_F16_ABI,
@@ -7081,6 +7098,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 SM120_MXFP4_ABI,
                 SM120_PAGED_KV_F32_ABI,
                 SM120_PAGED_KV_WRITE_F32_ABI,
+                SM120_ARGREDUCE_F32_ABI,
                 SM120_PAGED_ATTN_F32_ABI,
                 SM120_REDUCE_F16_ABI,
                 SM120_REDUCE_BF16_ABI,

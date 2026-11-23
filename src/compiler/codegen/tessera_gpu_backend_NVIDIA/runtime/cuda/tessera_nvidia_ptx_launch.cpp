@@ -120,6 +120,8 @@ constexpr const char* kTileAttentionBackwardPrefix =
     "tessera_tile_attention_backward_";
 constexpr const char* kTilePagedKV = "tessera_tile_paged_kv_read_f32_direct";
 constexpr const char* kTilePagedKVWrite = "tessera_tile_paged_kv_write_f32_direct";
+// AR-DECODE-PROGRAM-1 S1b: `tessera_tile_argreduce_{argmax,argmin}_f32_<hash10>`.
+constexpr const char* kTileArgReducePrefix = "tessera_tile_argreduce_";
 // Compiler-owned static FP4 expansion image (SM120-FP4-EXPAND-NATIVE-20261103):
 // entry `tessera_nvfp4_expand_<schedule hash prefix>`.
 constexpr const char* kNvfp4ExpandPrefix = "tessera_nvfp4_expand_";
@@ -1378,6 +1380,31 @@ int invokePagedKVWrite(CUfunction fn, void** buffers, size_t nbuf,
         }
     }
     for (CUdeviceptr ptr:device) if (ptr) cuMemFree(ptr);
+    return rc;
+}
+
+// AR-DECODE-PROGRAM-1 S1b. Buffers: x [rows, columns] f32 (in), indices
+// [rows] i32 (out). One 128-thread CTA per row; the i32 index ABI bounds both
+// extents, and the compiler refused larger shapes before packaging.
+int invokeArgReduce(CUfunction fn, void** buffers, size_t nbuf,
+                    const int64_t* dims, size_t ndim) {
+    if (nbuf != 2 || ndim != 2) return 5;
+    const long long rows=dims[0], columns=dims[1];
+    if (rows<=0 || columns<=0 || rows>INT32_MAX || columns>INT32_MAX ||
+        rows>INT32_MAX/columns) return 5;
+    const size_t inputBytes=(size_t)rows*(size_t)columns*4, outputBytes=(size_t)rows*4;
+    CUdeviceptr dx=0, dout=0;
+    if (!cuOk(cuMemAlloc(&dx, inputBytes), "cuMemAlloc")) return 3;
+    if (!cuOk(cuMemAlloc(&dout, outputBytes), "cuMemAlloc")) { cuMemFree(dx); return 3; }
+    int rc=0;
+    long long rowsArg=rows, columnsArg=columns;
+    void* args[] = {&dx,&dout,&rowsArg,&columnsArg};
+    if (!cuOk(cuMemcpyHtoD(dx, buffers[0], inputBytes), "cuMemcpyHtoD") ||
+        !cuOk(cuLaunchKernel(fn,(unsigned)rows,1,1,128,1,1,0,0,args,0), "cuLaunchKernel") ||
+        !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+        !cuOk(cuMemcpyDtoH(buffers[1], dout, outputBytes), "cuMemcpyDtoH")) rc=3;
+    cuMemFree(dx);
+    cuMemFree(dout);
     return rc;
 }
 
@@ -2982,6 +3009,9 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
         return invokePagedKV(fn, buffers, nbuf, dims, ndim);
     if (std::strcmp(kernel_name, kTilePagedKVWrite) == 0)
         return invokePagedKVWrite(fn, buffers, nbuf, dims, ndim);
+    if (std::strncmp(kernel_name, kTileArgReducePrefix,
+                     std::strlen(kTileArgReducePrefix)) == 0)
+        return invokeArgReduce(fn, buffers, nbuf, dims, ndim);
     if (std::strncmp(kernel_name, kNvfp4ExpandPrefix,
                      std::strlen(kNvfp4ExpandPrefix)) == 0)
         return invokeNvfp4Expand(fn, buffers, nbuf, dims, ndim);

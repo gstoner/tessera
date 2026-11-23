@@ -169,8 +169,9 @@ def test_saved_lse_tuple_aliases_execute_native(order,bias,causal,monkeypatch):
     if bias: arrays["bias"]=rng.normal(size=(1,4,1,3)).astype(np.float32)*.1
     expected=saved_forward_oracle(arrays["q"],arrays["k"],arrays["v"],causal,arrays.get("bias"))
     fn=ts.jit(target="nvidia_sm120")(saved_alias_function(order,causal,bias))
-    assert len(fn.graph_ir.functions[0].result_types)==2
     result=fn(**arrays)
+    # Read after the call: an undeclared program has no compiled module before one.
+    assert len(fn.graph_ir.functions[0].result_types)==2
     assert fn.execution_kind=="native_gpu"
     assert fn.runtime_artifact().launch_descriptor.provenance["schedule_digest"]
     for actual,reference in zip(result,expected,strict=True):

@@ -11,7 +11,9 @@ pytestmark=[pytest.mark.hardware_nvidia,pytest.mark.skipif(not nvidia_cuda_host_
 def test_nested_public_nvfp4_single_launch_native_replay(mode,ta,tb,prefix,shape,monkeypatch):
     from tessera import runtime as rt
     scalar,owner,values,wanted=case(mode,ta,tb,prefix,shape)
-    before=scalar.graph_ir.to_mlir();launches=[]
+    # Undeclared scalar: no compiled module before a call (JIT_UNSPECIALIZED_SIGNATURE);
+    # vmap routes from its structural module, which the owner must not mutate.
+    before=scalar._structure_module().to_mlir();launches=[]
     real=rt.launch
     def counted(*args,**kwargs):launches.append(1);return real(*args,**kwargs)
     monkeypatch.setattr(rt,"launch",counted)
@@ -33,5 +35,5 @@ def test_nested_public_nvfp4_single_launch_native_replay(mode,ta,tb,prefix,shape
     # New codes and scale arrays retain the exact signature and image.
     _,_,fresh,expected=case(mode,ta,tb,prefix,shape,seed=50708)
     np.testing.assert_allclose(owner(*fresh),expected,rtol=0,atol=2e-3)
-    assert len(launches)==2 and scalar.graph_ir.to_mlir()==before
+    assert len(launches)==2 and scalar._structure_module().to_mlir()==before
     np.testing.assert_allclose(out,wanted,rtol=0,atol=2e-3)

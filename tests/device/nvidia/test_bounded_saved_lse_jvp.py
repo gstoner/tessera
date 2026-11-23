@@ -65,12 +65,13 @@ def test_bounded_saved_lse_replays_one_package_and_keeps_generations(
     if not nvidia_cuda_host_ready():
         pytest.skip("exact SM120 CUDA host required")
     fn = function(biased, activity)
-    original = copy.deepcopy(fn.graph_ir)
+    # Undeclared program: snapshot its structural module (JIT_UNSPECIALIZED_SIGNATURE).
+    original = copy.deepcopy(fn._structure_module())
     traced, _ = inputs(3, 4, biased, activity)
     program = fn.compile_native_attention_jvp(
         *traced.values(), compiler=Path(os.environ["TESSERA_OPT"]),
         llvm_bin=Path(os.environ["LLVM_BIN"]), sequence_bounds=bounds)
-    assert fn.graph_ir == original
+    assert fn._structure_module() == original
     assert program.saved_lse is True
     assert program.pair.forward.descriptor.provenance["shape_bounds"] == [1, 2, 1, *bounds, 4, 3]
     program = NativeAttentionJVPProgram.from_json(

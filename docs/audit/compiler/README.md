@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-07
+last_updated: 2026-11-22
 audit_role: index
 ---
 
@@ -226,3 +226,7 @@ AD/workload status excerpts are archived; they are not additional queues.
 ## Compiled autoregressive decode
 
 - `AR_DECODE_PROGRAM_PLAN.md`: [scoped acceptance plan](AR_DECODE_PROGRAM_PLAN.md) (`AR-DECODE-PROGRAM-1`, proposed) for compiling an AR decode step, then the generate loop, as one compiler-owned program with a device-resident KV cache; sm_120 first, siblings by their own proof. Global order remains in the integrated plan.
+
+## Formal validation pilot
+
+- `LEAN_VALIDATION_PILOT_PLAN.md`: [scoped pilot plan](LEAN_VALIDATION_PILOT_PLAN.md) (`LEAN-PILOT-1`, proposed) — three Lean 4 theorems over ℝ/Nat (exp VJP rule, paged-KV slot map, softmax shift invariance) in `formal/lean/`, each anchored to the Tessera line it models and gated by `tests/unit/test_formal_lean_pilot.py`. Not a float or generated-code claim; go/no-go for wider use is in its §5. Global order remains in the integrated plan.

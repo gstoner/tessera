@@ -1,0 +1,13 @@
+# LEAN-PILOT-1 — not part of any CMake target. Build with `lake build` from
+# this directory; see README.md. Mathlib is pinned to the tag matching
+# `lean-toolchain`; bump both together.
+name = "tessera_formal"
+defaultTargets = ["TesseraFormal"]
+
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4"
+rev = "v4.36.0"
+
+[[lean_lib]]
+name = "TesseraFormal"

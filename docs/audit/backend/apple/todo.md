@@ -16492,7 +16492,21 @@ A full Mac `tests/unit` sweep had 758 failures and errors. Most were tests of NV
 - **Gap:** there is no general Graph → Schedule → Tile → Apple Target IR producer-DAG owner with owned intermediates, original-source replay, a shape plan and a Metal frame owner. `native_tensor_program.py` hard-codes sm_120 and PTX.
 - **What already exists:** Apple has only fixed-pattern packages (a private-heap composite package, MPSGraph `matmul_softmax`/`rmsnorm_matmul`, and an MSL arena with a host sizer).
 - **To do:** extend those three into a general owner.
-- **Tests that name this item:** the `test_native_tensor_*.py` and `test_native_semantic_dag_ownership.py` families.
+- **Tests that name this item:** the `test_native_tensor_*.py` and `test_native_semantic_dag_ownership.py` families. They are sm_120 compiler-route tests (`--tessera-lower-to-nvidia-sm120`); an Apple owner needs its own.
+
+#### APPLE-NTBI-2 design (2026-11-22, code read; matmul DAGs first by owner decision)
+
+What the sm_120 owner is, by stage, and what each stage needs on Apple:
+
+| Stage | sm_120 today | Apple |
+|---|---|---|
+| Graph → Schedule admission (`NativeTensorProgram.h`, `outline`) | Gated to `tessera.target = "nvidia_sm120"`. The DAG checks (one function, matmul product, semantic producers, static or bounded rows) are target-neutral; member geometry comes from `selectMatmulKernel` (16×8 typed / 32×32 macro MMA) and `semanticGeometry` (128-thread blocks), checked against CUDA launch limits. | Admit `apple_gpu`/`apple7` under an explicit request until every later stage exists (existing Apple lanes, such as fused matmul+relu, must not be rerouted to a half-built owner). Geometry comes from the Apple scheduled contracts: the `simdgroup_matrix` f16→f32 tile (APPLE-TILE-1) and the f32 batch-1 BMM for matmul members, and the Apple row kernels for producers. |
+| Schedule → Tile (`PMPasses.cpp`, `tessera-schedule-to-tile`) | Reruns the ordinary scheduled pipeline per member, then requires exactly one `nvvm.kernel` LLVM function carrying `tessera.native.program_geometry`/`_scalars`, rewrites each `tile.program_invoke` to it, and exports the frame (`exportFrame`). | A member ends at the launch-level Tile carrier the Apple scheduled packagers already consume (`apple_native.package_scheduled_matmul`, `package_softmax`, …); the invoke binds that carrier. `exportFrame` is structurally target-neutral (buffers with roles input/private/output, stages with member/entry/inputs/output/scalars/geometry) and needs only its target fields parameterized. |
+| Target / member images | `--tessera-lower-to-nvidia-sm120` per member → PTX images. | Each member packages to a declared `tessera_apple.gpu.kernel_call` over the pinned runtime dylib (the Tier-3 delegate form the scheduled packages use today). Compiler-emitted MSL members (`AppleArenaMSL.h` generalized past one kernel/one arena) are a later step. |
+| Frame owner | `PreparedNativeTensorFrame` (CUDA). | New: a Metal owner that allocates the `private` buffers and encodes every stage into one command buffer. Most runtime kernels commit their own command buffer today, so the members need encode-only entry points; `apple_gpu_ops.run_trace` (one command buffer per encode segment) is prior art. |
+| Python binding | `native_tensor_program.py` (source replay, member/image re-derivation, `runtime_artifact`). | The same contract with an Apple branch: replay the original Graph, re-derive every member and package, refuse any drift. |
+
+Slices, in order: (1) admission + frame export for `apple_gpu` under the request, with Schedule → Tile refusing an Apple member by a stable diagnostic until (2) lands; (2) Apple member carriers and packages for `relu`/`add`/`rmsnorm` → `matmul` (f16 storage, f32 accumulate); (3) the Metal frame owner and encode-only member entry points; (4) the Python binding and a Mac device proof that one command buffer ran the whole frame and matches the reference.
 
 ### APPLE-NTBI-3 — attention JVP (forward mode)
 - **Gap:** there is no Apple tangent consumer or Metal result lease; the attention tangent interface is gated to sm_120.

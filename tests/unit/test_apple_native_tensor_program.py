@@ -47,6 +47,11 @@ def _self_attention_like(x):
     return ts.ops.matmul(ts.ops.softmax(x, axis=-1), x, output_dtype="fp32")
 
 
+def _self_product(x):
+    p = ts.ops.softmax(x, axis=-1)
+    return ts.ops.matmul(p, p, output_dtype="fp32")
+
+
 @pytest.fixture(scope="module")
 def program():
     return atp.compile_apple_tensor_program(
@@ -70,6 +75,17 @@ def test_every_member_is_bound_to_its_traced_op_and_packaged(program):
         assert atp._carrier(stage.member_ir, stage.carrier) == atp._carrier(
             stage.artifact.tile_ir, stage.carrier)
         assert f"tessera.native.tensor_program_member_index = {stage.index}" in stage.member_ir
+
+
+def test_an_aliased_product_keeps_one_package_binding_per_operand_position():
+    # matmul(p, p): the member keeps both positions, so the package must too.
+    aliased = atp.compile_apple_tensor_program(_graph(_self_product, (_half(64, 64),), ("x",)))
+    product = aliased.stages[1]
+    assert product.inputs == (aliased.stages[0].output,) * 2
+    assert len(set(product.bindings)) == 2
+    assert [b.name for b in product.package.descriptor.buffers][:2] == list(product.bindings)
+    assert aliased.frame["stages"][1]["inputs"] == [1, 1]
+    aliased.validate()
 
 
 def test_validate_replays_the_source_and_every_member(program):
@@ -125,6 +141,7 @@ def test_requested_programs_outside_the_profile_are_refused(fn, arrays, why):
 @pytest.mark.parametrize("fn, shapes, names", [
     (_scores_values, ((64, 32), (32, 48)), ("s", "v")),
     (_self_attention_like, ((64, 64),), ("x",)),
+    (_self_product, ((64, 64),), ("x",)),
 ])
 def test_member_packages_compute_the_program_on_metal(fn, shapes, names):
     from tests._support.apple import require_apple_chip_identity
@@ -139,9 +156,12 @@ def test_member_packages_compute_the_program_on_metal(fn, shapes, names):
     scores = arrays[0].astype(np.float32)
     weights = np.exp(scores - scores.max(-1, keepdims=True))
     probabilities = (weights / weights.sum(-1, keepdims=True)).astype(np.float16)
-    reference = probabilities.astype(np.float32) @ arrays[-1].astype(np.float32)
+    rhs = probabilities if fn is _self_product else arrays[-1]
+    reference = probabilities.astype(np.float32) @ rhs.astype(np.float32)
     assert output.dtype == np.float32 and output.shape == reference.shape
     np.testing.assert_allclose(output, reference, rtol=0, atol=2e-3)
+    framed, _ = atp.execute_frame(program, dict(zip(names, arrays)))
+    assert framed.tobytes() == output.tobytes()
 
 
 @pytest.mark.hardware_apple_gpu

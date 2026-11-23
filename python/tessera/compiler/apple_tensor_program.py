@@ -112,16 +112,29 @@ def _source(module: GraphIRModule) -> str:
     return targeted.to_mlir(target="apple_gpu", canonical=True)
 
 
-def _stage_module(function: GraphIRFunction, op: IROp, types: Mapping[str, Any]) -> GraphIRModule:
-    """The traced op as its own one-op Graph program (what a standalone call lowers)."""
-    names = list(dict.fromkeys(value.removeprefix("%") for value in op.operands))
+def _stage_module(function: GraphIRFunction, op: IROp,
+                  types: Mapping[str, Any]) -> tuple[GraphIRModule, tuple[str, ...]]:
+    """The traced op as its own one-op Graph program (what a standalone call lowers).
+
+    One argument per operand position, as the projected member keeps them: an
+    aliased operand (``matmul(p, p)``) gets a distinct argument name per
+    position, and the returned bindings say which value feeds each.
+    """
+    operands = [value.removeprefix("%") for value in op.operands]
     if op.inferred_type is None:
         raise AppleTensorProgramError(f"Apple member {op.op_name} lacks its result type")
+    bindings: list[str] = []
+    for position, name in enumerate(operands):
+        bindings.append(name if name not in bindings else f"{name}__operand{position}")
+    staged = copy.deepcopy(op)
+    staged.operands = ["%" + name for name in bindings]
     single = GraphIRFunction(
-        name=function.name, args=[IRArg(name, types[name]) for name in names],
-        result_types=[op.inferred_type], body=[copy.deepcopy(op)],
+        name=function.name,
+        args=[IRArg(binding, types[name]) for binding, name in zip(bindings, operands)],
+        result_types=[op.inferred_type], body=[staged],
         return_values=["%" + str(op.result)])
-    return GraphIRModule(functions=[single], module_attrs={"tessera.ir.version": '"1.0"'})
+    module = GraphIRModule(functions=[single], module_attrs={"tessera.ir.version": '"1.0"'})
+    return module, tuple(bindings)
 
 
 def _package(op_name: str, stage_module: GraphIRModule):
@@ -144,6 +157,8 @@ class AppleTensorStage:
     carrier: str
     inputs: tuple[str, ...]
     output: str
+    #: The package's input binding name for each operand position.
+    bindings: tuple[str, ...]
     member_ir: str
     artifact: Any
     package: Any
@@ -177,17 +192,18 @@ def _bind_stages(function: GraphIRFunction, frame: dict, tile_ir: str, compiler:
         names[stage["output"]] = str(op.result)
         types[str(op.result)] = op.inferred_type
         member = run_tessera_opt(compiler, tile_ir, f"--tessera-schedule-to-tile=tensor-member={index}")
-        artifact, package = _package(op.op_name, _stage_module(function, op, types))
+        stage_module, bindings = _stage_module(function, op, types)
+        artifact, package = _package(op.op_name, stage_module)
         if _carrier(member, carrier) != _carrier(artifact.tile_ir, carrier):
             raise AppleTensorProgramError(
                 f"Apple member {index} Tile carrier differs from its standalone package")
         if _signature(member, stage["entry"]) != _signature(artifact.tile_ir, function.name):
             raise AppleTensorProgramError(f"Apple member {index} tensor signature differs")
         bound = [b.name for b in package.descriptor.buffers]
-        if bound != list(dict.fromkeys(operands)) + [str(op.result)]:
+        if bound != list(bindings) + [str(op.result)]:
             raise AppleTensorProgramError(f"Apple member {index} package binds different values")
         stages.append(AppleTensorStage(index, op.op_name, carrier, tuple(operands),
-                                       str(op.result), member, artifact, package))
+                                       str(op.result), bindings, member, artifact, package))
     if names.get(frame["output"]) != function.return_values[0].removeprefix("%"):
         raise AppleTensorProgramError("Apple frame result differs from the Graph return value")
     return tuple(stages)
@@ -288,7 +304,7 @@ def run_members_sequentially(program: AppleTensorProgram, inputs: Mapping[str, A
     for stage, record in zip(program.stages, frame["stages"], strict=True):
         package = stage.package
         spec = frame["buffers"][record["output"]]
-        buffers = {name: values[name] for name in dict.fromkeys(stage.inputs)}
+        buffers = {binding: values[name] for binding, name in zip(stage.bindings, stage.inputs)}
         buffers[stage.output] = np.full(tuple(spec["shape"]), np.nan, _NUMPY[spec["storage"]])
         artifact = RuntimeArtifact(
             metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},

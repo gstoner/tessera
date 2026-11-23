@@ -108,6 +108,8 @@ def _find_runtime_source() -> Optional[Path]:
 # stale sentinel is accepted and then fails at the *call site* with a missing
 # symbol, which reads as a broken consumer rather than the stale runtime it is.
 _SENTINEL_SYMBOLS = (
+    # APPLE-NTBI-2 slice 3: the native tensor program frame owner.
+    "tessera_apple_gpu_tensor_frame_execute",
     # Resident ReplaySSM native checkpoint fold + ring clear.
     "tessera_apple_gpu_ssm_replay_flush_dev_f32_enc",
     # Normalization VJP (E2E-REAL-6 / WS-2).

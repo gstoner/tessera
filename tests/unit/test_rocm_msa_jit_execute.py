@@ -38,7 +38,8 @@ def test_jit_rocm_msa_executes_via_launch():
     V = rng.standard_normal((b, hkv, sk, d)).astype(np.float32)
 
     # The @jit(target="rocm") path stamps the artifact executable.
-    art = _msa_jit.runtime_artifact()
+    # Unannotated: the artifact these inputs compile (JIT_UNSPECIALIZED_SIGNATURE).
+    art = _msa_jit.specialize(Q, K, V).runtime_artifact()
     meta = art.metadata
     assert meta.get("execution_kind") == "native_gpu"
     assert meta.get("compiler_path") == "rocm_sparse_attn_compiled"

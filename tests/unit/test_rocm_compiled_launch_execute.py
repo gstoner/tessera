@@ -212,17 +212,18 @@ def test_jit_rocm_matmul_defaults_to_compiled_lane():
     COMPILER-GENERATED lane by default (was artifact_only). Off-device it stays
     artifact_only — so this asserts the flip only where the lane can run."""
     rt = _compiled_or_skip()
-    art = _rocm_mm.runtime_artifact()
+    m, n, k = 128, 96, 64
+    rng = np.random.default_rng(3)
+    a = (rng.standard_normal((m, k)) * 0.4).astype(np.float16)
+    b = (rng.standard_normal((k, n)) * 0.4).astype(np.float16)
+    # Unannotated: the artifact is the program these inputs compile
+    # (JIT_UNSPECIALIZED_SIGNATURE).
+    art = _rocm_mm.specialize(a, b).runtime_artifact()
     md = art.metadata or {}
     assert md.get("executable") is True
     assert md.get("compiler_path") == "rocm_compiled"
     assert md.get("execution_kind") == "native_gpu"
     assert md.get("rocm_fallback_lane") == "rocm_wmma"
-
-    m, n, k = 128, 96, 64
-    rng = np.random.default_rng(3)
-    a = (rng.standard_normal((m, k)) * 0.4).astype(np.float16)
-    b = (rng.standard_normal((k, n)) * 0.4).astype(np.float16)
     res = rt.launch(art, (a, b))
     assert res["ok"] is True, res.get("reason")
     assert res["compiler_path"] == "rocm_compiled"

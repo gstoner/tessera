@@ -37518,6 +37518,9 @@ class TesseraStrictDispatchError(RuntimeError):
 # Bounded funnel of (op_name, reason) failure-class fallbacks — lets tests
 # assert "this suite took zero silent fallbacks" without strict mode.
 _DISPATCH_FALLBACK_LOG: "collections.deque[tuple[str, str]]" = collections.deque(maxlen=1024)
+# Monotonic count of every recorded fallback. The log is bounded, so its length
+# cannot tell a caller whether a fallback happened during one call; this can.
+_DISPATCH_FALLBACK_COUNT = [0]
 
 
 def _strict_dispatch_enabled() -> bool:
@@ -37539,6 +37542,7 @@ def reset_dispatch_fallback_log() -> None:
 def _note_dispatch_fallback(op_name: str, reason: str, exc: Exception | None = None) -> None:
     """Record a failure-class fallback; raise instead under strict dispatch."""
     _DISPATCH_FALLBACK_LOG.append((op_name, reason))
+    _DISPATCH_FALLBACK_COUNT[0] += 1
     if _strict_dispatch_enabled():
         raise TesseraStrictDispatchError(f"[STRICT_DISPATCH] {op_name}: {reason}") from exc
 
@@ -37956,7 +37960,23 @@ def _execute_apple_gpu_mps_artifact(artifact: RuntimeArtifact, args: Any) -> Any
     which ``launch`` unwraps (it never reports native execution for a fallback).
     """
 
-    return _execute_apple_gpu_mps_metadata(artifact.metadata or {}, args, return_provenance=True)
+    before = _DISPATCH_FALLBACK_COUNT[0]
+    result = _execute_apple_gpu_mps_metadata(artifact.metadata or {}, args, return_provenance=True)
+    if (isinstance(result, tuple) and len(result) == 2
+            and result[1] in {"native_gpu", "reference"}):
+        output, kind = result
+    else:
+        # The fusion early-returns hand back a bare array.
+        output, kind = result, "native_gpu"
+    # The executor's own demotion covers only a lane that returned no output.
+    # It cannot see a lane that computed with numpy inside its handler
+    # (recorded as a dispatch fallback), nor a host with no Metal device at
+    # all, where every lane is the host's arithmetic: neither is Metal
+    # execution, and labelling it native_gpu / metal_runtime is the silent
+    # fallback the rung-7 provenance gate exists to refuse.
+    if _DISPATCH_FALLBACK_COUNT[0] != before or _apple_gpu_live_arch() is None:
+        kind = "reference"
+    return (output, kind)
 
 
 def _apple_gpu_synth_fusion_dtype(a: Any, b: Any, np: Any) -> Any:

@@ -239,15 +239,20 @@ def test_fallback_lane_classified_honestly_no_silent_miscompile():
         if not v.provenance_ok:
             assert v.rung is Rung.ARTIFACT_ONLY and v.is_silent_fallback
 
-    # Every one of these envelope-adjacent ops now executes natively on Metal.
-    # They used to fall back because the evaluator launched the artifact of the
-    # decoration's AST module, typed over opaque tensors and so never
-    # executable; it now launches the program these inputs compile
-    # (``for_signature``, E2E-REAL-6F). As this test anticipated, the
-    # assertion becomes HARDWARE_VERIFIED -- and (a) above still guards that
-    # native execution never disagrees with the oracle.
-    assert verdicts and all(v.rung is Rung.HARDWARE_VERIFIED for v in verdicts), [
-        (v.execution_kind, v.rung.name) for v in verdicts]
+    # The evaluator launches the program these inputs compile
+    # (``for_signature``, E2E-REAL-6F); it used to launch the decoration's AST
+    # module, typed over opaque tensors and never executable, so every op fell
+    # back. With a live Metal device every op now executes natively on Metal.
+    # Without one, every op is the host's arithmetic and must say so: the
+    # runtime demotes it to ``reference`` rather than stamping metal_runtime
+    # (a Linux box reported two wrong host results as native until it did).
+    from tessera import runtime
+
+    observed = [(v.execution_kind, v.rung.name) for v in verdicts]
+    if runtime._apple_gpu_live_arch() is not None:
+        assert verdicts and all(v.rung is Rung.HARDWARE_VERIFIED for v in verdicts), observed
+    else:
+        assert verdicts and all(v.is_silent_fallback for v in verdicts), observed
 
 
 # ── E1b: horizontal-equivalence oracle (portable classifier) ─────────────────

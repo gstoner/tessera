@@ -379,8 +379,10 @@ _KNOWN_UNPARSEABLE: dict[str, str] = {}
 
 
 def _emit_target_ir(target_kind: str) -> str:
+    # Declared (symbolic dims) so the decoration's own emitter output is what
+    # is verified; an undeclared signature has none before a call.
     @ts.jit(target=target_kind)
-    def mm(A, B):
+    def mm(A: ts.Tensor["M", "K"], B: ts.Tensor["K", "N"]):
         return ts.ops.matmul(A, B)
 
     return mm.target_ir

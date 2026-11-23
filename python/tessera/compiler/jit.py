@@ -1437,6 +1437,8 @@ class JitFn:
         """
         if id(self) in _CONCRETE_SIGNATURE_OWNERS.get():
             return
+        if self.__dict__.get("_post_call_trace_declined"):
+            return  # a traced call happened and its trace is not re-derivable
         undeclared = _undeclared_parameters(self._fn)
         if not undeclared:
             return
@@ -1527,10 +1529,22 @@ class JitFn:
         signature = self.__dict__.get("_last_traced_signature")
         if (signature is None or not self.ast_emission_pending
                 or id(self) in _CONCRETE_SIGNATURE_OWNERS.get()
-                or not _undeclared_parameters(self._fn)):
+                or not _undeclared_parameters(self._fn)
+                or self.__dict__.get("_post_call_trace_declined")):
             return None
         import numpy as np
-        return self.specialize(*(np.zeros(shape, dtype) for shape, dtype in signature))
+        try:
+            return self.specialize(*(np.zeros(shape, dtype) for shape, dtype in signature))
+        except TesseraJitError as exc:
+            if not str(exc).startswith("tracer frontend failed"):
+                raise
+            # The call reached tracer authority through a native route the
+            # plain trace does not reproduce (a bounded quantized program
+            # binds packed operands by its own logical extents). A call has
+            # supplied the types, so the read answers as it did before
+            # specialize-at-call: from the decoration's module.
+            self._post_call_trace_declined = True
+            return None
 
     def _structure_module(self) -> GraphIRModule:
         """The module a route predicate reads op STRUCTURE from, before a call.

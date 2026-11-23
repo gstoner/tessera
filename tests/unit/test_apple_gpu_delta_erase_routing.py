@@ -103,7 +103,11 @@ def test_jit_path_threads_erase_end_to_end():
 def test_jit_emits_erase_attribute_in_graph_ir():
     """item 1: erase is first-class — the @jit graph IR text carries it (not just
     a Python kwarg).  Paired with the ODS attr (`gated_deltanet_erase.mlir`)."""
-    art = _delta_true.runtime_artifact()
+    # Unannotated: the compiled form exists per signature
+    # (JIT_UNSPECIALIZED_SIGNATURE), so ask for the one the inputs fix.
+    Q, K, V = _qkv(9)
+    beta, decay = _bd(10)
+    art = _delta_true.specialize(Q, K, V, beta, decay).runtime_artifact()
     txt = str(getattr(art, "graph_ir", "") or "")
     if not txt:
         txt = str(getattr(_delta_true, "to_mlir", lambda: "")())

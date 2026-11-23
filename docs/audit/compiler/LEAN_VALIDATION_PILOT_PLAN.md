@@ -62,8 +62,9 @@ would, and `physical_injective` states the lemma it would require.
   gitignored. Theorem 2 imports nothing from Mathlib.
 * **Consumer (Decision #29).** `tests/unit/test_formal_lean_pilot.py`:
   * always runs (any host, no Lean): each `tessera-anchor: <path> :: <text>`
-    line in a theorem file must still occur verbatim in `<path>`, so changing or
-    moving a modeled line fails the unit lane instead of leaving a proof about
+    line in a theorem file must occur verbatim **exactly once** in `<path>`
+    (a literal `\n` spans lines, so a formula is tied to its owning function,
+    not to an identical line elsewhere), so changing or moving a modeled line fails the unit lane instead of leaving a proof about
     code that no longer exists; files must carry their non-claims and no
     `sorry`/`admit`/`axiom`/`native_decide`; no CMake file may reference
     `formal`;

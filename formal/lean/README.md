@@ -34,7 +34,8 @@ them together and re-run the gate.
 ## Gate
 
 `tests/unit/test_formal_lean_pilot.py` always checks that every
-`tessera-anchor:` line still matches its Tessera source verbatim, so a change to
+`tessera-anchor:` line still matches its Tessera source verbatim and exactly
+once (a literal `\n` spans lines), so a change to
 the modeled code fails CI even on hosts without Lean. The `lake build` and axiom
 audit tests **skip** when `lake` or the Mathlib cache is absent — a skip means
 the host did not check the proofs, never that they passed.

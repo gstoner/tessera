@@ -5,8 +5,7 @@ the derivative of `exp`.
 Models (Tessera source; the anchors are drift-checked by
 `tests/unit/test_formal_lean_pilot.py`, which fails if the modeled text moves):
 
-tessera-anchor: python/tessera/autodiff/vjp.py :: @_vjp("exp")
-tessera-anchor: python/tessera/autodiff/vjp.py :: return (np.asarray(dout) * np.exp(np.asarray(x)),)
+tessera-anchor: python/tessera/autodiff/vjp.py :: @_vjp("exp")\ndef vjp_exp(dout, x, **_):\n    return (np.asarray(dout) * np.exp(np.asarray(x)),)
 
 `vjp_exp(dout, x)` returns `dout * exp(x)` elementwise. `vjpExp` below is that
 expression on one scalar element; `exp` has no broadcasting, so the rule has no

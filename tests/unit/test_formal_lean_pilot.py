@@ -61,9 +61,14 @@ def test_theorem_file_anchors_still_match_tessera_source(path: Path) -> None:
         source = _REPO / m.group("path")
         assert source.is_file(), f"{path.name}: anchored file {m.group('path')} is gone"
         body = source.read_text(encoding="utf-8")
-        assert m.group("text") in body, (
-            f"{path.name}: modeled text moved or changed in {m.group('path')}: "
-            f"{m.group('text')!r} -- re-check the proof against the new code"
+        # A literal `\n` in an anchor spans lines, so a formula can be tied to
+        # the function that owns it rather than to any identical line.
+        anchor = m.group("text").replace("\\n", "\n")
+        hits = body.count(anchor)
+        assert hits == 1, (
+            f"{path.name}: anchor must match exactly once in {m.group('path')}, "
+            f"found {hits}: {anchor!r} -- re-check the proof against the code, "
+            "or widen the anchor until it is unique"
         )
 
 

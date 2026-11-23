@@ -17144,3 +17144,12 @@ This gives the decode program its greedy token selection on sm_120.
 - **Launcher:** `invokeArgReduce`.
 - **Evidence (RTX 5070):** the device tests pass 22/22, bitwise against NumPy and the S0 oracle's greedy tokens. On Tajasarus's assertions-ON LLVM, the Graph fixtures and `sm120_argreduce_kernel.mlir` pass. A full `tests/device/nvidia` A/B against `origin/main` adds no failing ID (305 here vs 305 + 9 errors on main).
 - **Not routed from the public frontend:** the manifest rows are `planned`. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4c-s1b--row-argmaxargmin-on-sm_120-2026-11-22))
+
+## `AR-DECODE-PROGRAM-1-S1c-2026-11-23`: owning slice — embedding row gather (sm_120)
+
+This gives the decode program its token-to-hidden-state step on sm_120.
+- **Route:** Graph `tessera.gather` (f32[V,H] table, i32[B] tokens, axis 0) → `schedule.embedding_gather` (`NativeEmbeddingGather.h`) → the new `tile.embedding_gather_kernel` → NVVM.
+- **Kernel:** one 128-thread CTA per token row. The token is checked against [0, V) on the device; an out-of-range token sets a status word instead of writing its row, and the launcher (`invokeEmbeddingGather`) refuses the call and copies nothing back.
+- **Why a new kernel:** `tile.moe_dispatch_kernel` gathers rows too but trusts its indices, which the runtime checks on the host. That check is unavailable once the decode program is resident (S3).
+- **Evidence (RTX 5070):** the device tests pass 14/14, bitwise (uint32) against NumPy `take` and the S0 oracle's own embedding table, including refusal of tokens −1, V, 2^31−1 and −2^31. On Tajasarus's assertions-ON LLVM, the Graph fixtures and `sm120_embedding_gather_kernel.mlir` pass. Device A/B: full `tests/device/nvidia` head vs main shows no new failure attributable to S1c; the head-only IDs are host `nvidia-smi` setup timeouts, or tests that fail the same way on main when rerun on their own (the pre-existing `rhs_chain` single-sided failure); see the plan's §4d.
+- **Not routed from the public frontend:** the manifest row is `planned`. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4d-s1c--embedding-row-gather-on-sm_120-2026-11-23))

@@ -241,7 +241,7 @@ follow.
     - 24 token-by-token writes through a permuted page table, bitwise against `paged_kv_pages` of the S0 oracle.
     - One 24-token prefill write across a page boundary.
     - An in-place write touches only its rows.
-    - Four refused writes (negative position, past capacity, physical page out of range, negative page) each leave the pages bitwise unchanged with status 1.
+    - Five refused writes (negative position, past capacity, physical page out of range, negative page, two written logical pages aliasing one physical page) each leave the pages bitwise unchanged with status 1; an alias outside the written range is not refused (review on #1073).
 - **Host-copy ABI, not yet resident.** This launcher still copies pages host↔device per call, like the read. Resident pages, a device-side position across calls, and composition with the paged read inside one program are S1d/S2 work.
 
 Performance is out of scope until S4 passes. Timing rows follow the

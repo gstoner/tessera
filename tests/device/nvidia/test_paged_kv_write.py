@@ -108,7 +108,7 @@ def test_write_is_in_place_and_touches_only_its_rows(oracle):
 
 
 @pytest.mark.parametrize("case", ["negative_position", "past_capacity", "page_out_of_range",
-                                  "negative_page"])
+                                  "negative_page", "aliased_pages"])
 def test_refused_write_leaves_pages_untouched(oracle, case):
     contract, live, k_logical = oracle
     table = np.array([0, 1, 2, 3], np.int32)
@@ -117,7 +117,10 @@ def test_refused_write_leaves_pages_untouched(oracle, case):
         table = np.array([4, 1, 2, 3], np.int32)
     if case == "negative_page":
         table = np.array([-1, 1, 2, 3], np.int32)
-    tokens = 2 if case == "past_capacity" else 1  # 63 + 2 > 64
+    if case == "aliased_pages":
+        # Logical 15 (page 0) and 16 (page 1) both land on physical page 0.
+        table, position = np.array([0, 0, 2, 3], np.int32), 15
+    tokens = 2 if case in ("past_capacity", "aliased_pages") else 1  # 63 + 2 > 64
     values = np.ones((tokens, *k_logical.shape[2:]), np.float32)
     pages = np.full_like(k_logical, 3.25)
     before = pages.copy()
@@ -126,3 +129,14 @@ def test_refused_write_leaves_pages_untouched(oracle, case):
     assert "refused" in str(result.get("reason", result)), result
     assert status[0] == 1
     np.testing.assert_array_equal(pages, before)
+
+
+def test_alias_outside_the_written_range_is_not_refused(oracle):
+    """Only pages this write touches must be distinct; later aliases are unread here."""
+    _, _, k_logical = oracle
+    table = np.array([0, 1, 2, 2], np.int32)
+    values = np.ones((1, *k_logical.shape[2:]), np.float32)
+    pages = np.zeros_like(k_logical)
+    result, status = _write(pages, table, values, 0)
+    assert result.get("ok") is True and status[0] == 0, result
+    assert np.all(pages[0, 0] == 1.0) and not np.any(pages[1:])

@@ -1371,7 +1371,7 @@ int invokePagedKVWrite(CUfunction fn, void** buffers, size_t nbuf,
     if (!rc) {
         std::memcpy(buffers[4], &status, 4);
         if (status != 0) {
-            g_last_error = "paged KV write refused: position or physical page out of range";
+            g_last_error = "paged KV write refused: position or physical page out of range, or two written pages alias one physical page";
             rc = 6;
         } else if (!cuOk(cuMemcpyDtoH(buffers[0], device[0], pageBytes), "cuMemcpyDtoH")) {
             rc = 3;

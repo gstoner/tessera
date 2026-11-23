@@ -26,6 +26,11 @@ module {
 // CHECK: llvm.load {{.*}} : !llvm.ptr -> i32
 // CHECK: arith.cmpi ult, %{{.*}}, %arg5 : i64
 // CHECK: scf.if
+// Earlier written pages that alias this physical page refuse before the store.
+// CHECK: scf.for
+// CHECK: llvm.load {{.*}} : !llvm.ptr -> i32
+// CHECK: arith.cmpi eq
+// CHECK: llvm.store %{{.*}}, %arg4 {{.*}} : i32, !llvm.ptr
 // CHECK: llvm.load {{.*}} : !llvm.ptr -> f32
 // CHECK: llvm.store {{.*}} : f32, !llvm.ptr
 // Physical page out of range, then position out of range: both set status.

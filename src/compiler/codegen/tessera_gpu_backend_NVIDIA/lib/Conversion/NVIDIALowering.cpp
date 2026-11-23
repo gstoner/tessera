@@ -4127,6 +4127,26 @@ static LogicalResult materializeSm120PagedKVWriteKernel(
       {
         OpBuilder::InsertionGuard leaf(builder);
         builder.setInsertionPointToStart(mapped.thenBlock());
+        // Two written logical pages that share a physical page would race on
+        // the same cache elements. Each thread scans the earlier pages of the
+        // written range, so the later page of every aliasing pair refuses; the
+        // launcher then discards the device copy (no partial or racing write).
+        Value firstPage = arith::DivUIOp::create(builder, loc, position, pageSize);
+        auto scan = scf::ForOp::create(builder, loc, firstPage, logicalPage,
+                                       i64Constant(builder, loc, 1));
+        {
+          OpBuilder::InsertionGuard scanGuard(builder);
+          builder.setInsertionPointToStart(scan.getBody());
+          Value earlierPtr = LLVM::GEPOp::create(builder, loc, in[1].getType(), i32,
+                                                 in[1], ValueRange{scan.getInductionVar()});
+          Value earlier = arith::ExtSIOp::create(builder, loc, i64,
+              LLVM::LoadOp::create(builder, loc, i32, earlierPtr, 4));
+          auto aliased = scf::IfOp::create(builder, loc,
+              arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq,
+                                    earlier, physical), false);
+          builder.setInsertionPointToStart(aliased.thenBlock());
+          LLVM::StoreOp::create(builder, loc, one, in[4], 4);
+        }
         Value pageIndex = addI64(builder, loc,
             mulI64(builder, loc,
                 addI64(builder, loc,

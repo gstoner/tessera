@@ -16,6 +16,13 @@ from tessera.runtime import launch
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _f32(*shapes):
+    """f32 example inputs: an unannotated @jit program's compiled form exists
+    only per concrete signature (JIT_UNSPECIALIZED_SIGNATURE)."""
+    rng = np.random.default_rng(0)
+    return tuple(rng.standard_normal(s).astype(np.float32) * 0.5 for s in shapes)
+
+
 def _simple_transformer_reference(x, wq, wk, wv, wo, w1, w2):
     q = x @ wq
     k = x @ wk
@@ -38,6 +45,7 @@ def test_apple_cpu_target_reports_accelerate_execution_mode_and_runtime_pipeline
 
     A = np.eye(2, dtype=np.float32)
     B = np.ones((2, 2), dtype=np.float32)
+    mm = mm.specialize(A, B)  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     artifact = mm.runtime_artifact()
 
     assert artifact.metadata["execution_mode"] == "cpu_accelerate"
@@ -73,6 +81,12 @@ def test_apple_cpu_accelerate_falls_back_for_non_f32_or_non_rank2_matmul():
     def mm(A, B):
         return ts.ops.matmul(A, B)
 
+    # The f32 rank-2 artifact; launches below hand it inputs outside its
+    # envelope. (Unannotated: the compiled form exists per signature --
+    # JIT_UNSPECIALIZED_SIGNATURE; fp64 is not a legal apple_cpu matmul
+    # signature to compile, so the f32 one is the artifact under test.)
+    mm = mm.specialize(np.eye(2, dtype=np.float32), np.eye(2, dtype=np.float32))
+
     # f64 falls back to np.matmul; result is correct, ok=True.
     A_f64 = np.eye(2, dtype=np.float64)
     B_f64 = 2 * np.eye(2, dtype=np.float64)
@@ -106,6 +120,10 @@ def test_apple_cpu_multi_op_tiny_decode_executes_through_accelerate():
         ctx = ts.ops.matmul(probs, v)
         return ts.ops.matmul(ctx, wo)
 
+    x = np.arange(16, dtype=np.float32).reshape(4, 4) / 16.0
+    w = np.eye(4, dtype=np.float32)
+    theta = np.zeros((4, 4), dtype=np.float32)
+    tiny_decode = tiny_decode.specialize(x, w, w, w, w, theta)  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     artifact = tiny_decode.runtime_artifact()
 
     assert artifact.metadata["execution_mode"] == "cpu_accelerate"
@@ -124,17 +142,19 @@ def test_apple_cpu_multi_op_tiny_decode_executes_through_accelerate():
     assert len(accel) >= 4
 
     # Numerical correctness vs numpy reference.
-    x = np.arange(16, dtype=np.float32).reshape(4, 4) / 16.0
-    w = np.eye(4, dtype=np.float32)
-    theta = np.zeros((4, 4), dtype=np.float32)
-
     out = tiny_decode(x, w, w, w, w, theta)
     np.testing.assert_allclose(out, ts.ops.softmax(x @ x.T) @ x, rtol=1e-5)
 
 
 def test_apple_gpu_tiny_decode_artifact_covers_rope_softmax_matmul_and_kv_cache():
+    # Annotated: the trace cannot take a KVCacheHandle argument, so the
+    # signature is declared and decoration compiles it
+    # (JIT_UNSPECIALIZED_SIGNATURE).
     @ts.jit(target="apple_gpu")
-    def tiny_decode(x, wq, wk, wv, wo, theta, cache):
+    def tiny_decode(x: ts.Tensor["S", "D", "fp32"], wq: ts.Tensor["D", "D", "fp32"],
+                    wk: ts.Tensor["D", "D", "fp32"], wv: ts.Tensor["D", "D", "fp32"],
+                    wo: ts.Tensor["D", "D", "fp32"], theta: ts.Tensor["S", "D", "fp32"],
+                    cache: ts.cache.KVCacheHandle):
         q = ts.ops.matmul(x, wq)
         k = ts.ops.matmul(x, wk)
         v = ts.ops.matmul(x, wv)
@@ -225,6 +245,7 @@ def test_apple_cpu_simple_moe_solver_executes_reference_expert_routing():
         x[3] @ experts[1],
     ])
 
+    simple_moe = simple_moe.specialize(x, experts)  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     artifact = simple_moe.runtime_artifact()
     assert simple_moe.is_executable
     assert artifact.metadata["compiler_path"] == "apple_cpu_accelerate"
@@ -263,6 +284,7 @@ def test_apple_gpu_simple_moe_solver_runs_metal_runtime():
         x[2] @ experts[0], x[3] @ experts[1],
     ])
 
+    simple_moe = simple_moe.specialize(x, experts)  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     artifact = simple_moe.runtime_artifact()
     assert artifact.metadata["execution_mode"] == "metal_runtime"
     assert artifact.metadata["runtime_status"] == "ready"
@@ -312,6 +334,7 @@ def test_apple_cpu_simple_transformer_block_executes_attention_and_mlp():
     w1 = np.linspace(-0.35, 0.45, 32, dtype=np.float32).reshape(4, 8)
     w2 = np.linspace(0.25, -0.30, 32, dtype=np.float32).reshape(8, 4)
 
+    simple_transformer = simple_transformer.specialize(x, wq, wk, wv, wo, w1, w2)  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     artifact = simple_transformer.runtime_artifact()
     out = simple_transformer(x, wq, wk, wv, wo, w1, w2)
     expected = _simple_transformer_reference(x, wq, wk, wv, wo, w1, w2)
@@ -727,6 +750,7 @@ def test_apple_gpu_target_reports_mps_execution_mode_for_single_matmul():
 
     A = np.eye(4, dtype=np.float32)
     B = np.arange(16, dtype=np.float32).reshape(4, 4)
+    mm = mm.specialize(A, B)  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     artifact = mm.runtime_artifact()
 
     assert artifact.metadata["compiler_path"] == "apple_gpu_mps"
@@ -854,6 +878,7 @@ def test_apple_gpu_multi_op_with_non_gpu_op_stays_metal_artifact():
     def chain(x, w):
         return ts.ops.gelu(ts.ops.flip(ts.ops.matmul(x, w), axis=-1))
 
+    chain = chain.specialize(*_f32((4, 8), (8, 16)))  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     artifact = chain.runtime_artifact()
     assert artifact.metadata["execution_mode"] == "metal_artifact"
     assert artifact.metadata["runtime_status"] == "artifact_only"
@@ -879,6 +904,7 @@ def test_apple_gpu_target_emits_msl_kernel_artifact_with_inline_source():
     def rope(X, Theta):
         return ts.ops.rope(X, Theta)
 
+    rope = rope.specialize(*_f32((8, 16), (8, 16)))  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     target_ir = rope.target_ir
     assert "tessera_apple.gpu.msl_kernel" in target_ir
     assert 'entry_point = "rope_f32"' in target_ir
@@ -1032,6 +1058,7 @@ def test_apple_gpu_flash_attn_target_emits_msl_kernel_artifact_with_inline_sourc
     def flash(q, k, v):
         return ts.ops.flash_attn(q, k, v, causal=True)
 
+    flash = flash.specialize(*_f32((1, 8, 16), (1, 8, 16), (1, 8, 16)))  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     target_ir = flash.target_ir
     assert "tessera_apple.gpu.msl_kernel" in target_ir
     assert 'entry_point = "flash_attn_f32"' in target_ir
@@ -1165,6 +1192,7 @@ def test_apple_gpu_softmax_target_emits_msl_kernel_artifact_with_inline_source()
     def sm(X):
         return ts.ops.softmax(X)
 
+    sm = sm.specialize(*_f32((4, 8)))  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     target_ir = sm.target_ir
     assert "tessera_apple.gpu.msl_kernel" in target_ir
     assert 'entry_point = "softmax_f32"' in target_ir
@@ -1202,6 +1230,7 @@ def test_apple_gpu_gelu_target_emits_msl_kernel_artifact_with_inline_source():
     def gelu(X):
         return ts.ops.gelu(X)
 
+    gelu = gelu.specialize(*_f32((4, 8)))  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     target_ir = gelu.target_ir
     assert "tessera_apple.gpu.msl_kernel" in target_ir
     assert 'entry_point = "gelu_f32"' in target_ir
@@ -1319,6 +1348,7 @@ def test_apple_gpu_matmul_softmax_chain_emits_fused_msl_kernel_artifact():
     def fused(A, B):
         return ts.ops.softmax(ts.ops.matmul(A, B))
 
+    fused = fused.specialize(*_f32((4, 8), (8, 16)))  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     target_ir = fused.target_ir
     assert "tessera_apple.gpu.msl_kernel" in target_ir
     # Optimizing-Compiler Plan F2 — f32 matmul->softmax is SYNTHESIZED (the
@@ -1433,6 +1463,7 @@ def test_apple_gpu_matmul_f32_artifact_reports_metal_runtime():
     def mm(A, B):
         return ts.ops.matmul(A, B)
 
+    mm = mm.specialize(*_f32((4, 4), (4, 4)))  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     artifact = mm.runtime_artifact()
     assert artifact.metadata["execution_mode"] == "metal_runtime"
     assert artifact.metadata["compiler_path"] == "apple_gpu_mps"
@@ -1930,6 +1961,7 @@ def test_apple_gpu_attn_block_chain_emits_fused_msl_kernel():
     def attn(A, B, C):
         return ts.ops.matmul(ts.ops.softmax(ts.ops.matmul(A, B)), C)
 
+    attn = attn.specialize(*_f32((4, 8), (8, 8), (8, 4)))  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     target_ir = attn.target_ir
     assert "tessera_apple.gpu.msl_kernel" in target_ir
     assert 'entry_point = "matmul_softmax_matmul_f32"' in target_ir
@@ -2060,6 +2092,7 @@ def test_apple_gpu_attn_block_falls_back_when_chain_breaks():
     def gelu_chain(A, B, C):
         return ts.ops.matmul(ts.ops.gelu(ts.ops.matmul(A, B)), C)
 
+    gelu_chain = gelu_chain.specialize(*_f32((4, 8), (8, 8), (8, 4)))  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     target_ir = gelu_chain.target_ir
     # The 3-op fusion entry point name (the actual call site) must NOT
     # appear in any call. We check by looking for the call site shape rather
@@ -2166,6 +2199,7 @@ def test_apple_gpu_matmul_gelu_chain_emits_fused_msl_kernel():
     def mlp(A, B):
         return ts.ops.gelu(ts.ops.matmul(A, B))
 
+    mlp = mlp.specialize(*_f32((4, 8), (8, 8)))  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     target_ir = mlp.target_ir
     assert "tessera_apple.gpu.msl_kernel" in target_ir
     # Optimizing-Compiler Plan F2 — the matmul->gelu MSL is now SYNTHESIZED, so
@@ -2203,6 +2237,7 @@ def test_apple_gpu_matmul_rmsnorm_chain_emits_fused_msl_kernel():
     def norm(A, B):
         return ts.ops.rmsnorm(ts.ops.matmul(A, B))
 
+    norm = norm.specialize(*_f32((4, 8), (8, 8)))  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     target_ir = norm.target_ir
     assert "tessera_apple.gpu.msl_kernel" in target_ir
     # Optimizing-Compiler Plan F2 — synthesized matmul->rmsnorm.
@@ -2392,6 +2427,7 @@ def test_apple_gpu_swiglu_chain_emits_fused_msl_symbol_in_backend_artifact():
         hidden = ts.ops.silu_mul(gate, up)
         return ts.ops.gemm(hidden, wd)
 
+    block = block.specialize(*_f32((4, 8), (8, 16), (8, 16), (16, 8)))  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     backend_text = block.compile_bundle.artifact("backend").text
     assert "tessera_apple_gpu_swiglu_f32" in backend_text
     assert 'execution_mode = "metal_runtime"' in backend_text
@@ -2413,6 +2449,8 @@ def test_apple_gpu_swiglu_chain_breaks_when_x_differs_per_matmul():
         hidden = ts.ops.silu_mul(gate, up)
         return ts.ops.gemm(hidden, wd)
 
+    two_inputs = two_inputs.specialize(
+        *_f32((4, 8), (4, 8), (8, 16), (8, 16), (16, 8)))  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     backend = two_inputs.compile_bundle.artifact("backend")
     backend_text = backend.text if backend is not None else ""
     assert "tessera_apple_gpu_swiglu_f32" not in backend_text

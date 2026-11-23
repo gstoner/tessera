@@ -402,7 +402,7 @@ source so the AST frontend can compile them:
 
 ```python
 src = """
-def mm(A, B):
+def mm(A: ts.Tensor["M", "K"], B: ts.Tensor["K", "N"]):
     return ts.ops.gemm(A, B)
 """
 
@@ -436,6 +436,50 @@ frontend does not lower nested scopes and an uninvoked helper never runs. An
 deferred) is left to the tracer; it fails as `JIT_APPLE_GPU_TRACE_FAILED`
 rather than falling back. Calls outside `tessera.ops` (numpy, user helpers)
 are not yet covered by this refusal.
+
+#### 2.1.2 An undeclared signature compiles per call
+
+A parameter with no annotation has no type until a call supplies one. Reading
+the compiled form of such a program outside a call raises `TesseraJitError`
+with `JIT_UNSPECIALIZED_SIGNATURE`. This covers `graph_ir`, `compile_bundle`,
+`cpu_plan`, `compile_result`, `lowering_diagnostics`, `runtime_artifact()`,
+`target_ir`, `ir_text()`, `explain()` and the other fields derived from them.
+The only module such a read could return is an AST lowering that types every
+unannotated argument as an opaque tensor, and no call executes that module once
+the tracer specializes the program (E2E-REAL-6F). The message names the
+parameters. There are three ways to get a compiled form:
+
+* Annotate every parameter. Any annotation declares it: a tensor annotation
+  (`ts.Tensor["B", "D"]`, `ts.fp32["M", "K"]`), or the type of a non-tensor
+  argument such as `KVCacheHandle` or `int`. A declared signature compiles at
+  decoration as before.
+* Call the function. A read after a call that the tracer specialized returns
+  that specialization.
+* Ask for one signature: `fn.specialize(*example_args, **kwargs)` traces the
+  body on the arguments' shapes and dtypes, compiles that module through the
+  decoration's own compile path, and returns a callable `JitFn` that describes
+  it. The specialization is cached per signature. `fn.for_signature(...)`
+  returns `fn` itself when the signature is declared, and the specialization
+  otherwise. `dry_run(fn, example_args=(...))` explains one.
+
+```python
+@ts.jit
+def mm_relu(x, y):
+    return ts.ops.relu(ts.ops.matmul(x, y))
+
+mm_relu.graph_ir                       # TesseraJitError: JIT_UNSPECIALIZED_SIGNATURE
+spec = mm_relu.specialize(a, b)        # a: (4, 8) f32, b: (8, 3) f32
+spec.graph_ir.functions[0].args        # x: tensor<4x8xf32>, y: tensor<8x3xf32>
+```
+
+Calls are unchanged. Inside a call, the decoration's AST candidate still runs
+for a body the trace declines (an effectful body, an unsupported construct),
+and so does inside `native_backward`, `native_jvp`, `native_hvp` and the
+frontend certificates, which receive the call's arguments. `specialize` does
+not yet compile a differentiation request; call the function instead.
+`tessera.vmap` routes on op structure when it is applied, and for an undeclared
+program it reads that structure from the declared AST oracle. Decorations that
+emit eagerly (several `apple_gpu` routes) are not affected.
 
 ---
 

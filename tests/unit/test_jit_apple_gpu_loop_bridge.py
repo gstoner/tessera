@@ -77,7 +77,11 @@ def test_control_flow_functions_flagged_needs_trace():
     assert silu_loop._needs_trace is True          # raw for → scf markers
     assert prenorm_residual_loop._needs_trace is True
     assert ctrl_branch._needs_trace is True         # ts.control.cond call
-    assert straightline._needs_trace is False       # pure straight-line → untouched
+    # straightline has no control flow to force the tracer, so its compiled form
+    # is per signature (JIT_UNSPECIALIZED_SIGNATURE); read the gate there.
+    x = np.ones((1, 8), np.float32)
+    w = np.eye(8, dtype=np.float32)
+    assert straightline.specialize(x, w)._needs_trace is False  # pure straight-line → untouched
 
 
 def test_untranslatable_op_raises_hard_diagnostic():

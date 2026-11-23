@@ -44,9 +44,14 @@ def _expected(x: np.ndarray) -> np.ndarray:
 def test_traced_plan_runs_a_body_whose_helper_the_ast_dropped():
     fn = tessera.jit(_calls_a_module_helper)
     # The AST front end drops the call to the helper, so its module is
-    # truncated and compiles to no plan at all.
-    assert "_relu_helper" in fn.graph_ir.frontend_unlowered_calls
-    assert fn._decoration_compile[0] is None
+    # truncated and compiles to no plan at all. An unannotated program has no
+    # graph_ir before a call (JIT_UNSPECIALIZED_SIGNATURE), so read the AST
+    # oracle and plan it directly.
+    from tessera.compiler.matmul_pipeline import build_cpu_plan
+
+    legacy = fn._ensure_legacy_graph_ir()
+    assert "_relu_helper" in legacy.frontend_unlowered_calls
+    assert build_cpu_plan(legacy) is None
     x = _x()
     np.testing.assert_allclose(np.asarray(fn(x)), _expected(x), rtol=1e-6)
     assert fn.frontend_authority == "tracer"

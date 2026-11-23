@@ -30,6 +30,15 @@ def _source_witness(fn: JitFn):
 
 def native_public_jvp(fn: JitFn, primals: tuple[Any, ...], tangents: tuple[Any, ...]):
     """Project public JVP activity into native Graph AD without changing the caller."""
+    from .jit import _concrete_signature
+
+    # The primals are in hand: the module this builds its owner from is the
+    # call's executing candidate, not a pre-call read (E2E-REAL-6F).
+    with _concrete_signature(fn):
+        return _native_public_jvp(fn, primals, tangents)
+
+
+def _native_public_jvp(fn: JitFn, primals: tuple[Any, ...], tangents: tuple[Any, ...]):
     from tessera.autodiff.tape import TesseraAutodiffError
 
     fn.last_jvp_execution = None

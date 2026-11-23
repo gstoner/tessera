@@ -10,6 +10,11 @@ from tessera.compiler.frontend import lower_text_to_graph_ir
 from tessera.compiler.gpu_target import GPUTargetProfile, ISA
 
 
+def _f32(*shapes):
+    rng = np.random.default_rng(0)
+    return [rng.standard_normal(s).astype(np.float32) for s in shapes]
+
+
 def test_target_kind_normalization_accepts_planned_backend_aliases():
     assert normalize_target_kind(None) == "cpu"
     assert normalize_target_kind("cuda") == "nvidia_sm90"
@@ -32,6 +37,8 @@ def test_jit_rocm_target_emits_mfma_and_async_copy_artifact():
     def mm(A, B):
         return ts.ops.matmul(A, B)
 
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    mm = mm.specialize(*_f32((64, 64), (64, 64)))
     # Target IR text is emitted regardless of the execution lane.
     assert mm.has_target_artifacts
     assert 'target = "rocm"' in mm.target_ir
@@ -64,6 +71,8 @@ def test_jit_hopper_target_emits_wgmma_tma_and_mbarrier_artifact():
     def mm(A, B):
         return ts.ops.matmul(A, B)
 
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    mm = mm.specialize(*_f32((64, 64), (64, 64)))
     assert not mm.is_executable
     assert mm.has_target_artifacts
     assert 'target = "nvidia_sm90"' in mm.target_ir
@@ -82,6 +91,8 @@ def test_jit_blackwell_target_emits_tcgen05_and_tmem_artifact():
     def mm(A, B):
         return ts.ops.gemm(A, B)
 
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    mm = mm.specialize(*_f32((64, 64), (64, 64)))
     assert 'target = "nvidia_sm100"' in mm.target_ir
     assert 'arch = "sm_100a"' in mm.target_ir
     assert "tessera_nvidia.tmem_alloc" in mm.target_ir
@@ -94,6 +105,8 @@ def test_jit_apple_cpu_target_emits_accelerate_artifact():
     def mm(A, B):
         return ts.ops.matmul(A, B)
 
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    mm = mm.specialize(*_f32((4, 8), (8, 4)))
     assert 'target = "apple_cpu"' in mm.target_ir
     assert "tessera_apple.cpu.accelerate_gemm" in mm.target_ir
     assert 'framework = "Accelerate"' in mm.target_ir
@@ -109,6 +122,8 @@ def test_jit_apple_gpu_target_emits_mps_runtime_for_single_matmul():
     def mm(A, B):
         return ts.ops.matmul(A, B)
 
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    mm = mm.specialize(*_f32((4, 8), (8, 4)))
     assert 'target = "apple_gpu"' in mm.target_ir
     assert "tessera_apple.gpu.mps_matmul" in mm.target_ir
     assert "tessera_apple.gpu.mps_dispatch" in mm.target_ir
@@ -124,6 +139,8 @@ def test_jit_apple_gpu_matmul_softmax_chain_emits_fused_msl_runtime_contract():
     def fused(A, B):
         return ts.ops.softmax(ts.ops.matmul(A, B))
 
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    fused = fused.specialize(*_f32((4, 8), (8, 4)))
     assert 'target = "apple_gpu"' in fused.target_ir
     assert "tessera_apple.gpu.msl_kernel" in fused.target_ir
     # Optimizing-Compiler Plan F2 — f32 matmul->softmax is SYNTHESIZED (the tiled
@@ -143,6 +160,8 @@ def test_jit_apple_gpu_unrecognized_multi_op_keeps_metal_artifact_contract():
     def chain(x, w):
         return ts.ops.matmul(ts.ops.softmax(x), w)
 
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    chain = chain.specialize(*_f32((4, 8), (8, 4)))
     assert 'target = "apple_gpu"' in chain.target_ir
     assert "tessera_apple.gpu.metal_kernel" in chain.target_ir
     assert "tessera_apple.gpu.dispatch" in chain.target_ir
@@ -160,6 +179,8 @@ def test_flash_attention_apple_gpu_gets_msl_runtime_contract():
     def flash(q, k, v):
         return ts.ops.flash_attn(q, k, v, causal=True)
 
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    flash = flash.specialize(*_f32((1, 2, 16, 8), (1, 2, 16, 8), (1, 2, 16, 8)))
     assert "tessera.flash_attn" in flash.ir_text()
     assert "schedule.pipeline.region" in flash.schedule_ir
     assert "tessera_attn.online_softmax" in flash.tile_ir
@@ -358,8 +379,10 @@ _KNOWN_UNPARSEABLE: dict[str, str] = {}
 
 
 def _emit_target_ir(target_kind: str) -> str:
+    # Declared (symbolic dims) so the decoration's own emitter output is what
+    # is verified; an undeclared signature has none before a call.
     @ts.jit(target=target_kind)
-    def mm(A, B):
+    def mm(A: ts.Tensor["M", "K"], B: ts.Tensor["K", "N"]):
         return ts.ops.matmul(A, B)
 
     return mm.target_ir

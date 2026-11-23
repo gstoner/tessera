@@ -109,11 +109,13 @@ class TestDeepCopySemantics:
 class TestJitIntegration:
     def test_repeated_decoration_hits_cache(self) -> None:
         source = """
-            def f(x, y):
+            def f(x: tessera.Tensor["N"], y: tessera.Tensor["N"]):
                 return tessera.ops.add(x, y)
         """
         # First decoration — miss + store. ``graph_ir`` is read because the
-        # cpu target emits the AST module on first read (E2E-REAL-6F).
+        # cpu target emits the AST module on first read (E2E-REAL-6F); the
+        # parameters are annotated because an unannotated program has no
+        # graph_ir before a call (JIT_UNSPECIALIZED_SIGNATURE).
         _ = tessera.from_text(source).graph_ir
         stats_after_first = graph_ir_cache_stats()
         assert stats_after_first["misses"] >= 1
@@ -127,8 +129,8 @@ class TestJitIntegration:
         assert stats_after_second["size"] == stats_after_first["size"]
 
     def test_different_function_does_not_hit(self) -> None:
-        source_a = "def f(x): return tessera.ops.relu(x)"
-        source_b = "def f(x): return tessera.ops.gelu(x)"
+        source_a = 'def f(x: tessera.Tensor["N"]): return tessera.ops.relu(x)'
+        source_b = 'def f(x: tessera.Tensor["N"]): return tessera.ops.gelu(x)'
         _ = tessera.from_text(source_a).graph_ir
         _ = tessera.from_text(source_b).graph_ir
         stats = graph_ir_cache_stats()

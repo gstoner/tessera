@@ -328,8 +328,10 @@ class TestGraphIRBuilder:
 
     def test_graph_ir_mlir_via_jit(self):
         """@jit decorated functions expose Graph IR MLIR for inspection."""
+        # Annotated: decoration compiles a declared signature; an unannotated
+        # one has no graph_ir before a call (JIT_UNSPECIALIZED_SIGNATURE).
         @tessera.jit
-        def simple(A, B):
+        def simple(A: tessera.Tensor["M", "K"], B: tessera.Tensor["K", "N"]):
             return tessera.ops.gemm(A, B)
 
         ir = simple.graph_ir.to_mlir()
@@ -477,8 +479,10 @@ class TestGraphIRBuilder:
         *info* note that names the specific axis that wasn't yet emitted
         as SSA (``PY_FRONTEND_DYNAMIC_IF_UNLOWERED_CONDITION``). The
         source-span requirement is unchanged."""
+        # Annotated: decoration compiles a declared signature; an unannotated
+        # one has no graph_ir before a call (JIT_UNSPECIALIZED_SIGNATURE).
         @tessera.jit
-        def bad_control(x):
+        def bad_control(x: tessera.Tensor["N"]):
             if x.sum() > 0:
                 return tessera.ops.relu(x)
             return x
@@ -582,16 +586,20 @@ class TestGraphIRBuilder:
         assert "GRAPH_IR_RETURN_MISSING" in result.format()
 
     def test_graph_ir_mlir_contains_gemm(self):
+        # Annotated: decoration compiles a declared signature; an unannotated
+        # one has no graph_ir before a call (JIT_UNSPECIALIZED_SIGNATURE).
         @tessera.jit
-        def gemm_step(A, B, C):
+        def gemm_step(A: tessera.Tensor["M", "K"], B: tessera.Tensor["K", "N"], C: tessera.Tensor["M", "N"]):
             C[:] = tessera.ops.gemm(A, B)
 
         ir = gemm_step.graph_ir.to_mlir()
         assert "gemm" in ir
 
     def test_effect_tag_in_function_attrs(self):
+        # Annotated: decoration compiles a declared signature; an unannotated
+        # one has no graph_ir before a call (JIT_UNSPECIALIZED_SIGNATURE).
         @tessera.jit
-        def with_dropout(x):
+        def with_dropout(x: tessera.Tensor["M", "N"]):
             return tessera.ops.dropout(x)
 
         ir = with_dropout.graph_ir.to_mlir()

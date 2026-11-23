@@ -12,7 +12,9 @@ from tessera.compiler.scheduled_matmul import find_tessera_opt, run_tessera_opt
 from tests.unit.test_attention_jvp_schema_matrix import graph
 
 
-def saved(q, k, v):
+# Annotated with the shapes the tests call it at: an unannotated program has no
+# decoration-time graph_ir to compare against (JIT_UNSPECIALIZED_SIGNATURE).
+def saved(q: ts.Tensor[1, 2, 3, 8], k: ts.Tensor[1, 1, 5, 8], v: ts.Tensor[1, 1, 5, 8]):
     return ts.ops.flash_attn(q, k, v, causal=True, lse_checkpoint="saved")
 
 

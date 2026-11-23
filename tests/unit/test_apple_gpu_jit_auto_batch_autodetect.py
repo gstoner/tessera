@@ -136,17 +136,43 @@ def test_explicit_true_skips_emission():
     assert fn.compile_bundle is None
 
 
+def _example_args():
+    import numpy as np
+    rng = np.random.default_rng(0)
+    return (rng.standard_normal((4, 16)).astype(np.float32),
+            rng.standard_normal((16,)).astype(np.float32))
+
+
+def _assert_emission_kept(fn):
+    # Emission is kept, not skipped: for an unannotated body it is deferred to
+    # a concrete signature (JIT_UNSPECIALIZED_SIGNATURE), and the program
+    # compiled for one carries the body.
+    with pytest.raises(TesseraJitError, match="JIT_UNSPECIALIZED_SIGNATURE"):
+        fn.graph_ir
+    spec = fn.specialize(*_example_args())
+    assert len(spec.graph_ir.functions) == 1
+    return spec
+
+
 def test_explicit_false_keeps_emission():
     fn = _decorate(_CHAIN, auto_batch=False)  # recognized chain, forced off
     # Emission runs normally: the module carries the body.
-    assert len(fn.graph_ir.functions) == 1
-    codes = {d.code for d in fn.lowering_diagnostics}
+    spec = _assert_emission_kept(fn)
+    codes = {d.code for d in spec.lowering_diagnostics}
     assert "JIT_APPLE_GPU_AUTO_BATCH" not in codes
 
 
 def test_non_chain_keeps_emission():
     fn = _decorate(_ARITH)  # arithmetic body -> not auto-batched
+    # Deferred, not skipped (JIT_UNSPECIALIZED_SIGNATURE). The tracer declines
+    # `op * 2.0`, so specialize() cannot build it; a call runs the deferred
+    # emission, and the module it ran carries the body.
+    with pytest.raises(TesseraJitError, match="JIT_UNSPECIALIZED_SIGNATURE"):
+        fn.graph_ir
+    fn(*_example_args())
     assert len(fn.graph_ir.functions) == 1
+    codes = {d.code for d in fn.lowering_diagnostics}
+    assert "JIT_APPLE_GPU_AUTO_BATCH" not in codes
 
 
 def test_emit_package_keeps_emission_even_when_autobatched():

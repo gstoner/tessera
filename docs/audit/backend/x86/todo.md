@@ -12709,6 +12709,10 @@ The conformance dashboard now proves its IR rungs on the traced module; the dash
 
 Differentiation-request decorations now defer the AST module; no x86 lowering or kernel path changed, and no x86 device lane was run. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-differentiation-requests-defer-the-ast-module))
 
+## `E2E-REAL-6F-specialize-at-call-2026-11-22`: sibling outcome — not applicable
+
+A read of an unannotated program's compiled form before a call now refuses (`JIT_UNSPECIALIZED_SIGNATURE`); no x86 lowering or kernel path changed. The Tajasarus unit lane, which includes the x86 tests, matches ba4d8b575. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-22--e2e-real-6f-an-unannotated-program-compiles-for-a-concrete-call-and-reading-it-before-one-is-refused))
+
 ## `AR-DECODE-PROGRAM-1-S1a-2026-11-22`: sibling outcome — not applicable — no x86 lowering exists; the Schedule contract admits sm_120 only and refuses every other target by name. x86 belongs to slice S7. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4b-s1a--in-place-paged-kv-write-on-sm_120-2026-11-22))
 
 ## `MAC-HOST-HYGIENE-2026-11-22`: sibling outcome — not applicable (test infrastructure)

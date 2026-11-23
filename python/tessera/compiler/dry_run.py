@@ -33,6 +33,7 @@ def dry_run(
     source: Optional[str] = None,
     source_path: Optional[str] = None,
     native_required: bool = False,
+    example_args: Optional[tuple] = None,
 ) -> Explain:
     """Return an :class:`Explain` for ``fn`` without executing it.
 
@@ -51,6 +52,12 @@ def dry_run(
         ``inspect.getsource`` or accompanied by ``source=``.
     target, deterministic, seed, source, source_path, native_required:
         Forwarded to ``@tessera.jit``.
+
+    example_args
+        Example inputs fixing the signature to explain. Required for a
+        function with an unannotated parameter, which has no compiled form
+        until a signature is given (``JIT_UNSPECIALIZED_SIGNATURE``); only
+        their shapes and dtypes are read.
 
     Returns
     -------
@@ -73,6 +80,9 @@ def dry_run(
         jit_kwargs["source_path"] = source_path
 
     jitted = _jit(fn, **jit_kwargs)
+    if example_args is not None:
+        # Shapes and dtypes only: the trace never executes the inputs.
+        jitted = jitted.for_signature(*example_args)
     return jitted.explain()
 
 

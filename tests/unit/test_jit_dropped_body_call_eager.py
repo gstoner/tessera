@@ -111,7 +111,12 @@ def test_native_route_runs_before_the_dropped_call_guard(monkeypatch):
     whole body. Guarding before it sent the call to the eager oracle; the
     guard now applies only to the lanes that execute the AST graph."""
     fn = tessera.jit(target="rocm_gfx1201")(_expand_with_policy_helper)
-    assert fn.graph_ir.frontend_unlowered_calls == ["nvfp4_expansion_policy"]
+    # The dropped call is the AST frontend's record; an unannotated program has
+    # no graph_ir before a call (JIT_UNSPECIALIZED_SIGNATURE), so read the AST
+    # oracle that records it. (Static NVFP4 extents need a uint8 annotation,
+    # which the dtype gate refuses.)
+    assert fn._ensure_legacy_graph_ir().frontend_unlowered_calls == [
+        "nvfp4_expansion_policy"]
     monkeypatch.setattr(fn, "_try_source_attention_call", lambda args, kwargs: "native")
 
     def eager(*_args, **_kwargs):
@@ -177,8 +182,11 @@ def test_an_input_refusal_during_trace_is_not_swallowed_by_the_decline(monkeypat
     jit_module = importlib.import_module("tessera.compiler.jit")
     trace_module = importlib.import_module("tessera.compiler.trace")
     namespace = {"tessera": tessera, "np": np}
-    exec(_UFUNC_SOURCE, namespace)  # noqa: S102 -- literal test source
-    fn = tessera.jit(target="rocm_gfx1151", source=_UFUNC_SOURCE)(namespace["f"])
+    # Declared signature, so the dropped call is readable before a call
+    # (JIT_UNSPECIALIZED_SIGNATURE otherwise).
+    source = _UFUNC_SOURCE.replace("def f(x):", 'def f(x: tessera.Tensor["N"]):')
+    exec(source, namespace)  # noqa: S102 -- literal test source
+    fn = tessera.jit(target="rocm_gfx1151", source=source)(namespace["f"])
     assert fn.graph_ir.frontend_unlowered_calls == ["np.exp"]
 
     def refuses(*_args, **_kwargs):

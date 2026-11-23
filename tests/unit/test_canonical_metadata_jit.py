@@ -30,8 +30,20 @@ def _mha(q, k, v):
     return ts.ops.matmul(a, v)
 
 
+def _examples(fn):
+    import inspect
+    n = len(inspect.signature(fn).parameters)
+    rng = np.random.default_rng(0)
+    return [rng.standard_normal((8, 8)).astype(np.float32) for _ in range(n)]
+
+
+def _spec(fn, target):
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    return ts.jit(target=target)(fn).specialize(*_examples(fn))
+
+
 def _meta(fn, target):
-    return ts.jit(target=target)(fn).runtime_artifact().metadata
+    return _spec(fn, target).runtime_artifact().metadata
 
 
 # ── metadata is present on the jit artifact (the bug this closes) ──────────── #
@@ -51,7 +63,7 @@ def test_jit_artifact_carries_canonical_metadata(target):
 
 def test_metadata_does_not_override_executability():
     # apple_gpu MHA is executable; merging descriptive metadata must not flip it.
-    art = ts.jit(target="apple_gpu")(_mha).runtime_artifact()
+    art = _spec(_mha, "apple_gpu").runtime_artifact()
     assert art.metadata["execution_mode"] == "metal_runtime"
     assert art.metadata.get("executable") is True
 

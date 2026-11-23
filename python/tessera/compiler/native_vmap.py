@@ -378,25 +378,26 @@ def _native_scaled_vmap(fn, in_axes, out_axes, *, target):
         return fn
     request = fn.differentiation_request
     from .rocm_typed_scaled_native import requests_composed_typed_scaled, requests_floating_scaled
-    floating = requests_floating_scaled(fn.graph_ir)
+    structure = fn._structure_module()
+    floating = requests_floating_scaled(structure)
     if floating and request is not None and request.mode not in {"forward", "reverse"}:
         raise ValueError("native floating scaled maps require a primal, forward or reverse JIT owner")
-    composed = requests_composed_typed_scaled(fn.graph_ir) or (
-        floating and len(fn.graph_ir.functions[0].body) > 1)
-    if len(fn.graph_ir.functions)!=1:
+    composed = requests_composed_typed_scaled(structure) or (
+        floating and len(structure.functions[0].body) > 1)
+    if len(structure.functions)!=1:
         raise ValueError("native scaled vmap requires one semantic function")
-    arguments=fn.graph_ir.functions[0].args
-    scale_names={value.removeprefix("%") for op in fn.graph_ir.functions[0].body
+    arguments=structure.functions[0].args
+    scale_names={value.removeprefix("%") for op in structure.functions[0].body
                  if op.op_name=="tessera.scaled_matmul" for value in op.operands[2:]}
     scale_indices={i for i,arg in enumerate(arguments) if (floating or arg.name in scale_names) and arg.ir_type.dtype=="fp32"}
     forward_scales = (
         target == "rocm_gfx1201" and request is not None
         and request.mode in {"forward", "reverse"} and request.wrt_indices
         and all(index in scale_indices for index in request.wrt_indices)
-        and len(fn.graph_ir.functions) == 1
-        and (len(fn.graph_ir.functions[0].body) == 1 or composed)
+        and len(structure.functions) == 1
+        and (len(structure.functions[0].body) == 1 or composed)
         and all(op.kwargs.get("scale_layout", {}).get("format") == "fp32"
-                for op in fn.graph_ir.functions[0].body if op.op_name=="tessera.scaled_matmul")
+                for op in structure.functions[0].body if op.op_name=="tessera.scaled_matmul")
     )
     if (normalize_target_kind(fn.target) != target
             or (request is not None and not forward_scales)
@@ -437,7 +438,7 @@ def _native_scaled_vmap(fn, in_axes, out_axes, *, target):
     permutation.insert(out_axes % rank, 0)
     if rank > 8 and tuple(permutation) != tuple(range(rank)):
         raise ValueError("native mapped result exceeds the verified permutation rank")
-    owner = JitFn(fn._fn, copy.deepcopy(fn._legacy_graph_ir or fn.graph_ir),
+    owner = JitFn(fn._fn, copy.deepcopy(structure if fn._structure_is_oracle() else (fn._legacy_graph_ir or fn.graph_ir)),
                   fn.inferred_effect, copy.deepcopy(fn.constraints),
                   deterministic=fn.deterministic, seed=fn.seed, target=fn.target,
                   source_origin=fn.source_origin, source_text=fn._frontend_source_text,

@@ -61,15 +61,15 @@ def test_jit_nvidia_sm120_matmul_dispatches_to_shipped_symbol():
     def mm(a, b):
         return tessera.ops.matmul(a, b)
 
-    artifact = mm.runtime_artifact()
+    rng = np.random.default_rng(3)
+    a = (rng.standard_normal((128, 64)) * 0.4).astype(np.float16)
+    b = (rng.standard_normal((64, 96)) * 0.4).astype(np.float16)
+    # Undeclared signature: compile for the concrete operands.
+    artifact = mm.for_signature(a, b).runtime_artifact()
     metadata = artifact.metadata or {}
     assert metadata.get("executable") is True
     assert metadata.get("compiler_path") == "nvidia_mma"
     assert metadata.get("execution_kind") == "native_gpu"
-
-    rng = np.random.default_rng(3)
-    a = (rng.standard_normal((128, 64)) * 0.4).astype(np.float16)
-    b = (rng.standard_normal((64, 96)) * 0.4).astype(np.float16)
     result = rt.launch(artifact, (a, b))
     assert result["ok"] is True, result.get("reason")
     assert result["compiler_path"] == "nvidia_mma"

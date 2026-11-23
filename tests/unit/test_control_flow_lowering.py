@@ -50,8 +50,10 @@ def test_dynamic_if_lowers_structurally_with_named_diagnostic():
     diagnostic names the specific unlowered axis. Downstream CPU
     compile then honestly reports ``tessera.scf.if.begin`` as an
     unsupported op (separate gap, separate fix)."""
+    # Annotated: decoration lowers a declared signature through the AST
+    # frontend (an unannotated one raises JIT_UNSPECIALIZED_SIGNATURE pre-call).
     @ts.jit
-    def dynamic_branch(x):
+    def dynamic_branch(x: ts.Tensor["N"]):
         if x.sum() > 0:
             return ts.ops.relu(x)
         return x

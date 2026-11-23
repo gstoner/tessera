@@ -151,9 +151,18 @@ def test_exemptions_only_shrink():
 
 
 def test_strict_validation_refuses_an_unspecialized_module_by_its_semantic_key(opt):
+    # The subject is the AST frontend's module over an opaque argument: lower
+    # it directly, since a decoration no longer answers with that module
+    # before a call (JIT_UNSPECIALIZED_SIGNATURE).
+    from tessera.compiler.graph_ir import GraphIRBuilder
+
     source = "def f(a):\n    return tessera.ops.relu(a)\n"
+    namespace = {"tessera": tessera}
+    exec(source, namespace)  # noqa: S102 -- literal test source
+    builder = GraphIRBuilder()
+    builder.lower(namespace["f"], source_text=source, source_origin="explicit")
     with pytest.raises(GraphIRToolValidationError, match="GRAPH_IR_UNRESOLVED_ELEMENT_TYPE"):
-        _validate(_module(source))
+        _validate(builder.module())
 
 
 def test_strict_validation_refuses_when_no_tool_can_answer(monkeypatch):

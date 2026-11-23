@@ -3,11 +3,17 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 import tessera
 from tessera.compiler import dry_run
 from tessera.compiler.explain import Explain
+
+# Unannotated functions have a compiled form only per signature
+# (JIT_UNSPECIALIZED_SIGNATURE); dry_run takes example inputs for that.
+_X = np.ones((4, 4), dtype=np.float32)
+_EXAMPLE = (_X, _X)
 
 
 class TestDryRun:
@@ -15,7 +21,7 @@ class TestDryRun:
         def f(x, y):
             return tessera.ops.add(x, y)
 
-        ex = dry_run(f)
+        ex = dry_run(f, example_args=_EXAMPLE)
         assert isinstance(ex, Explain)
 
     def test_dry_run_does_not_execute(self) -> None:
@@ -25,7 +31,9 @@ class TestDryRun:
 
         call_count = {"n": 0}
 
-        def f(x, y):
+        # Annotated so decoration lowers the signature without running the
+        # body (example_args would trace it once over symbolic values).
+        def f(x: tessera.Tensor[4, 4], y: tessera.Tensor[4, 4]):
             call_count["n"] += 1
             return tessera.ops.add(x, y)
 
@@ -46,7 +54,7 @@ class TestDryRun:
             z = tessera.ops.add(x, y)
             return tessera.ops.relu(z)
 
-        ex = dry_run(chain)
+        ex = dry_run(chain, example_args=_EXAMPLE)
         op_names = [k.op_name for k in ex.kernels]
         assert "add" in op_names
         assert "relu" in op_names
@@ -55,7 +63,7 @@ class TestDryRun:
         def add(x, y):
             return tessera.ops.add(x, y)
 
-        ex = dry_run(add, target="rocm")
+        ex = dry_run(add, target="rocm", example_args=_EXAMPLE)
         # Target IR was emitted for the alternate target.
         assert "rocm" in ex.target or ex.execution_kind == "artifact_only"
 
@@ -81,7 +89,7 @@ class TestFromTextDocumentedKwargs:
             """,
             target="rocm",
         )
-        ex = f.explain()
+        ex = f.specialize(*_EXAMPLE).explain()
         assert "rocm" in ex.target
 
     def test_deterministic_kwarg_forwarded(self) -> None:

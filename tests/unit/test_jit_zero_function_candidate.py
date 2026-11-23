@@ -70,11 +70,19 @@ def _unlowerable_intermediate(x):
     return ops.relu(y)       # -> dangling operand -> function fails verify
 
 
+# The same body with a declared signature, for the tests that inspect the
+# candidate module before any call: an unannotated program has no compiled
+# form outside a call (JIT_UNSPECIALIZED_SIGNATURE).
+def _unlowerable_intermediate_declared(x: ts.Tensor["N"]):
+    y = _not_a_graph_op(x)
+    return ops.relu(y)
+
+
 # --- the regression ---------------------------------------------------------- #
 
 def test_apple_gpu_candidate_module_has_zero_functions():
     """The state that used to crash is reachable, and is what we think it is."""
-    fn = _decorate("apple_gpu", _unlowerable_intermediate)
+    fn = _decorate("apple_gpu", _unlowerable_intermediate_declared)
     assert fn._legacy_graph_ir is not None
     assert fn._legacy_graph_ir.functions == []
     assert fn._needs_trace is True
@@ -86,7 +94,7 @@ def test_zero_function_candidate_does_not_raise_indexerror():
     Called directly so the assertion is about the guard itself and does not
     depend on whether the tracer can then execute the body (or on a device).
     """
-    fn = _decorate("apple_gpu", _unlowerable_intermediate)
+    fn = _decorate("apple_gpu", _unlowerable_intermediate_declared)
     # The deferred decoration builds the empty candidate on first read.
     assert fn._legacy_graph_ir.functions == []
     fn._establish_tracer_authority((np.zeros(3, np.float32),), {})
@@ -208,7 +216,7 @@ def test_differential_gate_materializes_the_oracle_and_reports_a_verdict():
     is a MISMATCH -- which must surface as a refusal to certify, never as a
     certificate and never as an ``IndexError``.
     """
-    fn = _decorate("apple_gpu", _unlowerable_intermediate)
+    fn = _decorate("apple_gpu", _unlowerable_intermediate_declared)
     assert fn._legacy_graph_ir.functions == []
     with pytest.raises(TesseraJitError, match="lacks differential parity"):
         fn.frontend_differential(np.array([1.0, -2.0, 4.0], np.float32))

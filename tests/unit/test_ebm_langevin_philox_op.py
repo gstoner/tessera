@@ -45,7 +45,8 @@ def _record():
 
 
 def _launch_traced(fn, args):
-    md = fn.runtime_artifact().metadata
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    md = fn.specialize(*args).runtime_artifact().metadata
     art = rt.RuntimeArtifact(metadata={"arg_names": md["arg_names"],
                                        "output_name": md["output_name"],
                                        "ops": md["ops"]})
@@ -55,11 +56,14 @@ def _launch_traced(fn, args):
 
 
 def test_frontend_emits_the_four_operand_philox_op():
-    text = _step.ir_text()
+    y = np.zeros((2, 3), np.float32)
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    step = _step.specialize(y, y, np.array([1], np.int64), np.zeros(4, np.int64))
+    text = step.ir_text()
     assert "tessera.ebm.langevin_step_philox" in text
     assert 'tessera.effect_kind = "random"' in text
     assert 'tessera.stochastic_identity = "seed_counter"' in text
-    (op,) = _step.runtime_artifact().metadata["ops"]
+    (op,) = step.runtime_artifact().metadata["ops"]
     assert op["op_name"] == "tessera.ebm.langevin_step_philox"
     assert op["operands"] == ["y", "g", "seed", "ctr"]
     assert op["kwargs"] == {"eta": 0.1, "temperature": 0.5, "noise_scale": 0.3}

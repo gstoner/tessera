@@ -33,13 +33,14 @@ def test_public_jvp_native_attention_preserves_original_and_reuses_product(
         values["bias"] = rng.normal(0, .15, (1, 2, 1, sk)).astype(np.float32)
         seeds["bias"] = None
     fn = ts.jit(target="nvidia_sm120")({"plain": plain, "biased": biased, "saved": saved}[profile])
-    before = copy.deepcopy(fn.graph_ir)
+    # Undeclared program: snapshot its structural module (JIT_UNSPECIALIZED_SIGNATURE).
+    before = copy.deepcopy(fn._structure_module())
     with NvidiaDeviceSession() as session:
         inputs = tuple(Borrowed(session.upload(values[name])) if resident else values[name] for name in order)
         directions = tuple(Borrowed(session.upload(seeds[name])) if resident and seeds[name] is not None
                            else seeds[name] for name in order)
         result = jvp(fn, inputs, directions)
-        assert fn.graph_ir == before and fn.differentiation_request is None
+        assert fn._structure_module() == before and fn.differentiation_request is None
         active = tuple(index for index, value in enumerate(directions) if value is not None)
         owner = fn._native_public_jvp_owners[active][1]
         assert owner.last_jvp_execution["execution_kind"] == "native_gpu"

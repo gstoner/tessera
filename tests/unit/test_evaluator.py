@@ -136,7 +136,9 @@ def test_nvidia_matmul_emits_wgmma_ptx_and_reports_emission_rung():
     matmul attaches structurally-valid WGMMA PTX to the artifact, and the
     Evaluator reports EMITS_ASM_TEXT (rung 2.5) — above artifact_only, but never
     claiming execution."""
-    fn = ts.jit(target="nvidia_sm90")(_mm)
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    a = np.ones((64, 64), dtype=np.float32)
+    fn = ts.jit(target="nvidia_sm90")(_mm).specialize(a, a)
     meta = fn.runtime_artifact().metadata
     assert "nvidia_ptx" in meta, "lowering did not attach emitted PTX"
     assert meta.get("nvidia_ptx_valid") is True
@@ -237,14 +239,20 @@ def test_fallback_lane_classified_honestly_no_silent_miscompile():
         if not v.provenance_ok:
             assert v.rung is Rung.ARTIFACT_ONLY and v.is_silent_fallback
 
-    # The Evaluator is genuinely distinguishing native from fallback — at least
-    # one of these envelope-adjacent ops is shown to NOT execute natively (the
-    # gap accelerator_proof's static `proven` would miss). If a future change
-    # wires them all to Metal, update this to assert HARDWARE_VERIFIED instead.
-    assert any(v.is_silent_fallback for v in verdicts), (
-        "expected the differential lane to expose at least one envelope-adjacent "
-        "op that falls back rather than executing natively"
-    )
+    # The evaluator launches the program these inputs compile
+    # (``for_signature``, E2E-REAL-6F); it used to launch the decoration's AST
+    # module, typed over opaque tensors and never executable, so every op fell
+    # back. With a live Metal device every op now executes natively on Metal.
+    # Without one, every op is the host's arithmetic and must say so: the
+    # runtime demotes it to ``reference`` rather than stamping metal_runtime
+    # (a Linux box reported two wrong host results as native until it did).
+    from tessera import runtime
+
+    observed = [(v.execution_kind, v.rung.name) for v in verdicts]
+    if runtime._apple_gpu_live_arch() is not None:
+        assert verdicts and all(v.rung is Rung.HARDWARE_VERIFIED for v in verdicts), observed
+    else:
+        assert verdicts and all(v.is_silent_fallback for v in verdicts), observed
 
 
 # ── E1b: horizontal-equivalence oracle (portable classifier) ─────────────────

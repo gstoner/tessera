@@ -122,7 +122,9 @@ def test_frontend_emitted_op_is_what_the_executor_consumes():
     y = _RNG.standard_normal((3, 7)).astype(np.float32)
     grad = _RNG.standard_normal((3, 7)).astype(np.float32)
     seed, ctr = _seed([11, 22]), np.array([9, 1, 2, 3], np.int64)
-    traced = step.runtime_artifact().metadata
+    # Unannotated: the op record is the one these inputs compile
+    # (JIT_UNSPECIALIZED_SIGNATURE).
+    traced = step.specialize(y, grad, seed, ctr).runtime_artifact().metadata
     assert [o["op_name"] for o in traced["ops"]] == ["tessera.ebm.langevin_step_philox"]
     art = _art(rt, {})
     art.metadata["arg_names"] = list(traced["arg_names"])

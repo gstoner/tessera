@@ -52,6 +52,14 @@ def _ntk_rope(x, theta):
 
 def test_frontend_emits_both_composites():
     """The producer half: @jit emits the Graph ops the rewrite consumes."""
+    # unannotated: compiled form exists per signature
+    # (JIT_UNSPECIALIZED_SIGNATURE); call first, then read that signature's IR.
+    tokens = np.arange(4, dtype=np.int32)
+    logits = _RNG.standard_normal((4, 16)).astype(np.float32)
+    x = _RNG.standard_normal((4, 8)).astype(np.float32)
+    theta = _RNG.standard_normal((4, 4)).astype(np.float32)
+    _target_verify(tokens, logits)
+    _ntk_rope(x, theta)
     tv_ir = _target_verify.ir_text()
     nr_ir = _ntk_rope.ir_text()
     assert "tessera.target_verify" in tv_ir

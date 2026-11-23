@@ -161,7 +161,9 @@ def evaluate(
 
     from tessera import runtime as _rt
 
-    res = _rt.launch(jitted_fn.runtime_artifact(), args)
+    # The artifact of the program these inputs compile (E2E-REAL-6F): an
+    # unannotated program has no compiled form until a signature is given.
+    res = _rt.launch(jitted_fn.for_signature(*args).runtime_artifact(), args)
     execution_kind = str(res.get("execution_kind", "unknown"))
     runtime_status = str(res.get("runtime_status", "unknown"))
 
@@ -201,7 +203,7 @@ def run_native(target: str, fn: Any, args: tuple[Any, ...]) -> tuple[Any | None,
     """
     from tessera import runtime as _rt
 
-    res = _rt.launch(fn.runtime_artifact(), args)
+    res = _rt.launch(fn.for_signature(*args).runtime_artifact(), args)
     native = (
         res.get("runtime_status") == "success"
         and str(res.get("execution_kind", "")) not in _FALLBACK_EXECUTION_KINDS

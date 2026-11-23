@@ -64,7 +64,8 @@ def test_conv2d_jit_launch_executes_natively():
     rng = np.random.default_rng(0)
     x = rng.standard_normal((1, 8, 8, 3)).astype(np.float32)
     w = rng.standard_normal((3, 3, 3, 4)).astype(np.float32)
-    res = tessera.runtime.launch(f.runtime_artifact(), (x, w))
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    res = tessera.runtime.launch(f.specialize(x, w).runtime_artifact(), (x, w))
     assert res["ok"] and res["runtime_status"] == "success"
     # Honest provenance gate: native only when Metal genuinely ran the conv.
     assert res["execution_kind"] in ("native_gpu", "reference")
@@ -95,7 +96,8 @@ def test_conv2d_jit_launch_never_fakes_native_on_fallback(monkeypatch):
     rng = np.random.default_rng(1)
     x = rng.standard_normal((1, 6, 6, 2)).astype(np.float32)
     w = rng.standard_normal((3, 3, 2, 5)).astype(np.float32)
-    res = tessera.runtime.launch(f.runtime_artifact(), (x, w))
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    res = tessera.runtime.launch(f.specialize(x, w).runtime_artifact(), (x, w))
     assert res["execution_kind"] == "reference"   # demoted, not fake native
     assert res["runtime_status"] == "success"
     out = np.asarray(res["output"])

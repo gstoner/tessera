@@ -50,7 +50,8 @@ def test_ordinary_nvfp4_jit_matches_oracle_and_rebinds(mode,rows,n,k,use_vmap,mo
     sa=np.ascontiguousarray(choices[rng.integers(0,len(choices),sa_shape)])
     sb=np.ascontiguousarray(choices[rng.integers(0,len(choices),sb_shape)])
     scalar = ts.jit(rank_two if use_vmap else globals()[mode], target="nvidia_sm120")
-    before = scalar.graph_ir.to_mlir()
+    # Undeclared scalar: snapshot its structural module (JIT_UNSPECIALIZED_SIGNATURE).
+    before = scalar._structure_module().to_mlir()
     call = vmap(scalar, in_axes=(0, None, 0, None) if mode == "shared" else 0) if use_vmap else scalar
     expected=(_decode_e2m1(ac)*np.repeat(_decode_ue4m3(sa),16,axis=len(a_shape)-1)[..., :k]).astype(np.float64)
     rhs_scale=np.repeat(_decode_ue4m3(sb),16,axis=len(b_shape)-2)
@@ -67,7 +68,7 @@ def test_ordinary_nvfp4_jit_matches_oracle_and_rebinds(mode,rows,n,k,use_vmap,mo
     assert len(launches) == 1
     np.testing.assert_allclose(out,expected,rtol=0,atol=2e-3)
     if use_vmap:
-        assert scalar.graph_ir.to_mlir() == before
+        assert scalar._structure_module().to_mlir() == before
         assert call.graph_ir.functions[0].body[0].kwargs["batching"] == ("shared_rhs_rows" if mode == "shared" else "independent_rhs")
     assert call.frontend_authority=="tracer"
     assert call._native_descriptor_last_receipt["execution_kind"]=="native_gpu"

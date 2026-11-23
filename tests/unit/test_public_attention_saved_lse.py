@@ -3,13 +3,19 @@ import numpy as np
 import pytest
 import tessera as ts
 from tessera.compiler.trace import trace, to_graph_ir_module
-from tessera.compiler.graph_ir import _infer_result_types, tensor_ir_type
+from tessera.compiler.graph_ir import GraphIRBuilder, _infer_result_types, tensor_ir_type
 from tessera.autodiff.jvp import jvp_flash_attn
 from tessera.autodiff.vjp import vjp_flash_attn
 
 
 def saved(q,k,v):
     return ts.ops.flash_attn(q,k,v,lse_checkpoint="saved")
+
+
+def ast_function(function):
+    # The AST frontend lowered directly: an unannotated @jit has no pre-call
+    # graph_ir (JIT_UNSPECIALIZED_SIGNATURE), and these tests are about the AST lowering.
+    return GraphIRBuilder().lower(function,legality_target="nvidia_sm120")
 
 
 def oracle(values, causal, dropout=0.0, seed=None):
@@ -41,8 +47,7 @@ def test_saved_lse_shape_preserves_primary_storage_and_f32_auxiliary(dtype):
 
 
 def test_direct_multi_result_return_is_retained_in_ast_and_trace():
-    fn=ts.jit(saved,target="nvidia_sm120")
-    assert len(fn.graph_ir.functions[0].return_values)==2
+    assert len(ast_function(saved).return_values)==2
     traced=trace(saved,((1,2,3,4),"fp32"),((1,1,5,4),"fp32"),((1,1,5,3),"fp32"))
     module=to_graph_ir_module(traced,name="saved",target="nvidia_sm120")
     assert [t.shape for t in module.functions[0].result_types]==[("1","2","3","3"),("1","2","3")]
@@ -140,8 +145,7 @@ def saved_rebound(q,k,v):
 
 @pytest.mark.parametrize("function",[saved_bound,saved_copied,saved_unpacked,saved_selected])
 def test_tuple_aliases_preserve_all_producer_ssa_components(function):
-    fn=ts.jit(function,target="nvidia_sm120")
-    graph=fn.graph_ir.functions[0]
+    graph=ast_function(function)
     assert graph.return_values==["%"+n for n in graph.body[0].result_names]
     assert len(graph.result_types)==2
     traced=trace(function,((1,2,3,4),"fp32"),((1,1,5,4),"fp32"),((1,1,5,3),"fp32"))
@@ -150,7 +154,7 @@ def test_tuple_aliases_preserve_all_producer_ssa_components(function):
 
 
 def test_tuple_rebinding_does_not_retain_stale_auxiliary_results():
-    graph=ts.jit(saved_rebound,target="nvidia_sm120").graph_ir.functions[0]
+    graph=ast_function(saved_rebound)
     assert graph.return_values==["%q"]
     assert len(graph.result_types)==1
 

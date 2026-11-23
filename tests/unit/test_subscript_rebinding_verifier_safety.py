@@ -30,6 +30,9 @@ import pytest
 
 
 def _decorate(tmp_path, source: str, fn_name: str = "f"):
+    # Sources annotate every parameter: an unannotated program has no compiled
+    # form until a call (JIT_UNSPECIALIZED_SIGNATURE), and these tests pin what
+    # decoration itself lowers and verifies.
     (tmp_path / "sub_mod.py").write_text(source)
     import sys
     sys.path.insert(0, str(tmp_path))
@@ -49,7 +52,7 @@ def test_single_subscript_write_decorates_clean(tmp_path):
         import tessera
 
         @tessera.jit
-        def f(a, b):
+        def f(a: tessera.Tensor["M", "N"], b: tessera.Tensor["M", "N"]):
             a[:] = tessera.ops.relu(b)
             return a
     """).strip() + "\n"
@@ -68,7 +71,7 @@ def test_repeated_subscript_write_to_same_target_decorates_clean(tmp_path):
         import tessera
 
         @tessera.jit
-        def f(a, b, c):
+        def f(a: tessera.Tensor["M", "N"], b: tessera.Tensor["M", "N"], c: tessera.Tensor["M", "N"]):
             a[:] = tessera.ops.relu(b)
             a[:] = tessera.ops.relu(c)
             return a
@@ -88,7 +91,7 @@ def test_scalar_then_subscript_rebind_decorates_clean(tmp_path):
         import tessera
 
         @tessera.jit
-        def f(a, b):
+        def f(a: tessera.Tensor["M", "N"], b: tessera.Tensor["M", "N"]):
             a = tessera.ops.relu(a)
             a[:] = tessera.ops.relu(b)
             return a
@@ -112,7 +115,7 @@ def test_subscript_write_followed_by_read_does_not_crash(tmp_path):
         import tessera
 
         @tessera.jit
-        def f(a, b):
+        def f(a: tessera.Tensor["M", "N"], b: tessera.Tensor["M", "N"]):
             a[:] = tessera.ops.relu(b)
             c = a + b
             return c
@@ -132,7 +135,7 @@ def test_subscript_aug_assign_still_unsupported(tmp_path):
         import tessera
 
         @tessera.jit
-        def f(a, b):
+        def f(a: tessera.Tensor["M", "N"], b: tessera.Tensor["M", "N"]):
             a[:] += b
             return a
     """).strip() + "\n"

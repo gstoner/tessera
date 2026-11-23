@@ -130,6 +130,7 @@ def test_load_balance_jit_metal_runtime():
         return ts.ops.load_balance_loss(p)
     rng = np.random.default_rng(7)
     p = np.exp(rng.standard_normal((64, 8))).astype(np.float32); p /= p.sum(-1, keepdims=True)
+    f = f.specialize(p)  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     assert f.runtime_artifact().metadata["execution_mode"] == "metal_runtime"
     np.testing.assert_allclose(float(np.asarray(f(p))),
                                float(L.load_balance_loss(p)), rtol=1e-5, atol=1e-6)

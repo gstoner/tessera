@@ -17105,6 +17105,10 @@ The conformance dashboard now proves its IR rungs on the traced module; the dash
 
 Differentiation-request decorations now defer the AST module; no NVIDIA lowering changed. The-Super-Bear unit and `tests/device/nvidia` failing node IDs match dfebdc397. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-differentiation-requests-defer-the-ast-module))
 
+## `E2E-REAL-6F-specialize-at-call-2026-11-22`: sibling outcome — parity validated on sm_120 (RTX 5070)
+
+A read of an unannotated program's compiled form before a call now refuses (`JIT_UNSPECIALIZED_SIGNATURE`); no NVIDIA lowering changed. The-Super-Bear unit failing IDs match ba4d8b575. Six `tests/device/nvidia` modules read before calling and were migrated; re-run alone, the seven affected files pass. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-22--e2e-real-6f-an-unannotated-program-compiles-for-a-concrete-call-and-reading-it-before-one-is-refused))
+
 ## `AR-DECODE-PROGRAM-1-S1a-2026-11-22`: owning slice — in-place paged KV write (sm_120)
 
 This adds `tessera.paged_kv_write`, the destination-passing twin of the paged read, for the compiled AR decode program.

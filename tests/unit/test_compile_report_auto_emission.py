@@ -179,7 +179,10 @@ def test_tessera_jit_exposes_compile_report_accessor() -> None:
     def add(x, y):
         return x + y
 
-    report = add.compile_report()
+    import numpy as np
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    x = np.ones((4,), dtype=np.float32)
+    report = add.specialize(x, x).compile_report()
     assert report.frontend == "tessera.jit"
     assert report.value_kind == "tensor"
     assert "graph_ir" in report.ir_hashes

@@ -30,7 +30,10 @@ def case(mode,ta,tb,prefix=(2,3),shape=(7,5,31),*,seed=None):
 def test_frontend_and_native_schedule_preserve_nested_nvfp4_axes(mode,ta,tb,prefix):
     if schedule.find_tessera_opt() is None:pytest.skip("matching native compiler required")
     scalar,owner,values,wanted=case(mode,ta,tb,prefix)
-    before=copy.deepcopy(scalar.graph_ir)
+    # The scalar program is undeclared, so it has no compiled module before a
+    # call (JIT_UNSPECIALIZED_SIGNATURE); vmap routed from its structural
+    # module, which the owners must not mutate.
+    before=copy.deepcopy(scalar._structure_module())
     graph=owner._trace_frontend_capture(values,{})[0]
     assert graph.functions[0].result_types[0].shape==tuple(map(str,wanted.shape))
     assert native.supports_nvfp4_matmul(graph)
@@ -38,7 +41,8 @@ def test_frontend_and_native_schedule_preserve_nested_nvfp4_axes(mode,ta,tb,pref
     assert (artifact.m,artifact.n,artifact.k)==(math.prod(prefix)*7,5,31)
     assert artifact.graph_ir.count("!tessera.nvfp4")>=2
     assert "tile.matmul_kernel" in artifact.tile_ir
-    assert scalar.graph_ir==before
+    assert scalar._structure_module()==before
+    assert scalar.ast_emission_pending
 
 def test_nested_policy_change_is_rejected_before_capture():
     scalar,owner,_,_=case("independent_rhs",False,False)

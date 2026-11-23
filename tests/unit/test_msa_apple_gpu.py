@@ -99,7 +99,7 @@ def test_jit_apple_gpu_reports_metal_runtime():
         return ts.ops.msa_sparse_attention(Q, K, V, block_size=4, top_k=2, causal=True)
 
     Q, K, V = _qkv(seed=1)
-    md = msa.runtime_artifact().metadata
+    md = msa.specialize(Q, K, V).runtime_artifact().metadata  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     assert md["compiler_path"] == "apple_gpu_mps"
     # Host-select + GPU exact attention reports metal_runtime, consistent with
     # the rest of the sparse-attn lane (e.g. deepseek_sparse_attention): the
@@ -116,7 +116,7 @@ def test_jit_apple_gpu_launch_matches_reference():
         return ts.ops.msa_sparse_attention(Q, K, V, block_size=4, top_k=2, causal=True)
 
     Q, K, V = _qkv(seed=2)
-    res = launch(msa.runtime_artifact(), args=(Q, K, V))
+    res = launch(msa.specialize(Q, K, V).runtime_artifact(), args=(Q, K, V))  # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
     assert res["ok"] is True
     assert res["runtime_status"] == "success"
     ref = ts.ops.msa_sparse_attention(Q, K, V, block_size=4, top_k=2, causal=True)

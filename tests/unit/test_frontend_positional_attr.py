@@ -13,11 +13,14 @@ import tessera as ts
 
 
 def _graph(fn):
+    # The bodies annotate their parameters: decoration lowers a declared
+    # signature through the AST frontend under test; an unannotated one has no
+    # compiled form before a call (JIT_UNSPECIALIZED_SIGNATURE).
     return ts.jit(target="apple_gpu")(fn).runtime_artifact().graph_ir or ""
 
 
 def test_top_k_positional_scalar_lowers_to_attribute():
-    def f(x):
+    def f(x: ts.Tensor["M", "N"]):
         return ts.ops.top_k(x, 5)
 
     g = _graph(f)
@@ -27,10 +30,10 @@ def test_top_k_positional_scalar_lowers_to_attribute():
 
 
 def test_top_k_positional_matches_keyword_form():
-    def pos(x):
+    def pos(x: ts.Tensor["M", "N"]):
         return ts.ops.top_k(x, 5)
 
-    def kw(x):
+    def kw(x: ts.Tensor["M", "N"]):
         return ts.ops.top_k(x, k=5)
 
     gp, gk = _graph(pos), _graph(kw)
@@ -41,10 +44,10 @@ def test_top_k_positional_matches_keyword_form():
 
 def test_tensor_arg_ops_still_emit_operands():
     # regression: ops whose positional args are tensors are unaffected
-    def mm(a, b):
+    def mm(a: ts.Tensor["M", "K"], b: ts.Tensor["K", "N"]):
         return ts.ops.matmul(a, b)
 
-    def qkv(x, W):
+    def qkv(x: ts.Tensor["M", "K"], W: ts.Tensor["K", "N"]):
         return ts.ops.qkv_projection(x, W)
 
     assert "tessera.matmul(%a, %b)" in _graph(mm)
@@ -63,7 +66,7 @@ def test_positional_scalar_resolves_from_closure_variable():
     # the closure/global constant to its value, like a literal.
     k = 7
 
-    def f(x):
+    def f(x: ts.Tensor["M", "N"]):
         return ts.ops.top_k(x, k)
 
     assert 'tessera.top_k(%x) {k = 7, tessera.effect_kind = "pure"}' in _graph(f)
@@ -73,7 +76,7 @@ _GLOBAL_K = 4
 
 
 def test_positional_scalar_resolves_from_module_global():
-    def f(x):
+    def f(x: ts.Tensor["M", "N"]):
         return ts.ops.top_k(x, _GLOBAL_K)
 
     assert 'tessera.top_k(%x) {k = 4, tessera.effect_kind = "pure"}' in _graph(f)

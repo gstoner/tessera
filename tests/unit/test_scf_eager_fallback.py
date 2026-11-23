@@ -52,11 +52,13 @@ def test_dynamic_if_diagnostic_is_control_flow_info_not_unsupported_op_warning(t
         import tessera
 
         @tessera.jit
-        def f(x):
+        def f(x: tessera.Tensor["N"]):
             if x.sum() > 0:
                 return tessera.ops.relu(x)
             return x
     """).strip() + "\n"
+    # Annotated: decoration lowers a declared signature, so its diagnostics
+    # exist before a call (JIT_UNSPECIALIZED_SIGNATURE otherwise).
     fn = _decorate(tmp_path, src)
     explanation = fn.explain_lowering()
     assert "JIT_EAGER_FALLBACK_CONTROL_FLOW" in explanation, explanation
@@ -72,11 +74,13 @@ def test_control_flow_diagnostic_names_the_specific_op(tmp_path):
         import tessera
 
         @tessera.jit
-        def f(x):
+        def f(x: tessera.Tensor["N"]):
             if x.sum() > 0:
                 return tessera.ops.relu(x)
             return x
     """).strip() + "\n"
+    # Annotated: decoration lowers a declared signature, so its diagnostics
+    # exist before a call (JIT_UNSPECIALIZED_SIGNATURE otherwise).
     fn = _decorate(tmp_path, src)
     explanation = fn.explain_lowering()
     assert "tessera.scf.if.begin" in explanation, explanation
@@ -89,11 +93,13 @@ def test_while_loop_diagnostic_is_control_flow(tmp_path):
         import tessera
 
         @tessera.jit
-        def f(x):
+        def f(x: tessera.Tensor["N"]):
             while x.sum() > 0:
                 y = x
             return y
     """).strip() + "\n"
+    # Annotated: decoration lowers a declared signature, so its diagnostics
+    # exist before a call (JIT_UNSPECIALIZED_SIGNATURE otherwise).
     fn = _decorate(tmp_path, src)
     explanation = fn.explain_lowering()
     assert "JIT_EAGER_FALLBACK_CONTROL_FLOW" in explanation, explanation
@@ -110,11 +116,13 @@ def test_dynamic_for_diagnostic_is_control_flow(tmp_path):
         import tessera
 
         @tessera.jit
-        def f(xs):
+        def f(xs: tessera.Tensor["N", "D"]):
             for x in xs:
                 y = x
             return y
     """).strip() + "\n"
+    # Annotated: decoration lowers a declared signature, so its diagnostics
+    # exist before a call (JIT_UNSPECIALIZED_SIGNATURE otherwise).
     fn = _decorate(tmp_path, src)
     explanation = fn.explain_lowering()
     assert "JIT_EAGER_FALLBACK_CONTROL_FLOW" in explanation, explanation

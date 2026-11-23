@@ -29,6 +29,17 @@ def _mlp():
     return mlp
 
 
+def _declared_mlp():
+    # Annotated so decoration compiles an AST plan to compare against: an
+    # unannotated program has no decoration plan before a call
+    # (JIT_UNSPECIALIZED_SIGNATURE).
+    @tessera.jit
+    def mlp(x: tessera.Tensor["N", 8], w: tessera.Tensor[8, 3]):
+        return tessera.ops.relu(tessera.ops.matmul(x, w))
+
+    return mlp
+
+
 def _inputs(rows: int = 4):
     rng = np.random.default_rng(rows)
     x = rng.standard_normal((rows, 8)).astype(np.float32)
@@ -37,7 +48,7 @@ def _inputs(rows: int = 4):
 
 
 def test_tracer_authority_executes_the_traced_plan_not_the_decoration_plan(monkeypatch):
-    mlp = _mlp()
+    mlp = _declared_mlp()
     decoration_plan = mlp.cpu_plan
 
     plan_type = type(decoration_plan)
@@ -99,7 +110,7 @@ def test_traced_plan_is_compiled_once_per_specialization(monkeypatch):
 
 
 def test_a_failed_traced_compile_runs_the_decoration_plan_and_says_why(monkeypatch):
-    mlp = _mlp()
+    mlp = _declared_mlp()
     # The decoration plan is built before the compiler breaks: only the
     # traced compile is meant to fail (``cpu`` defers the AST emission).
     assert mlp._decoration_compile[0] is not None

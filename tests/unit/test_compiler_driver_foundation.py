@@ -114,7 +114,9 @@ def test_debug_env_vars_dump_compiler_artifacts(tmp_path, monkeypatch):
     def mm(A, B):
         return ts.ops.matmul(A, B)
 
-    mm.runtime_artifact()
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    a = np.ones((4, 8), dtype=np.float32)
+    mm.specialize(a, a.T.copy()).runtime_artifact()
 
     dump_dirs = list(tmp_path.iterdir())
     assert len(dump_dirs) == 1
@@ -133,6 +135,9 @@ def test_non_cpu_target_artifacts_are_traceable_and_non_executable():
     def mm(A, B):
         return ts.ops.matmul(A, B)
 
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE)
+    a = np.ones((4, 8), dtype=np.float32)
+    mm = mm.specialize(a, a.T.copy())
     artifact = mm.runtime_artifact()
     metadata = artifact.metadata
     assert metadata["target"] == "nvidia_sm90"
@@ -191,5 +196,7 @@ def test_moe_optional_route_name_survives_into_every_backend_artifact():
         if item.example_id == "s8_current_gen_qwen3_moe_compile_slice"
     )
     for target in FOUNDATION_TARGETS:
-        artifact = jit(example.fn, target=target).runtime_artifact()
+        # The example's inputs fix the signature it compiles for.
+        artifact = jit(example.fn, target=target).for_signature(
+            *example.runtime_args).runtime_artifact()
         assert 'extras = ["route"]' in artifact.graph_ir

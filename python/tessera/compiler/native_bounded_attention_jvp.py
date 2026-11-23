@@ -122,6 +122,14 @@ class BoundedAttentionJVPCall:
 
 
 def execute(fn, args, kwargs, ordered, tangents, bounds):
+    from .jit import _concrete_signature
+
+    # Runs with the call's arguments in hand (E2E-REAL-6F).
+    with _concrete_signature(fn):
+        return _execute(fn, args, kwargs, ordered, tangents, bounds)
+
+
+def _execute(fn, args, kwargs, ordered, tangents, bounds):
     from .jit import TesseraJitError
     # Include immutable source semantics and a real Thread object. Integer thread
     # IDs can be reused; a new lifetime must not inherit another CUDA owner.

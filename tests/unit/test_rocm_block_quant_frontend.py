@@ -77,8 +77,12 @@ def test_authored_quantizer_projects_without_mutating_its_graph():
 
 def test_jit_frontend_identifies_authored_quantizer_without_execution():
     from tessera.compiler.rocm_block_quant_native import requests_block_quant
+    import ml_dtypes
     fn=ts.jit(target="rocm_gfx1201",native_required=True)(make_quantizer())
-    assert requests_block_quant(fn.graph_ir)
+    # unannotated: compiled form exists per signature (JIT_UNSPECIALIZED_SIGNATURE);
+    # specialize traces shapes/dtypes only, so the quantizer still never executes.
+    specialized=fn.specialize(np.zeros((3,32),ml_dtypes.bfloat16))
+    assert requests_block_quant(specialized.graph_ir)
 
 
 @pytest.mark.usefixtures("production_compiler")

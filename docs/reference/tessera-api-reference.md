@@ -40,10 +40,15 @@ def matmul_step(A: ts.Tensor["M", "K"], B: ts.Tensor["K", "N"]):
 
 # Notebook-safe construction when @jit can't read source (REPL, heredoc):
 fn = ts.from_text("""
-    def gelu_then_norm(x):
+    def gelu_then_norm(x: ts.Tensor["B", "D"]):
         return ts.ops.layer_norm(ts.ops.gelu(x))
 """)
 ```
+
+A parameter with no annotation compiles per call: reading `explain()`,
+`ir_text()` or any other compiled form of such a program before a call raises
+`JIT_UNSPECIALIZED_SIGNATURE`. Annotate it, call the function first, or use
+`fn.specialize(*example_args)` (`docs/spec/PYTHON_API_SPEC.md` §2.1.2).
 
 ### `JitFn.explain()` — the inspection front door
 

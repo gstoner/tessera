@@ -74,6 +74,8 @@ from .._jit_boundary import TesseraJitError  # noqa: E402,F401 — re-exported
 # single global list) so concurrent traces in different threads don't clobber
 # each other.
 
+import contextlib
+import contextvars
 import os
 import threading
 
@@ -292,6 +294,16 @@ _AST_DERIVED_FIELDS = (
 )
 
 
+# The fields a read after a traced call answers from that call's
+# specialization. The decoration's own plan and its AST-only facts are not
+# among them: those stay the decoration's, so a later call of another shape
+# never starts from the first call's program.
+_POST_CALL_FIELDS = frozenset({
+    "graph_ir", "cpu_plan", "compile_bundle", "compile_result",
+    "lowering_diagnostics",
+})
+
+
 def _ast_derived_field(name: str) -> property:
     slot = "_ast_slot_" + name
 
@@ -299,6 +311,10 @@ def _ast_derived_field(name: str) -> property:
         try:
             return self.__dict__[slot]
         except KeyError:
+            if name in _POST_CALL_FIELDS:
+                specialized = self._post_call_specialization()
+                if specialized is not None:
+                    return getattr(specialized, name)
             self._materialize_ast_emission()
         try:
             return self.__dict__[slot]
@@ -313,6 +329,86 @@ def _ast_derived_field(name: str) -> property:
         self.__dict__.pop(slot, None)
 
     return property(get, set, delete)
+
+
+# E2E-REAL-6F specialize-at-call: the JitFns whose concrete arguments are in
+# hand on this thread of control. A program with an unannotated parameter has
+# no types until a call supplies them, so its deferred AST emission may run
+# only for an owner listed here (``__call__``, ``_trace_frontend_capture``,
+# ``specialize``); any other reader is refused with
+# ``JIT_UNSPECIALIZED_SIGNATURE``. Keyed by owner identity, so a call of one
+# program does not license a pre-call read of another inside it.
+_CONCRETE_SIGNATURE_OWNERS: "contextvars.ContextVar[frozenset[int]]" = (
+    contextvars.ContextVar("tessera_jit_concrete_signature", default=frozenset()))
+
+
+@contextlib.contextmanager
+def _concrete_signature(owner: "JitFn"):
+    token = _CONCRETE_SIGNATURE_OWNERS.set(
+        _CONCRETE_SIGNATURE_OWNERS.get() | {id(owner)})
+    try:
+        yield
+    finally:
+        _CONCRETE_SIGNATURE_OWNERS.reset(token)
+
+
+def _holds_concrete_signature(method: Callable) -> Callable:
+    """Run a JitFn method that receives the call's arguments as a call does.
+
+    The differentiated and certifying entry points (``native_backward``,
+    ``native_jvp``, the frontend certificates) take concrete arguments and
+    build their candidates from them exactly as ``__call__`` would, so a
+    deferred emission they force is the executing candidate, not a pre-call
+    read.
+    """
+    @functools.wraps(method)
+    def wrapper(self: "JitFn", *args: Any, **kwargs: Any) -> Any:
+        with _concrete_signature(self):
+            return method(self, *args, **kwargs)
+    return wrapper
+
+
+def _undeclared_parameters(fn: Callable) -> Tuple[str, ...]:
+    """Parameters of ``fn`` with no annotation, in signature order.
+
+    An annotation of any kind declares the parameter: a tensor annotation
+    gives the trace its rank and dtype, and a non-tensor one (a cache handle,
+    a scalar) declares an argument the tracer cannot take, for which the AST
+    candidate remains the program's declared front end.
+    """
+    try:
+        signature = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return ()
+    try:
+        import typing
+        hints = typing.get_type_hints(fn)
+    except Exception:
+        hints = {}
+    def declared(name: str, annotation: Any) -> bool:
+        if name in hints:
+            return True
+        if annotation is inspect.Parameter.empty:
+            return False
+        if isinstance(annotation, str):
+            # A string annotation declares the parameter only if it resolves:
+            # an unresolvable one (a name local to the defining scope under
+            # ``from __future__ import annotations``) types nothing, and the
+            # AST candidate would lower it as an opaque tensor.
+            value: Any = annotation
+            for _ in range(3):  # a quoted annotation under future annotations nests
+                if not isinstance(value, str):
+                    break
+                try:
+                    value = eval(value, getattr(fn, "__globals__", {}), {})  # noqa: S307
+                except Exception:
+                    return False
+            return not isinstance(value, str)
+        return True
+
+    return tuple(
+        name for name, parameter in signature.parameters.items()
+        if not declared(name, parameter.annotation))
 
 
 def _resolve_dispatch_via_package(value: "bool | str | None",
@@ -625,6 +721,7 @@ class JitFn:
                 # for the lock (or there was never one); the getter reports a
                 # field that is still absent.
                 return
+            self._refuse_unspecialized_read()
             try:
                 emission = thunk()
             except BaseException as exc:
@@ -914,7 +1011,12 @@ class JitFn:
         it as a MISMATCH is the true answer, where refusing to build one was
         merely an absent answer dressed as a failure.
         """
-        if self._legacy_graph_ir is None or not self._legacy_graph_ir.functions:
+        # Before a call, an undeclared program's deferred emission is refused
+        # (JIT_UNSPECIALIZED_SIGNATURE); the oracle is this method's own
+        # lowering, so read only a candidate already in hand.
+        current = (self.__dict__.get("_ast_slot__legacy_graph_ir")
+                   if self._structure_is_oracle() else self._legacy_graph_ir)
+        if current is None or not current.functions:
             # Memoized under its own cache lane. When the decoration-time
             # trace owns ``graph_ir`` (a native scaled program, say), every
             # owner ``tessera.vmap`` builds from it asks for this oracle to
@@ -944,7 +1046,8 @@ class JitFn:
                 module = builder.module()
                 _gic.store(self._frontend_source_text, module, **key)
             self._legacy_graph_ir = module
-        return self._legacy_graph_ir
+            return module
+        return current
 
     # PK8a (2026-06-02) — Graph IR → `.mtlpackage` AOT emission.
     def emit_package(
@@ -1320,7 +1423,214 @@ class JitFn:
         if candidate is not None:
             candidate.close()
 
+    def _refuse_unspecialized_read(self) -> None:
+        """Refuse a pre-call read of a program whose signature is undeclared.
+
+        The deferred AST emission is the only module a read outside a call
+        could get for such a program, and it is a different program from the
+        one a call runs: it types every unannotated argument as an opaque
+        tensor, and the first concrete call replaces it with the trace
+        (E2E-REAL-6F). Inside a call -- or ``specialize`` -- the arguments are
+        in hand and the emission is the executing candidate for a body the
+        trace declined, so it runs there unchanged. Not recorded as the
+        emission's error: the same field read inside a call must still build.
+        """
+        if id(self) in _CONCRETE_SIGNATURE_OWNERS.get():
+            return
+        if self.__dict__.get("_post_call_trace_declined"):
+            return  # a traced call happened and its trace is not re-derivable
+        undeclared = _undeclared_parameters(self._fn)
+        if not undeclared:
+            return
+        name = getattr(self._fn, "__name__", "<fn>")
+        raise TesseraJitError(
+            f"[{JitDiagnosticCode.UNSPECIALIZED_SIGNATURE.value}] {name!r} has "
+            f"no annotation on {', '.join(repr(p) for p in undeclared)}, so its "
+            f"compiled form exists only for a concrete call: annotate the "
+            f"parameters, read it after calling {name}(...), or use "
+            f"{name}.specialize(*example_args)."
+        )
+
+    def specialize(self, *args: Any, **kwargs: Any) -> "JitFn":
+        """The program compiled for one concrete signature.
+
+        Traces the body on ``args``/``kwargs`` (shapes and dtypes only; the
+        values are not retained) and compiles that module exactly as a
+        decoration compiles its own (``_compile_emitted_module``). The result
+        is a ``JitFn`` whose ``graph_ir``, ``compile_bundle``, ``cpu_plan``,
+        ``runtime_artifact()``, ``target_ir`` and ``explain()`` describe that
+        signature, and which executes like this one. It is the answer to
+        "what does this program compile to" for a signature the annotations do
+        not fix, which an unannotated program cannot answer before a call
+        (``JIT_UNSPECIALIZED_SIGNATURE``).
+
+        Raises ``TesseraJitError`` naming the tracer's refusal when the body or
+        the arguments are not something the trace can represent; the AST
+        candidate is never substituted, since it is not the specialized
+        program.
+        """
+        if self.differentiation_request is not None:
+            raise TesseraJitError(
+                "specialize() does not yet compile a differentiation request; "
+                "call the function, whose differentiated owners specialize "
+                "from the call's arguments")
+        if self._frontend_batch_axes is not None:
+            raise TesseraJitError(
+                "specialize() does not compile a batched owner; specialize the "
+                "unbatched program")
+        if self.inferred_effect == Effect.top:
+            # The call-site scan found a call it cannot resolve (raw numpy, a
+            # host RNG, dynamic dispatch). A trace runs that call once and
+            # either drops it or freezes its result into an attribute, so the
+            # traced module is not the program a call executes -- the same
+            # reason ``_establish_tracer_authority`` refuses a non-pure body.
+            # Decline with the tracer prefix so ``for_signature`` and a read
+            # after a call fall back to what a call runs.
+            raise TesseraJitError(
+                "tracer frontend failed: the body makes a call the effect scan "
+                "cannot resolve (effect top); a trace would drop it or freeze "
+                "its result, so no specialization is compiled")
+        with _concrete_signature(self):
+            traced, _ = self._trace_frontend_capture(
+                args, kwargs, source_arg_names=True)
+        # The capture caches one module per signature, so its identity keys
+        # the compiled specialization; the entry holds the module, keeping
+        # that identity from being reused while the entry lives.
+        cache = self.__dict__.setdefault("_specializations", {})
+        cached = cache.get(id(traced))
+        if cached is not None and cached[0] is traced:
+            return cached[1]
+        import copy
+        module = copy.deepcopy(traced)
+        tile = (int(self.cpu_tile[0]), int(self.cpu_tile[1]), int(self.cpu_tile[2]))
+        emission = _compile_emitted_module(
+            module, [], source_text=self._frontend_source_text,
+            source_origin=self.source_origin,
+            target_kind=normalize_target_kind(self.target),
+            cpu_tile=tile, deterministic=self.deterministic,
+            seed=self.seed, constraints=self.constraints.constraints)
+        specialized = JitFn(
+            fn=self._fn, graph_ir=emission.module,
+            inferred_effect=self.inferred_effect,
+            constraints=copy.deepcopy(self.constraints),
+            deterministic=self.deterministic, seed=self.seed,
+            target=self.target, attn_config=self.attn_config,
+            cpu_plan=emission.cpu_plan, compile_bundle=emission.compile_bundle,
+            compile_result=emission.compile_result,
+            cpu_tile=tile, source_origin=self.source_origin,
+            lowering_diagnostics=list(emission.diagnostics),
+            native_required=self.native_required,
+            dispatch_via_package=self.dispatch_via_package,
+            source_text=self._frontend_source_text,
+        )
+        specialized.frontend_authority = "tracer"
+        cache[id(traced)] = (traced, specialized)
+        return specialized
+
+    def _post_call_specialization(self) -> Optional["JitFn"]:
+        """The specialization of the last traced call, for a read after it.
+
+        Only for a read that would otherwise be refused: an undeclared
+        signature, outside a call, whose deferred emission has not run. The
+        last call that established tracer authority recorded its signature
+        (shapes and dtypes); this compiles that signature with
+        ``specialize``, from stand-in arrays of the same shape and dtype --
+        the trace reads no values. ``None`` when there is no such call, so
+        the read is refused as before.
+        """
+        signature = self.__dict__.get("_last_traced_signature")
+        if (signature is None or not self.ast_emission_pending
+                or id(self) in _CONCRETE_SIGNATURE_OWNERS.get()
+                or not _undeclared_parameters(self._fn)
+                or self.__dict__.get("_post_call_trace_declined")):
+            return None
+        import numpy as np
+        try:
+            return self.specialize(*(np.zeros(shape, dtype) for shape, dtype in signature))
+        except TesseraJitError as exc:
+            if not str(exc).startswith("tracer frontend failed"):
+                raise
+            # The call reached tracer authority through a native route the
+            # plain trace does not reproduce (a bounded quantized program
+            # binds packed operands by its own logical extents). A call has
+            # supplied the types, so the read answers as it did before
+            # specialize-at-call: from the decoration's module.
+            self._post_call_trace_declined = True
+            return None
+
+    def _structure_module(self) -> GraphIRModule:
+        """The module a route predicate reads op STRUCTURE from, before a call.
+
+        ``tessera.vmap`` picks its native route when it is applied, from op
+        names and attributes (a physical contract, a scaled-matmul policy) that
+        no argument type changes. For a declared signature, or once a module is
+        in hand, that is ``graph_ir``. For an undeclared one before a call it
+        is the AST oracle (``_ensure_legacy_graph_ir``), named as such: a
+        structural read for routing, never the module a call compiles, and
+        counted as that oracle's lowering by the AST census.
+        """
+        if self._structure_is_oracle():
+            return self._ensure_legacy_graph_ir()
+        return self.graph_ir
+
+    def _structure_is_oracle(self) -> bool:
+        """Whether ``_structure_module`` answers from the AST oracle."""
+        return (self.ast_emission_pending and bool(_undeclared_parameters(self._fn))
+                and id(self) not in _CONCRETE_SIGNATURE_OWNERS.get())
+
+    def for_signature(self, *args: Any, **kwargs: Any) -> "JitFn":
+        """This program as compiled for ``args``: itself when its signature is
+        declared, else ``specialize(*args, **kwargs)``.
+
+        For a tool that holds a program's inputs and reads its compiled form
+        before (or instead of) calling it -- the evaluator, graders, the
+        compiler-example harness. A declared signature already fixes the
+        compiled form, so the decoration's answer is kept unchanged. When the
+        tracer declines the body, a call on ``args`` runs the decoration's AST
+        candidate, and that candidate is returned (built as the call builds
+        it), so such a tool grades what a call would execute.
+        """
+        if not _undeclared_parameters(self._fn):
+            return self
+        try:
+            return self.specialize(*args, **kwargs)
+        except TesseraJitError as exc:
+            if not str(exc).startswith("tracer frontend failed"):
+                raise
+        # The tracer declined this body (a positional scalar operand, a
+        # handle argument, an unsupported construct). A call on these
+        # arguments then executes the decoration's AST candidate, so that is
+        # the program compiled for them: build it exactly as the call would,
+        # and answer from it. ``specialize`` itself never substitutes it.
+        with _concrete_signature(self):
+            self._materialize_ast_emission()
+        return self
+
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        with _concrete_signature(self):
+            result = self._call_concrete(*args, **kwargs)
+        self._record_traced_signature(args, kwargs)
+        return result
+
+    def _record_traced_signature(self, args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> None:
+        """Remember what a later read outside a call describes.
+
+        Only a call that ended under tracer authority (any route: the default
+        capture, a native tensor program, a source-attention owner) on host
+        arrays, and only shapes and dtypes, never values. A call that ran the
+        AST candidate records nothing, so a later read of an undeclared
+        signature is still refused rather than describing a trace that did
+        not run (``_post_call_specialization``).
+        """
+        if self.frontend_authority != "tracer" or not _undeclared_parameters(self._fn):
+            return
+        import numpy as np
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered and all(type(value) is np.ndarray for value in ordered):
+            self._last_traced_signature = tuple(
+                (tuple(value.shape), value.dtype) for value in ordered)
+
+    def _call_concrete(self, *args: Any, **kwargs: Any) -> Any:
         """
         Execute through the narrow CPU lowering path when available; otherwise
         fall back to the original Python function.
@@ -1791,6 +2101,7 @@ class JitFn:
         ranks = (4,) if source_attention else (1,2,3,4) if requests_attention(module) else (1,2)
         return cuda_frontend_specs(ordered,ranks=ranks)
 
+    @_holds_concrete_signature
     def _specialized_autodiff_module(
         self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
     ) -> GraphIRModule:
@@ -1865,6 +2176,20 @@ class JitFn:
         kwargs: Dict[str, Any],
         *,
         require_outputs: bool = False,
+        source_arg_names: bool = False,
+    ) -> Tuple[GraphIRModule, Optional[Any]]:
+        with _concrete_signature(self):
+            return self._trace_frontend_capture_concrete(
+                args, kwargs, require_outputs=require_outputs,
+                source_arg_names=source_arg_names)
+
+    def _trace_frontend_capture_concrete(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        require_outputs: bool = False,
+        source_arg_names: bool = False,
     ) -> Tuple[GraphIRModule, Optional[Any]]:
         """Trace one concrete signature into canonical Graph IR.
 
@@ -1900,6 +2225,14 @@ class JitFn:
                 else (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
                 for value in ordered
             )
+        if source_arg_names:
+            if resident:
+                raise TesseraJitError(
+                    "specialize() takes host arrays; a resident SM120 frontend "
+                    "specializes from its call")
+            # A separate entry: these arguments carry the source parameter
+            # names, the default capture's carry the tracer's own.
+            signature = (*signature, ("source_arg_names", True))
         cached = self._traced_frontend_specializations.get(signature)
         if cached is not None and not require_outputs:
             return cached, None
@@ -1923,7 +2256,10 @@ class JitFn:
             else:
                 trace_inputs = (tuple((shape, _np_dtype_to_elem(dtype)) for shape, dtype in resident_specs)
                                 if resident_specs is not None else ordered)
-                traced = trace(trace_callable, *trace_inputs, evaluate_catalog_outputs=require_outputs)
+                traced = trace(
+                    trace_callable, *trace_inputs,
+                    evaluate_catalog_outputs=require_outputs,
+                    arg_names=tuple(self.arg_names) if source_arg_names else None)
             # The AST module is a naming convenience here, not an input to the
             # trace: a zero-function one (apple_gpu trace-defer, auto_batch
             # skip) must not fail a capture that never needed it. Both fields
@@ -2225,6 +2561,7 @@ class JitFn:
         assert ordered is not None
         return tuple(ordered), {}
 
+    @_holds_concrete_signature
     def frontend_differential(
         self,
         *args: Any,
@@ -2289,6 +2626,7 @@ class JitFn:
         self._frontend_differential_certificates[certificate_key] = certificate
         return certificate
 
+    @_holds_concrete_signature
     def _frontend_nonreexecuting_certificate(
         self,
         args: Tuple[Any, ...],
@@ -3970,6 +4308,7 @@ class JitFn:
         return materialize_native_hvp(source, compiler=compiler, llvm_bin=llvm_bin,
                                       backend=backend, chip=chip)
 
+    @_holds_concrete_signature
     def native_hvp(self, *args: Any, tangents: Any,
                    out_cotangents: Any, **kwargs: Any) -> tuple[tuple[Any, ...], tuple[Any, ...]]:
         """Execute exact forward-over-reverse AD on the native CPU compiler.
@@ -4041,6 +4380,7 @@ class JitFn:
         return (tuple(outputs[i] for i in request.wrt_indices),
                 tuple(outputs[count + i] for i in request.wrt_indices))
 
+    @_holds_concrete_signature
     def native_jvp(
         self, *args: Any, tangents: Any, sequence_bounds: Any = None,
         result_placement: str = "host", **kwargs: Any,
@@ -4412,6 +4752,7 @@ class JitFn:
             raise TesseraJitError("no persisted native backward product from the last call")
         return artifact
 
+    @_holds_concrete_signature
     def native_backward(
         self, *args: Any, out_cotangents: Any, sequence_bounds=None, **kwargs: Any
     ) -> tuple[Any, ...]:
@@ -6011,6 +6352,106 @@ def _legality_target_for(target: Optional[Any]) -> str:
     return target if isinstance(target, str) else "cpu"
 
 
+def _compile_emitted_module(
+    module: GraphIRModule,
+    frontend_diagnostics: Sequence[JitDiagnostic],
+    *,
+    source_text: Optional[str],
+    source_origin: str,
+    target_kind: str,
+    cpu_tile: Tuple[int, int, int],
+    deterministic: bool,
+    seed: Optional[int],
+    constraints: Any,
+) -> "_GraphIREmission":
+    """Compile one emitted Graph IR module into the decoration's emission.
+
+    The single compile tail for a module whichever front end produced it:
+    the decoration's AST (or abstract-trace) lowering and
+    ``JitFn.specialize``'s concrete trace both reach the bundle, plan and
+    canonical result through here, so a specialization is compiled exactly as
+    a decoration would compile the same module (Decision #31).
+    """
+    diagnostics: list[JitDiagnostic] = list(frontend_diagnostics)
+    if source_text is None:
+        diagnostics.append(JitDiagnostic(
+            "warning",
+            "JIT_SOURCE_UNAVAILABLE",
+            (
+                "Python source could not be inspected; define the function in a file "
+                "or pass @jit(source=...) / @jit(source_path=...) to enable AST lowering"
+            ),
+        ))
+    elif source_origin != "inspect":
+        diagnostics.append(JitDiagnostic(
+            "info",
+            "JIT_SOURCE_PROVIDED",
+            f"using {source_origin} source for AST lowering",
+        ))
+    from .presburger import (
+        attach_presburger_system,
+        presburger_system_from_constraints,
+    )
+    presburger = presburger_system_from_constraints(constraints)
+    if presburger is not None:
+        for graph_function in module.functions:
+            attach_presburger_system(graph_function, presburger)
+    compile_bundle = compile_graph_module(
+        module,
+        source_origin=source_origin,
+        target=target_kind,
+        cpu_tile=(int(cpu_tile[0]), int(cpu_tile[1]), int(cpu_tile[2])),
+        options={
+            "cpu_tile": list(tuple(int(v) for v in cpu_tile)),
+            "deterministic": deterministic,
+            "seed": seed,
+        },
+    )
+    if diagnostics:
+        compile_bundle = CompileArtifactBundle(
+            request=compile_bundle.request,
+            graph=compile_bundle.graph,
+            schedule=compile_bundle.schedule,
+            tile=compile_bundle.tile,
+            target_ir=compile_bundle.target_ir,
+            backend=compile_bundle.backend,
+            executable=compile_bundle.executable,
+            runtime_status=compile_bundle.runtime_status,
+            execution_mode=compile_bundle.execution_mode,
+            execution_kind=compile_bundle.execution_kind,
+            diagnostics=tuple(diagnostics) + compile_bundle.diagnostics,
+            trace_events=compile_bundle.trace_events,
+            tool_invocations=compile_bundle.tool_invocations,
+            cpu_plan=compile_bundle.cpu_plan,
+        )
+    cpu_plan = compile_bundle.cpu_plan
+    diagnostics = list(compile_bundle.diagnostics)
+    compile_result = compile_result_from_bundle(compile_bundle, module=module)
+    return _GraphIREmission(
+        module=module, cpu_plan=cpu_plan, compile_bundle=compile_bundle,
+        compile_result=compile_result, diagnostics=diagnostics,
+        trace_deferred=False)
+
+
+def _abstract_trace_preferred(inferred_effect: Any) -> bool:
+    """Whether decoration emission may try the abstract trace before the AST.
+
+    The gate is a RESOLVED body, not a pure one. ``inferred_effect`` comes
+    from the call-site scan (Decision #5): it is ``top`` exactly when some
+    call did not resolve to a registered ``tessera.ops`` callable -- raw
+    numpy, dynamic dispatch, an unavailable source -- and that is the case
+    the trace cannot be trusted with, because it records only operations
+    that touch traced values and would silently omit the call. A body whose
+    every call resolved to a registered op (``state`` attention, ``memory``
+    copies, ``random`` samplers, ``collective`` routing) traces to the same
+    registered ops with the same registered effects; the AST frontend has
+    no information the trace lacks. The effect tag the module carries is
+    still the scan's, so a trace never weakens it. A signature or body the
+    tracer cannot represent falls back to the AST candidate unchanged.
+    """
+    return inferred_effect != Effect.top
+
+
 def _recover_frontend_diagnostics(
     fn: Callable, *, source_text: Optional[str],
     effect_tag: Optional[str], target_attr: Optional[str],
@@ -6111,7 +6552,7 @@ def _jit_emit_graph_ir(
             builder.lower(
                 fn, effect_tag=effect_tag,
                 target_attr=target_attr, source_text=source_text, source_origin=source_origin,
-                prefer_abstract_trace=inferred_effect == Effect.pure,
+                prefer_abstract_trace=_abstract_trace_preferred(inferred_effect),
                 legality_target=_legality_target_for(target),
             )
             module = builder.module()
@@ -6123,65 +6564,11 @@ def _jit_emit_graph_ir(
                 source_location=source_location,
                 constant_environment=constant_environment, call_abi=call_abi,
             )
-        diagnostics: list[JitDiagnostic] = list(frontend_diagnostics)
-        if source_text is None:
-            diagnostics.append(JitDiagnostic(
-                "warning",
-                "JIT_SOURCE_UNAVAILABLE",
-                (
-                    "Python source could not be inspected; define the function in a file "
-                    "or pass @jit(source=...) / @jit(source_path=...) to enable AST lowering"
-                ),
-            ))
-        elif source_origin != "inspect":
-            diagnostics.append(JitDiagnostic(
-                "info",
-                "JIT_SOURCE_PROVIDED",
-                f"using {source_origin} source for AST lowering",
-            ))
-        from .presburger import (
-            attach_presburger_system,
-            presburger_system_from_constraints,
-        )
-        presburger = presburger_system_from_constraints(constraints)
-        if presburger is not None:
-            for graph_function in module.functions:
-                attach_presburger_system(graph_function, presburger)
-        compile_bundle = compile_graph_module(
-            module,
-            source_origin=source_origin,
-            target=target_kind,
-            cpu_tile=(int(cpu_tile[0]), int(cpu_tile[1]), int(cpu_tile[2])),
-            options={
-                "cpu_tile": list(tuple(int(v) for v in cpu_tile)),
-                "deterministic": deterministic,
-                "seed": seed,
-            },
-        )
-        if diagnostics:
-            compile_bundle = CompileArtifactBundle(
-                request=compile_bundle.request,
-                graph=compile_bundle.graph,
-                schedule=compile_bundle.schedule,
-                tile=compile_bundle.tile,
-                target_ir=compile_bundle.target_ir,
-                backend=compile_bundle.backend,
-                executable=compile_bundle.executable,
-                runtime_status=compile_bundle.runtime_status,
-                execution_mode=compile_bundle.execution_mode,
-                execution_kind=compile_bundle.execution_kind,
-                diagnostics=tuple(diagnostics) + compile_bundle.diagnostics,
-                trace_events=compile_bundle.trace_events,
-                tool_invocations=compile_bundle.tool_invocations,
-                cpu_plan=compile_bundle.cpu_plan,
-            )
-        cpu_plan = compile_bundle.cpu_plan
-        diagnostics = list(compile_bundle.diagnostics)
-        compile_result = compile_result_from_bundle(compile_bundle, module=module)
-        return _GraphIREmission(
-            module=module, cpu_plan=cpu_plan, compile_bundle=compile_bundle,
-            compile_result=compile_result, diagnostics=diagnostics,
-            trace_deferred=False)
+        return _compile_emitted_module(
+            module, frontend_diagnostics, source_text=source_text,
+            source_origin=source_origin, target_kind=target_kind,
+            cpu_tile=cpu_tile, deterministic=deterministic, seed=seed,
+            constraints=constraints)
     except _AutoBatchSkipEmission:
         # auto_batch route is on; emission was skipped on purpose. Empty module
         # + no plan/bundle makes __call__ fall through to ``self._fn`` (the
@@ -6220,7 +6607,7 @@ def _jit_emit_graph_ir(
             frontend_diagnostics = _recover_frontend_diagnostics(
                 fn, source_text=source_text, source_origin=source_origin, effect_tag=effect_tag,
                 target_attr=target_attr,
-                prefer_abstract_trace=inferred_effect == Effect.pure,
+                prefer_abstract_trace=_abstract_trace_preferred(inferred_effect),
                 legality_target=_legality_target_for(target),
             )
         return _GraphIREmission(

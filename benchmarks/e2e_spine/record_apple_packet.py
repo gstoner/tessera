@@ -51,9 +51,10 @@ class FamilyPlan:
     fixture_id: str
     route: str
     op_name: str
-    # Fixture operands are reshaped to this rank before packaging; `None` keeps
-    # the corpus shape. The Apple GPU GEMM contract is batched-only, so the 2-D
-    # matmul fixture is proven as a batch-1 BMM.
+    # Fixture operands are reshaped to a batch-1 rank-3 view before packaging.
+    # No current plan sets it: the Graph verifier requires a rank-2
+    # tessera.matmul, and the Apple GPU f32 scheduled matmul packages a rank-2
+    # product to the same batch-1 BMM route (`apple_gpu_bmm_f32_batch1`).
     batched: bool
     timing_shape: tuple[int, ...]
 
@@ -61,7 +62,7 @@ class FamilyPlan:
 APPLE_GPU_PLANS = (
     FamilyPlan(
         "matmul", "matmul-f32-2x3x2-v1", "apple_gpu_bmm_f32_batch1",
-        "tessera.matmul", True, (1, 256, 256, 256),
+        "tessera.matmul", False, (256, 256, 256),
     ),
     FamilyPlan(
         "softmax", "softmax-f32-2x2-extreme-v1", "apple_gpu_msl_softmax_f32",
@@ -192,8 +193,18 @@ def _timing_bindings(plan: FamilyPlan) -> tuple[dict, np.ndarray]:
 def _packager(lane: Lane) -> Callable[..., Any]:
     if lane.target == "apple_gpu":
         from tessera.compiler import apple_native
+        from tessera.compiler.scheduled_matmul import lower_scheduled_matmul
 
-        return apple_native.package_native
+        def package(module, *, pipeline_name):
+            # `package_native` no longer owns the plain matmul: production
+            # packages it from the native scheduled artifact.
+            if module.functions[0].body[0].op_name == "tessera.matmul":
+                return apple_native.package_scheduled_matmul(
+                    lower_scheduled_matmul(module, target="apple_gpu"),
+                    pipeline_name=pipeline_name)
+            return apple_native.package_native(module, pipeline_name=pipeline_name)
+
+        return package
     from tessera.compiler import apple_cpu_native
 
     return apple_cpu_native.package_native
@@ -369,8 +380,13 @@ def _prove_gpu_placement(plan: FamilyPlan, bindings: dict) -> dict[str, Any]:
         probe.argtypes = [pointer, pointer, ctypes.c_int32, ctypes.c_int32]
         status = probe(x.ctypes.data_as(pointer), out.ctypes.data_as(pointer),
                        ctypes.c_int32(x.shape[0]), ctypes.c_int32(x.shape[1]))
-    elif plan.batched:
-        a, b = flat("a", 3), flat("b", 3)
+    elif plan.op_name == "tessera.matmul":
+        # The rank-2 product dispatches the same BMM symbol with batch 1, as
+        # the runtime's descriptor launch does.
+        rank = 3 if plan.batched else 2
+        a, b = flat("a", rank), flat("b", rank)
+        if rank == 2:
+            a, b = a.reshape(1, *a.shape), b.reshape(1, *b.shape)
         batch, m, k = a.shape
         n = b.shape[2]
         out = np.zeros((batch, m, n), dtype=np.float32)

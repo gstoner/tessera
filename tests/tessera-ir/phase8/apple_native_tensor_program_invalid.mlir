@@ -2,6 +2,7 @@
 // profile fails closed with a stable diagnostic rather than reaching a lane
 // that cannot carry it (Decision #21).
 //
+// REQUIRES: tessera-apple-backend
 // RUN: not tessera-opt %s --split-input-file --tessera-graph-to-schedule 2>&1 | FileCheck %s
 
 // relu has no Apple scheduled kernel.

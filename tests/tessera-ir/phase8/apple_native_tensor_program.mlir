@@ -4,6 +4,7 @@
 // program-owned private buffer, and the frame names the Apple target.
 // Without the request an Apple program is not claimed (Decision #10a).
 //
+// REQUIRES: tessera-apple-backend
 // RUN: tessera-opt %s --split-input-file --verify-each \
 // RUN:   --tessera-graph-to-schedule --tessera-schedule-to-tile | FileCheck %s
 

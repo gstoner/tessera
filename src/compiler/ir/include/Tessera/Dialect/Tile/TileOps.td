@@ -1042,6 +1042,18 @@ def Tile_ArgReduceKernelOp : Tile_Op<"argreduce_kernel"> {
   let hasVerifier = 1;
 }
 
+// AR-DECODE-PROGRAM-1 S1c: embedding row gather. Inputs are table f32[V, H],
+// tokens i32[B], out f32[B, H], status i32[1], then V, H and B. A token
+// outside [0, V) leaves its row unwritten and sets status[0] = 1; the launcher
+// then refuses the call (index_bounds = "kernel_checked_status_word").
+def Tile_EmbeddingGatherKernelOp : Tile_Op<"embedding_gather_kernel"> {
+  let summary = "Launch-level bounds-checked embedding row gather";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
 // Launch-level inclusive row scan. Inputs are source, destination, flattened
 // row count, and scan width.
 def Tile_ScanKernelOp : Tile_Op<"scan_kernel"> {

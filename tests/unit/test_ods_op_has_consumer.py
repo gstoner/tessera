@@ -286,6 +286,8 @@ def test_scan_parses_every_ods_form() -> None:
         "schedule.paged_kv_write",
         "tile.paged_kv_write_kernel",
         "schedule.argreduce",              # AR-DECODE-PROGRAM-1 S1b
+        "schedule.embedding_gather",       # AR-DECODE-PROGRAM-1 S1c
+        "tile.embedding_gather_kernel",    # AR-DECODE-PROGRAM-1 S1c
         "tile.tmem.store",                 # dotted mnemonic
         "tessera.neighbors.halo.region",   # dotted dialect name
     ):
@@ -310,7 +312,8 @@ def test_scan_parses_every_ods_form() -> None:
 # 697 -> 698: native storage-preserving schedule.binary_kernel.
 # 701 -> 703: Graph tessera.count_nonzero and tessera.top_k (Apple GPU descriptors).
 # 706 -> 707: schedule.argreduce (AR-DECODE-PROGRAM-1 S1b, sm_120 row argmax).
-_DECLARED_OP_RECORDS = 707
+# 707 -> 709: schedule.embedding_gather and tile.embedding_gather_kernel (AR-DECODE S1c).
+_DECLARED_OP_RECORDS = 709
 
 
 def test_scan_calls_a_known_consumed_op_consumed() -> None:

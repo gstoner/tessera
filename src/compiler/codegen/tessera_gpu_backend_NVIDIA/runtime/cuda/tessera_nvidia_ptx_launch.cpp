@@ -122,6 +122,7 @@ constexpr const char* kTilePagedKV = "tessera_tile_paged_kv_read_f32_direct";
 constexpr const char* kTilePagedKVWrite = "tessera_tile_paged_kv_write_f32_direct";
 // AR-DECODE-PROGRAM-1 S1b: `tessera_tile_argreduce_{argmax,argmin}_f32_<hash10>`.
 constexpr const char* kTileArgReducePrefix = "tessera_tile_argreduce_";
+constexpr const char* kTileEmbeddingGatherPrefix = "tessera_tile_embedding_gather_f32_";
 // Compiler-owned static FP4 expansion image (SM120-FP4-EXPAND-NATIVE-20261103):
 // entry `tessera_nvfp4_expand_<schedule hash prefix>`.
 constexpr const char* kNvfp4ExpandPrefix = "tessera_nvfp4_expand_";
@@ -1405,6 +1406,51 @@ int invokeArgReduce(CUfunction fn, void** buffers, size_t nbuf,
         !cuOk(cuMemcpyDtoH(buffers[1], dout, outputBytes), "cuMemcpyDtoH")) rc=3;
     cuMemFree(dx);
     cuMemFree(dout);
+    return rc;
+}
+
+// AR-DECODE-PROGRAM-1 S1c. Buffers: table [V, H] f32 (in), tokens [B] i32
+// (in), out [B, H] f32 (out), status [1] i32 (out, launch-owned). One
+// 128-thread CTA per token row. The kernel bounds-checks every token on the
+// device; a nonzero status refuses the call and nothing is copied back.
+int invokeEmbeddingGather(CUfunction fn, void** buffers, size_t nbuf,
+                          const int64_t* dims, size_t ndim) {
+    if (nbuf != 4 || ndim != 3) return 5;
+    const long long V=dims[0], H=dims[1], B=dims[2];
+    if (V<=0 || H<=0 || B<=0 || V>INT32_MAX || B>INT32_MAX) return 5;
+    auto checkedBytes=[](std::initializer_list<size_t> extents,size_t width,size_t& out) {
+        out=width; for(size_t extent:extents){if(extent && out>SIZE_MAX/extent)return false;out*=extent;} return true;
+    };
+    size_t tableBytes=0, tokenBytes=0, outBytes=0;
+    if (!checkedBytes({(size_t)V,(size_t)H},4,tableBytes) ||
+        !checkedBytes({(size_t)B},4,tokenBytes) ||
+        !checkedBytes({(size_t)B,(size_t)H},4,outBytes)) return 5;
+    size_t sizes[4] = {tableBytes, tokenBytes, outBytes, 4};
+    CUdeviceptr device[4] = {};
+    int rc = 0;
+    for (int i=0;i<4;++i) if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) { rc=3; break; }
+    if (!rc) for (int i=0;i<2;++i)
+        if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) { rc=3; break; }
+    if (!rc && !cuOk(cuMemsetD32(device[3], 0, 1), "cuMemsetD32")) rc=3;
+    int status = 0;
+    if (!rc) {
+        long long args64[3] = {V, H, B};
+        void* args[7] = {&device[0], &device[1], &device[2], &device[3],
+                         &args64[0], &args64[1], &args64[2]};
+        if (!cuOk(cuLaunchKernel(fn,(unsigned)B,1,1,128,1,1,0,0,args,0), "cuLaunchKernel") ||
+            !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+            !cuOk(cuMemcpyDtoH(&status, device[3], 4), "cuMemcpyDtoH")) rc=3;
+    }
+    if (!rc) {
+        std::memcpy(buffers[3], &status, 4);
+        if (status != 0) {
+            g_last_error = "embedding gather refused: a token is outside [0, vocab)";
+            rc = 6;
+        } else if (!cuOk(cuMemcpyDtoH(buffers[2], device[2], outBytes), "cuMemcpyDtoH")) {
+            rc = 3;
+        }
+    }
+    for (CUdeviceptr ptr:device) if (ptr) cuMemFree(ptr);
     return rc;
 }
 
@@ -3012,6 +3058,9 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
     if (std::strncmp(kernel_name, kTileArgReducePrefix,
                      std::strlen(kTileArgReducePrefix)) == 0)
         return invokeArgReduce(fn, buffers, nbuf, dims, ndim);
+    if (std::strncmp(kernel_name, kTileEmbeddingGatherPrefix,
+                     std::strlen(kTileEmbeddingGatherPrefix)) == 0)
+        return invokeEmbeddingGather(fn, buffers, nbuf, dims, ndim);
     if (std::strncmp(kernel_name, kNvfp4ExpandPrefix,
                      std::strlen(kNvfp4ExpandPrefix)) == 0)
         return invokeNvfp4Expand(fn, buffers, nbuf, dims, ndim);

@@ -381,10 +381,10 @@ dynamic_slice,tessera.dynamic_slice,indexing,no,fp32,fp32,int32,public,registere
 dynamic_slice,tessera.dynamic_slice,indexing,no,int32,int32,int32,public,registered,complete,planned,unsupported,unsupported,unsupported,absent,absent,absent,absent,absent,absent,absent,tile/physical/direct_test
 dynamic_update_slice,tessera.dynamic_update_slice,indexing,no,fp32,fp32,int32,public,registered,complete,reference,reference,legal_only,reference,absent,absent,absent,absent,absent,absent,absent,physical/direct_test
 dynamic_update_slice,tessera.dynamic_update_slice,indexing,no,int32,int32,int32,public,registered,complete,planned,unsupported,unsupported,unsupported,absent,absent,absent,absent,absent,absent,absent,tile/physical/direct_test
-gather,tessera.gather,indexing,no,bf16,bf16,int32,public,registered,complete,fused,unsupported,legal_only,unsupported,fused,absent,absent,absent,absent,absent,absent,
-gather,tessera.gather,indexing,no,fp16,fp16,int32,public,registered,complete,fused,unsupported,unsupported,unsupported,fused,absent,absent,absent,absent,absent,absent,
-gather,tessera.gather,indexing,no,fp32,fp32,int32,public,registered,complete,fused,reference,legal_only,reference,fused,absent,absent,absent,absent,absent,absent,
-gather,tessera.gather,indexing,no,int32,int32,int32,public,registered,complete,planned,unsupported,unsupported,unsupported,unsupported,absent,absent,absent,absent,absent,absent,tile/physical/direct_test
+gather,tessera.gather,indexing,no,bf16,bf16,int32,public,registered,complete,fused,unsupported,legal_only,unsupported,fused,unsupported,absent,absent,absent,absent,absent,
+gather,tessera.gather,indexing,no,fp16,fp16,int32,public,registered,complete,fused,unsupported,unsupported,unsupported,fused,unsupported,absent,absent,absent,absent,absent,
+gather,tessera.gather,indexing,no,fp32,fp32,int32,public,registered,complete,fused,reference,legal_only,reference,fused,planned,absent,absent,absent,absent,absent,
+gather,tessera.gather,indexing,no,int32,int32,int32,public,registered,complete,planned,unsupported,unsupported,unsupported,unsupported,unsupported,absent,absent,absent,absent,absent,tile/physical/direct_test
 index_select,tessera.index_select,indexing,no,fp32,fp32,int32,public,registered,complete,reference,reference,legal_only,reference,absent,absent,absent,absent,absent,absent,absent,physical/direct_test
 index_select,tessera.index_select,indexing,no,int32,int32,int32,public,registered,complete,planned,unsupported,unsupported,unsupported,absent,absent,absent,absent,absent,absent,absent,tile/physical/direct_test
 index_update,tessera.index_update,indexing,no,fp32,fp32,int32,public,registered,complete,reference,reference,legal_only,reference,absent,absent,absent,absent,absent,absent,absent,physical/direct_test

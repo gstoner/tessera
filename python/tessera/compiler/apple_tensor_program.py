@@ -445,3 +445,243 @@ def execute_frame(program: AppleTensorProgram, inputs: Mapping[str, Any]):
         "gpu_time_ns": int(receipt[3]) if receipt[3] >= 0 else None,
         "members": [record["member"] for record in frame["stages"]],
     }
+
+
+# --------------------------------------------------------------------------
+# Slice 4: RuntimeArtifact export and compiler-checked restoration.
+# --------------------------------------------------------------------------
+
+ARTIFACT_SCHEMA = "tessera.apple.tensor_program.v1"
+COMPILER_PATH = "canonical_apple_tensor_program"
+_GRAPH_SCHEMA = "tessera.apple.tensor_program_graph.v1"
+_SCALARS = (str, int, float, bool, type(None))
+
+
+def _type_record(value: Any) -> dict:
+    from .graph_ir import IRType
+
+    if not isinstance(value, IRType):
+        raise AppleTensorProgramError("Apple tensor Graph type is not an IRType")
+    return {"mlir": value.mlir_str, "shape": list(value.shape),
+            "dtype": value.dtype, "layout": value.layout}
+
+
+def _type_from_record(record: Any):
+    from .graph_ir import IRType
+
+    if (not isinstance(record, dict) or set(record) != {"mlir", "shape", "dtype", "layout"}
+            or not isinstance(record["mlir"], str) or not isinstance(record["shape"], list)
+            or any(not isinstance(extent, str) for extent in record["shape"])
+            or not isinstance(record["dtype"], (str, type(None)))
+            or not isinstance(record["layout"], (str, type(None)))):
+        raise AppleTensorProgramError("Apple tensor artifact Graph type record differs")
+    return IRType(record["mlir"], tuple(record["shape"]), record["dtype"], record["layout"])
+
+
+def _scalar_map(value: Any, what: str) -> dict:
+    if value is None:
+        return {}
+    if (not isinstance(value, dict) or any(not isinstance(key, str) for key in value)
+            or any(not isinstance(item, _SCALARS) for item in value.values())):
+        raise AppleTensorProgramError(f"Apple tensor Graph {what} are not scalar")
+    return dict(value)
+
+
+_SPAN = ("line", "col", "end_line", "end_col", "source_name")
+
+
+def _span_record(span: Any):
+    from .graph_ir import SourceSpan
+
+    if span is None:
+        return None
+    if not isinstance(span, SourceSpan):
+        raise AppleTensorProgramError("Apple tensor Graph source location is not a SourceSpan")
+    return {name: getattr(span, name) for name in _SPAN}
+
+
+def _span_from_record(record: Any):
+    from .graph_ir import SourceSpan
+
+    if record is None:
+        return None
+    if (not isinstance(record, dict) or set(record) != set(_SPAN)
+            or any(type(record[name]) is not int for name in ("line", "col"))
+            or any(not isinstance(record[name], (int, type(None))) or isinstance(record[name], bool)
+                   for name in ("end_line", "end_col"))
+            or not isinstance(record["source_name"], (str, type(None)))):
+        raise AppleTensorProgramError("Apple tensor artifact source location differs")
+    return SourceSpan(**record)
+
+
+def _optional_text(value: Any, what: str):
+    if not isinstance(value, (str, type(None))):
+        raise AppleTensorProgramError(f"Apple tensor Graph {what} are not text")
+    return value
+
+
+def _graph_record(graph: GraphIRModule) -> dict:
+    """The program's Graph as data: only what the profile's ops carry."""
+    (function,) = graph.functions
+    ops = []
+    for op in function.body:
+        if op.op_name not in _CARRIERS or op.result is None:
+            raise AppleTensorProgramError(f"Apple tensor artifact cannot record {op.op_name}")
+        ops.append({
+            "result": op.result, "op_name": op.op_name, "operands": list(op.operands),
+            "operand_types": list(op.operand_types), "result_type": op.result_type,
+            "attrs": _optional_text(op.attrs, "op attributes"),
+            "kwargs": _scalar_map(op.kwargs, "op keywords"),
+            "inferred_type": _type_record(op.inferred_type),
+            "source_span": _span_record(op.source_span),
+        })
+    return {
+        "schema": _GRAPH_SCHEMA,
+        "module_attrs": _scalar_map(graph.module_attrs, "module attributes"),
+        "name": function.name,
+        "args": [{"name": arg.name, "type": _type_record(arg.ir_type)} for arg in function.args],
+        "result_types": [_type_record(value) for value in function.result_types],
+        "fn_attrs": _scalar_map(function.fn_attrs, "function attributes"),
+        "body": ops, "return_values": list(function.return_values),
+    }
+
+
+def _graph_from_record(record: Any) -> GraphIRModule:
+    keys = {"schema", "module_attrs", "name", "args", "result_types", "fn_attrs",
+            "body", "return_values"}
+    op_keys = {"result", "op_name", "operands", "operand_types", "result_type", "attrs",
+               "kwargs", "inferred_type", "source_span"}
+    if (not isinstance(record, dict) or set(record) != keys or record["schema"] != _GRAPH_SCHEMA
+            or not isinstance(record["name"], str) or not isinstance(record["args"], list)
+            or not isinstance(record["body"], list) or not isinstance(record["result_types"], list)
+            or not isinstance(record["return_values"], list)
+            or any(not isinstance(value, str) for value in record["return_values"])):
+        raise AppleTensorProgramError("Apple tensor artifact Graph record differs")
+    args = []
+    for arg in record["args"]:
+        if not isinstance(arg, dict) or set(arg) != {"name", "type"} or not isinstance(arg["name"], str):
+            raise AppleTensorProgramError("Apple tensor artifact Graph argument differs")
+        args.append(IRArg(arg["name"], _type_from_record(arg["type"])))
+    body = []
+    for op in record["body"]:
+        if (not isinstance(op, dict) or set(op) != op_keys or op["op_name"] not in _CARRIERS
+                or not isinstance(op["result"], str) or not isinstance(op["result_type"], str)
+                or any(not isinstance(value, str) for value in op["operands"] + op["operand_types"])):
+            raise AppleTensorProgramError("Apple tensor artifact Graph op differs")
+        inferred = _type_from_record(op["inferred_type"])
+        body.append(IROp(
+            result=op["result"], op_name=op["op_name"], operands=list(op["operands"]),
+            operand_types=list(op["operand_types"]), result_type=op["result_type"],
+            attrs=_optional_text(op["attrs"], "op attributes"),
+            kwargs=_scalar_map(op["kwargs"], "op keywords"),
+            source_span=_span_from_record(op["source_span"]),
+            inferred_type=inferred, inferred_types=(inferred,)))
+    function = GraphIRFunction(
+        name=record["name"], args=args,
+        result_types=[_type_from_record(value) for value in record["result_types"]],
+        body=body, fn_attrs=_scalar_map(record["fn_attrs"], "function attributes"),
+        return_values=list(record["return_values"]))
+    return GraphIRModule(functions=[function],
+                         module_attrs=_scalar_map(record["module_attrs"], "module attributes"))
+
+
+def _member_record(stage: AppleTensorStage) -> dict:
+    descriptor = stage.package.descriptor
+    return {"member": stage.index, "op_name": stage.op_name, "carrier": stage.carrier,
+            "abi_id": descriptor.abi_id, "route": descriptor.provenance.get("route"),
+            "target_ir_sha256": hashlib.sha256(stage.package.target_ir.encode()).hexdigest(),
+            "image_digest": stage.package.image.image_digest}
+
+
+def runtime_artifact(program: AppleTensorProgram, *, argument_names=()):
+    """Export the compiler product; restoration requires the matching compiler.
+
+    The artifact carries the program's Graph as a narrow record, its original
+    source/Schedule/Tile text and a digest of every member package. It carries
+    no executable payload of its own: restoration recompiles the recorded Graph
+    and refuses unless every level and every member package matches.
+    """
+    from tessera.runtime import RuntimeArtifact
+
+    if not isinstance(program, AppleTensorProgram):
+        raise TypeError("Apple tensor artifact requires a compiled Apple tensor program")
+    names = tuple(argument_names)
+    roots = [arg.name for arg in program.graph.functions[0].args]
+    if names and (len(names) != len(roots) or len(set(names)) != len(names)
+                  or any(not isinstance(name, str) or not name for name in names)):
+        raise ValueError("Apple tensor argument names differ from source roots")
+    graph = _graph_record(program.graph)
+    # The record must rebuild the exact source the program was compiled from,
+    # or the artifact could never be restored; refuse it at export instead.
+    if _source(_graph_from_record(graph)) != program.source_ir:
+        raise AppleTensorProgramError("Apple tensor Graph record does not rebuild its source")
+    manifest = {
+        "schema": ARTIFACT_SCHEMA, "graph": graph, "source_ir": program.source_ir,
+        "schedule_ir": program.schedule_ir, "tile_ir": program.tile_ir,
+        "members": [_member_record(stage) for stage in program.stages],
+        "compiler_identity": program.compiler_identity,
+    }
+    return RuntimeArtifact(
+        graph_ir=program.source_ir, schedule_ir=program.schedule_ir, tile_ir=program.tile_ir,
+        target_ir="\n".join(stage.package.target_ir for stage in program.stages),
+        metadata={"target": "apple_gpu", "compiler_path": COMPILER_PATH,
+                  "execution_kind": "native_gpu", "runtime_status": "ready", "executable": True,
+                  "arg_names": list(names or roots), "native_program": manifest,
+                  "restoration": "matching_compiler_required"})
+
+
+def restore_runtime_artifact(artifact) -> AppleTensorProgram:
+    """Recompile the recorded Graph with the configured compiler; refuse any drift."""
+    metadata = getattr(artifact, "metadata", None) or {}
+    data = metadata.get("native_program")
+    keys = {"schema", "graph", "source_ir", "schedule_ir", "tile_ir", "members",
+            "compiler_identity"}
+    if (metadata.get("target") != "apple_gpu" or metadata.get("compiler_path") != COMPILER_PATH
+            or not isinstance(data, dict) or set(data) != keys
+            or data["schema"] != ARTIFACT_SCHEMA or not isinstance(data["members"], list)
+            or any(getattr(artifact, field) != data[key] for field, key in (
+                ("graph_ir", "source_ir"), ("schedule_ir", "schedule_ir"), ("tile_ir", "tile_ir")))):
+        raise AppleTensorProgramError("Apple tensor runtime artifact differs from its compiler product")
+    selected = find_tessera_opt()
+    if selected is None:
+        raise RuntimeError("Apple tensor artifact restoration requires the matching compiler")
+    if _tool_digest(Path(selected).resolve()) != data["compiler_identity"]:
+        raise AppleTensorProgramError("Apple tensor artifact was compiled by a different compiler")
+    graph = _graph_from_record(data["graph"])
+    if _source(graph) != data["source_ir"]:
+        raise AppleTensorProgramError("Apple tensor artifact Graph does not rebuild its source")
+    program = compile_apple_tensor_program(graph)
+    if (program.source_ir, program.schedule_ir, program.tile_ir) != (
+            data["source_ir"], data["schedule_ir"], data["tile_ir"]):
+        raise AppleTensorProgramError("Apple tensor artifact differs from its compiler replay")
+    if [_member_record(stage) for stage in program.stages] != data["members"]:
+        raise AppleTensorProgramError("Apple tensor artifact member packages differ on replay")
+    if artifact.target_ir != "\n".join(stage.package.target_ir for stage in program.stages):
+        raise AppleTensorProgramError("Apple tensor artifact Target IR differs on replay")
+    return program
+
+
+def execute_runtime_artifact(artifact, args):
+    """Restore a checked product and run it through the Metal frame owner."""
+    from collections.abc import Mapping as _Mapping
+    from tessera.runtime import NativeProgramExecution
+
+    program = restore_runtime_artifact(artifact)
+    roots = [arg.name for arg in program.graph.functions[0].args]
+    names = (artifact.metadata or {}).get("arg_names")
+    if (not isinstance(names, list) or len(names) != len(roots)
+            or any(not isinstance(name, str) for name in names) or len(set(names)) != len(names)):
+        raise ValueError("Apple tensor artifact argument names differ from its roots")
+    if isinstance(args, _Mapping):
+        if set(args) != set(names):
+            raise ValueError("Apple tensor named arguments differ")
+        ordered = [args[name] for name in names]
+    elif isinstance(args, (tuple, list)):
+        if len(args) != len(roots):
+            raise ValueError("Apple tensor positional arguments differ from its roots")
+        ordered = list(args)
+    else:
+        raise ValueError("Apple tensor execution requires a root sequence or mapping")
+    output, receipt = execute_frame(program, dict(zip(roots, ordered)))
+    return NativeProgramExecution(output, ({
+        "ok": True, "execution_kind": "native_gpu", "compiler_path": COMPILER_PATH, **receipt},))

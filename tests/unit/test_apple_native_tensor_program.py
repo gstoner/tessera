@@ -220,3 +220,110 @@ def test_frame_owner_refuses_a_frame_whose_buffers_do_not_fit_the_stage():
     receipt = (ctypes.c_int64 * 4)()
     assert owner(buffers, hosts, 2, stage, none, none, 1, receipt) == -1
     assert list(receipt) == [0, 0, 0, 0] and (out == -1).all()
+
+
+# --- Slice 4: public @jit binding and RuntimeArtifact restoration ---------
+
+
+def _jit_scores_values():
+    @ts.jit(target="apple_gpu")
+    def program(s, v):
+        return ts.ops.matmul(ts.ops.softmax(s, axis=-1), v, output_dtype="fp32")
+    return program
+
+
+def _tampered(artifact, **changes):
+    import copy
+
+    metadata = copy.deepcopy(artifact.metadata)
+    manifest = metadata["native_program"]
+    for key, edit in changes.items():
+        manifest[key] = edit(manifest[key])
+    fields = {name: manifest[name] for name in ("source_ir", "schedule_ir", "tile_ir")}
+    return dataclasses.replace(artifact, metadata=metadata, graph_ir=fields["source_ir"],
+                               schedule_ir=fields["schedule_ir"], tile_ir=fields["tile_ir"])
+
+
+def test_the_artifact_records_a_graph_that_rebuilds_its_source(program):
+    import json
+
+    artifact = atp.runtime_artifact(program, argument_names=("s", "v"))
+    json.dumps(artifact.metadata)  # portable data, no executable payload
+    assert artifact.metadata["compiler_path"] == "canonical_apple_tensor_program"
+    assert artifact.metadata["restoration"] == "matching_compiler_required"
+    graph = atp._graph_from_record(artifact.metadata["native_program"]["graph"])
+    assert atp._source(graph) == program.source_ir
+    restored = atp.restore_runtime_artifact(artifact)
+    assert (restored.tile_ir, len(restored.stages)) == (program.tile_ir, 2)
+
+
+@pytest.mark.parametrize("field, edit, why", [
+    ("tile_ir", lambda t: t.replace("tessera.macro_tile_m = 32", "tessera.macro_tile_m = 64"),
+     "differs from its compiler replay"),
+    ("members", lambda m: [{**m[0], "image_digest": "0" * 64}, m[1]],
+     "member packages differ on replay"),
+    ("compiler_identity", lambda _: "0" * 64, "compiled by a different compiler"),
+    ("graph", lambda g: {**g, "body": [g["body"][0], {**g["body"][1], "kwargs": {"output_dtype": "fp16"}}]},
+     "does not rebuild its source"),
+])
+def test_restoration_refuses_an_artifact_that_differs_from_the_compiler(program, field, edit, why):
+    artifact = _tampered(atp.runtime_artifact(program), **{field: edit})
+    with pytest.raises(atp.AppleTensorProgramError, match=why):
+        atp.restore_runtime_artifact(artifact)
+
+
+@pytest.mark.hardware_apple_gpu
+def test_public_jit_runs_the_program_in_one_command_buffer(monkeypatch):
+    from tests._support.apple import require_apple_chip_identity
+    from tessera import runtime as rt
+
+    require_apple_chip_identity()
+    s, v = _half(100, 37, seed=11), _half(37, 53, seed=12)
+    program = _jit_scores_values()
+    output = program(s, v)
+    receipt = program._apple_tensor_last_receipt
+    assert receipt["compiler_path"] == "canonical_apple_tensor_program"
+    assert receipt["frame_owned"] is True
+    assert (receipt["command_buffers"], receipt["dispatches"], receipt["private_device_buffers"]) == (1, 2, 1)
+    # The requested fp32 result dtype is kept (the MPS lane returned fp16).
+    assert output.dtype == np.float32 and output.shape == (100, 53)
+    compiled, _ = next(iter(program._apple_tensor_program_cache.values()))
+    roots = [arg.name for arg in compiled.graph.functions[0].args]
+    framed, _ = atp.execute_frame(compiled, dict(zip(roots, (s, v))))
+    assert output.tobytes() == framed.tobytes()
+    scores = s.astype(np.float32)
+    weights = np.exp(scores - scores.max(-1, keepdims=True))
+    probabilities = (weights / weights.sum(-1, keepdims=True)).astype(np.float16)
+    np.testing.assert_allclose(output, probabilities.astype(np.float32) @ v.astype(np.float32),
+                               rtol=0, atol=2e-3)
+    # A warm call binds the compiled program; it neither traces nor compiles.
+    monkeypatch.setattr(atp, "compile_apple_tensor_program",
+                        lambda *_: pytest.fail("warm call recompiled"))
+    assert program(s, v).tobytes() == output.tobytes()
+    # The exported artifact restores through the compiler and replays exactly.
+    monkeypatch.undo()
+    artifact = program.runtime_artifact()
+    assert artifact.metadata["arg_names"] == ["s", "v"]
+    launched = rt.launch(artifact, {"s": s, "v": v})
+    assert launched["ok"] and launched["execution_kind"] == "native_gpu"
+    assert np.asarray(launched["output"]).tobytes() == output.tobytes()
+
+
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.parametrize("fn, arrays", [
+    # Inputs outside the profile's f16 storage: declined before tracing.
+    (lambda s, v: ts.ops.matmul(ts.ops.softmax(s, axis=-1), v),
+     (_half(64, 32).astype(np.float32), _half(32, 48).astype(np.float32))),
+    # A producer the owner has no member for: declined after tracing.
+    (lambda s, v: ts.ops.matmul(ts.ops.relu(s), v, output_dtype="fp32"),
+     (_half(64, 32), _half(32, 48))),
+])
+def test_public_jit_leaves_programs_outside_the_profile_to_other_routes(fn, arrays):
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    program = ts.jit(target="apple_gpu")(fn)
+    program(*arrays)
+    assert program._apple_tensor_last_receipt is None
+    assert program._apple_tensor_program_cache and set(program._apple_tensor_program_cache.values()) == {None}
+    assert program.runtime_artifact().metadata.get("compiler_path") != "canonical_apple_tensor_program"

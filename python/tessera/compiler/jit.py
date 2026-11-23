@@ -951,6 +951,9 @@ class JitFn:
             self._bounded_lhs = BoundedLhsDispatcher(self,validate_bounds(shape_bounds),
                 bounded_source_certificate or SourceCertificate(fn,source_text),bounded_rhs_storage_order)
         self._native_tensor_program_cache: Dict[tuple, Any] = {}
+        self._apple_tensor_program_cache: Dict[tuple, Any] = {}
+        self._apple_tensor_last_program: Any = None
+        self._apple_tensor_last_receipt: Any = None
         self._native_tensor_thread_state = _NativeTensorThreadState()
         self._native_tensor_lock = threading.RLock()
         self._native_tensor_pid: int | None = None
@@ -1647,7 +1650,8 @@ class JitFn:
                 or self._rocm_quantized_product_last_program is not None
                 or getattr(self, "_native_source_attention_last_owner", None) is not None):
             self._cached_artifact = None
-        if self._native_tensor_last_program is not None:
+        if (self._native_tensor_last_program is not None
+                or self._apple_tensor_last_program is not None):
             self._cached_artifact = None
         # Every call starts from the decoration plan; tracer authority swaps
         # in a traced one below. The native routes in between read
@@ -1656,6 +1660,8 @@ class JitFn:
         self.executed_plan_frontend = None
         self.executed_plan_fallback_reason = None
         self._native_tensor_last_program = None
+        self._apple_tensor_last_program = None
+        self._apple_tensor_last_receipt = None
         self._native_tensor_last_owner = None
         self._native_tensor_last_receipt = None
         self._native_source_attention_last_owner = None
@@ -1715,6 +1721,9 @@ class JitFn:
             native_tensor = self._try_native_tensor_program_call(args, kwargs)
             if native_tensor is not _JIT_FALLBACK:
                 return native_tensor
+            apple_tensor = self._try_apple_tensor_program_call(args, kwargs)
+            if apple_tensor is not _JIT_FALLBACK:
+                return apple_tensor
             # Explicit bounded compilation already captured and verified the
             # frontend Graph. Replay binds that immutable native program, as the
             # prepared matmul route above does, instead of re-running the tracer.
@@ -3903,6 +3912,88 @@ class JitFn:
             self.last_fallback_reason = None
             return result
 
+    def _compile_apple_tensor_program(self, ordered):
+        """Trace and compile an apple7 tensor program, or ``None`` to decline.
+
+        Declines (other Apple routes stay eligible) only before admission: a
+        missing compiler or runtime, inputs outside the profile's f16 storage, a
+        body that cannot be traced, a traced body that is not a
+        softmax/matmul chain ending in its product, or the compiler's own
+        ``APPLE_TENSOR_PROGRAM_UNSUPPORTED`` refusal. Any failure after the
+        compiler formed the program raises.
+        """
+        from . import apple_native, apple_tensor_program as atp
+        from . import scheduled_apple_gpu_descriptor as descriptor
+        from .scheduled_matmul import find_tessera_opt
+
+        if any(value.dtype.name != "float16" or value.ndim != 2 for value in ordered):
+            return None
+        tool = find_tessera_opt()
+        if (tool is None or not apple_native.tools_available()
+                or not descriptor.apple_gpu_value_lowering_available(str(tool))):
+            return None
+        try:
+            module = self._traced_autodiff_module(ordered, {})
+        except _DroppedCallTraceDecline:
+            raise
+        except Exception:
+            # The tracer cannot represent this body yet; the AST lanes own it.
+            return None
+        if len(module.functions) != 1:
+            return None
+        body = module.functions[0].body
+        if (len(body) < 2 or any(op.op_name not in atp._CARRIERS for op in body)
+                or body[-1].op_name != "tessera.matmul"):
+            return None
+        try:
+            program = atp.compile_apple_tensor_program(module)
+        except RuntimeError as error:
+            if "APPLE_TENSOR_PROGRAM_UNSUPPORTED" in str(error):
+                return None
+            raise
+        return program, module
+
+    def _try_apple_tensor_program_call(self, args, kwargs):
+        """APPLE-NTBI-2: run a compiler-formed apple7 tensor program.
+
+        The whole program runs in one Metal command buffer through the frame
+        owner (``apple_tensor_program.execute_frame``). Warm calls reuse the
+        compiled program for the same input signature.
+        """
+        if normalize_target_kind(self.target) != "apple_gpu" or self.differentiation_request is not None:
+            return _JIT_FALLBACK
+        import numpy as np
+        from . import apple_tensor_program as atp
+
+        inputs = self._ordered_inputs(args, kwargs, normalize_batch=False)
+        if (not inputs or len(inputs) != len(self.arg_names)
+                or not all(isinstance(value, np.ndarray) for value in inputs)):
+            return _JIT_FALLBACK
+        ordered = tuple(inputs)
+        signature = tuple((value.shape, value.dtype.str) for value in ordered)
+        cache = self._apple_tensor_program_cache
+        if signature not in cache:
+            if len(cache) >= 24:
+                del cache[next(iter(cache))]
+            cache[signature] = self._compile_apple_tensor_program(ordered)
+        compiled = cache[signature]
+        if compiled is None:
+            return _JIT_FALLBACK
+        program, module = compiled
+        roots = [arg.name for arg in program.graph.functions[0].args]
+        output, receipt = atp.execute_frame(program, dict(zip(roots, ordered, strict=True)))
+        self.graph_ir = module
+        self.frontend_authority = "tracer"
+        self.frontend_authority_error = None
+        self._apple_tensor_last_program = program
+        self._apple_tensor_last_receipt = {
+            "ok": True, "execution_kind": "native_gpu", "compiler_path": atp.COMPILER_PATH,
+            **receipt}
+        self._native_descriptor_last_receipt = self._apple_tensor_last_receipt
+        self._cached_artifact = None
+        self.last_fallback_reason = None
+        return output
+
     def _try_nvidia_lhs_call(self, args, kwargs):
         """Execute the traced LHS producer on native SM120."""
         if normalize_target_kind(self.target) != "nvidia_sm120" or self.differentiation_request is not None:
@@ -5590,6 +5681,10 @@ class JitFn:
 
         from tessera.runtime import RuntimeArtifact
 
+        if self._apple_tensor_last_program is not None:
+            from .apple_tensor_program import runtime_artifact as apple_tensor_artifact
+            return apple_tensor_artifact(self._apple_tensor_last_program,
+                                         argument_names=tuple(self.arg_names))
         if self._native_tensor_last_program is not None:
             from .native_tensor_program import runtime_artifact as native_tensor_artifact
             return native_tensor_artifact(self._native_tensor_last_program,

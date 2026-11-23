@@ -16483,10 +16483,11 @@ A full Mac `tests/unit` sweep had 758 failures and errors. Most were tests of NV
 - **Gap:** the native-VJP `attention_backward` plugin registers x86, ROCm and `nvidia_sm120` consumers but no `apple_gpu` consumer (`python/tessera/compiler/native_vjp_plugins.py`, `target_consumers`).
 - **What already exists:** the Metal backward kernels (APPLE-ATTN-BWD-1, `apple_native.package_scheduled_attention_backward`).
 - **To do:**
-  1. Register an Apple consumer over the existing Metal backward.
+  1. ~~Register an Apple consumer over the existing Metal backward.~~ **Landed 2026-11-22** (sync `APPLE-NTBI-1-attention-vjp-2026-11-22`, below).
   2. Add a source-program reverse route with an Apple-native portable restore.
   3. Add bounded sequence capacities.
-- **Tests that name this item:** the `*source_attention_reverse*`, `test_native_sm120_source_reverse.py`, `test_sm120_bounded_attention_pullback.py` and `test_sm120_bounded_source_rows.py` families.
+- **Steps 2 and 3 are not a port of the sm_120 route.** The source-program reverse plan (`native_source_attention_reverse.py`) is a saved-LSE norm → attention plan: C++ passes outline it, `--lower-tessera-nvidia-to-nvvm` lowers its members, and PTX images are sealed and restored. Apple's backward cannot carry a saved LSE: it recomputes the row statistics (`apple7_recompute`), and `lower_scheduled_attention_backward` refuses `lse_checkpoint="saved"` on `apple_gpu`. An Apple source reverse therefore needs its own recompute plan kind and Metal member images, not a retargeted copy.
+- **Tests that name this item:** the `*source_attention_reverse*`, `test_native_sm120_source_reverse.py`, `test_sm120_bounded_attention_pullback.py` and `test_sm120_bounded_source_rows.py` families. They cover steps 2 and 3 and still skip on the Mac.
 
 ### APPLE-NTBI-2 — native tensor DAG program
 - **Gap:** there is no general Graph → Schedule → Tile → Apple Target IR producer-DAG owner with owned intermediates, original-source replay, a shape plan and a Metal frame owner. `native_tensor_program.py` hard-codes sm_120 and PTX.
@@ -16514,5 +16515,17 @@ These need nothing on Apple:
 
 The sibling-refusal cases that name `apple_gpu` still run and pass on the Mac.
 
+
+## `APPLE-NTBI-1-attention-vjp-2026-11-22`: the attention VJP plugin has an Apple consumer
+
+`native_backward` on an `apple_gpu` program whose body is one `flash_attn`, `gqa_attention` or `mqa_attention` now runs the `attention_backward` native-VJP plugin. It refused before ("native_backward currently supports target='cpu'/'x86', verified ROCm lanes, or verified NVIDIA SM120 lanes"). The plugin lowers the traced reverse carrier (`tessera.flash_attn_bwd`) through `lower_scheduled_attention_backward(target="apple_gpu")`, which selects `apple7_recompute`. It packages the result with the existing `apple_native.package_scheduled_attention_backward`: the APPLE-ATTN-BWD-1 split route, with fp32 dQ/dK/dV and an fp32 bias. `runtime._execute_native_attention_vjp_package` launches that package; it never receives the forward Graph. The target consumer is `apple.metal_attention_backward`, with `execution_mode` `metal_runtime`, and the attestation comes from the live Metal device and names the package's artifact hash.
+
+Measured on the Mac (M1 Max, macOS 27.2, unsandboxed, a fresh `TesseraAppleRuntimeShared` built from this branch):
+- `tests/unit/test_apple_attention_vjp_plugin.py`: GQA (4 query heads, 2 KV heads, causal) at fp32, fp16 and bf16 storage matches the two-way split-reduced reference within 1e-7. The biased fp32 and fp16 `flash_attn` cases match too.
+- Every case attests `apple7` with an `exact_device` execution certificate.
+- Dropout is refused by the frontend differential certificate, and `lse_checkpoint="saved"` by the scheduled lowering.
+- `tests/device/apple/test_native_vjp_execution_certificates.py` now carries an attention row, so the `frontend_authority` dashboard's new `apple_gpu` `exact_device_packet` claim for `attention_backward` is backed by a run.
+
+Steps 2 and 3 of APPLE-NTBI-1 stay open (above).
 
 ## `AR-DECODE-PROGRAM-1-S1b-2026-11-22`: sibling outcome — not applicable — no Apple lowering changed; `schedule.argreduce` claims only `nvidia_sm120` modules. Apple belongs to slice S7. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4c-s1b--row-argmaxargmin-on-sm_120-2026-11-22))

@@ -213,7 +213,7 @@ def _record_lower(fn, prefer_abstract_trace: bool) -> None:
             try:
                 from tessera.compiler.effect_scan import scan_call_effects
                 sc = scan_call_effects(fn)
-                why += f"|{getattr(sc.effect,"name",sc.effect)}|eff={','.join(sc.effectful_ops)}|unres={','.join(sc.unresolved[:4])}"
+                why += f"|{getattr(sc.effect,'name',sc.effect)}|eff={','.join(sc.effectful_ops)}|unres={','.join(sc.unresolved[:4])}"
             except Exception as e:
                 why += f"|err:{e!r}"
         else:

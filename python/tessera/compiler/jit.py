@@ -1478,6 +1478,18 @@ class JitFn:
             raise TesseraJitError(
                 "specialize() does not compile a batched owner; specialize the "
                 "unbatched program")
+        if self.inferred_effect == Effect.top:
+            # The call-site scan found a call it cannot resolve (raw numpy, a
+            # host RNG, dynamic dispatch). A trace runs that call once and
+            # either drops it or freezes its result into an attribute, so the
+            # traced module is not the program a call executes -- the same
+            # reason ``_establish_tracer_authority`` refuses a non-pure body.
+            # Decline with the tracer prefix so ``for_signature`` and a read
+            # after a call fall back to what a call runs.
+            raise TesseraJitError(
+                "tracer frontend failed: the body makes a call the effect scan "
+                "cannot resolve (effect top); a trace would drop it or freeze "
+                "its result, so no specialization is compiled")
         with _concrete_signature(self):
             traced, _ = self._trace_frontend_capture(
                 args, kwargs, source_arg_names=True)

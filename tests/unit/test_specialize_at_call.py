@@ -187,3 +187,21 @@ def test_an_unresolvable_string_annotation_declares_nothing():
         return x
 
     assert _undeclared_parameters(local_type) == ("x",)
+
+
+def _host_call_dropped(x):
+    y = ts.ops.relu(x)
+    np.random.seed(0)
+    return y
+
+
+def test_specialize_refuses_a_body_with_unresolved_calls():
+    # The host call touches no traced value, so a trace would drop it (or,
+    # had it chosen an attribute, freeze its result).
+    fn = ts.jit(_host_call_dropped)
+    x = np.ones((3, 4), np.float32)
+    with pytest.raises(TesseraJitError, match="tracer frontend failed: .*effect top"):
+        fn.specialize(x)
+    # for_signature answers with what a call runs: the decoration's candidate.
+    assert fn.for_signature(x) is fn
+    assert fn.frontend_authority != "tracer"

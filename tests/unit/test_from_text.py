@@ -58,7 +58,7 @@ class TestMultiDef:
             def main(x, y):
                 return helper(ts.ops.add(x, y))
         """, name="main")
-        assert "main" in f.specialize(_X, _X).explain().function_name
+        assert "main" in f.for_signature(_X, _X).explain().function_name
 
 
 class TestErrors:

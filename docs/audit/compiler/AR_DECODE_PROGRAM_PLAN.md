@@ -264,8 +264,9 @@ follow.
 - **Kernel.** One 128-thread CTA per row. Each thread scans a strided column
   slice, the warp combines (value, index) with five `shfl.sync.bfly`, and
   thread 0 combines the four warp partials from shared memory. The combine is
-  a total order, so the result does not depend on combine order. This is the
-  first warp-shuffle reduction in the tree (§2a listed none).
+  a total order, so the result does not depend on combine order. It is the first
+  warp-shuffle reduction on the sm_120 `tessera-lower-to-nvidia-sm120` route;
+  §2a found only shared-memory trees there.
 - **Python** (`scheduled_argreduce.py`, `nvidia_native.package_argreduce`)
   only builds the Graph text, replays both passes and re-reads every launch
   field from the replayed `tessera.native_contract`.
@@ -280,6 +281,12 @@ follow.
     shapes up to a 151,936-column row. They also cover ties spread across warps,
     signed zeros, NaN and infinity rows, and the flatten and `keepdims` forms.
     The S1a paged-write suite still passes on the same build.
+  - Device A/B on the same box, full `tests/device/nvidia` (2026-11-23): this
+    branch had 305 failed / 6229 passed; `origin/main` (375761496) had
+    305 failed / 6198 passed / 9 errors. The branch's failing IDs are a subset of
+    main's, so the new Schedule ownership of `tessera.argmax|argmin` in
+    `nvidia_sm120` modules adds no regression. The 305 failures predate this
+    slice; S1a's A/B found the same set.
 - **Public routing is not in this slice.** `tessera.ops.argmax` under `@jit`
   does not reach this lane yet, so the `nvidia_sm120` manifest rows for
   argmax/argmin are `planned` and name the device test instead of claiming it.

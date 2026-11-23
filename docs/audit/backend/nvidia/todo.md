@@ -17134,5 +17134,5 @@ This gives the decode program its greedy token selection on sm_120.
 - **Route:** Graph `tessera.argmax|argmin` → `schedule.argreduce` (`NativeArgReduce.h`) → the shared `tile.argreduce_kernel` → NVVM.
 - **Kernel:** one 128-thread CTA per row. Lanes scan strided columns, the warp combines with `shfl.sync.bfly`, and thread 0 combines the warp partials. The contract hashes first-occurrence ties and first-NaN-wins.
 - **Launcher:** `invokeArgReduce`.
-- **Evidence (RTX 5070):** the device tests pass 22/22, bitwise against NumPy and the S0 oracle's greedy tokens. On Tajasarus's assertions-ON LLVM, the Graph fixtures and `sm120_argreduce_kernel.mlir` pass.
+- **Evidence (RTX 5070):** the device tests pass 22/22, bitwise against NumPy and the S0 oracle's greedy tokens. On Tajasarus's assertions-ON LLVM, the Graph fixtures and `sm120_argreduce_kernel.mlir` pass. A full `tests/device/nvidia` A/B against `origin/main` adds no failing ID (305 here vs 305 + 9 errors on main).
 - **Not routed from the public frontend:** the manifest rows are `planned`. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4c-s1b--row-argmaxargmin-on-sm_120-2026-11-22))

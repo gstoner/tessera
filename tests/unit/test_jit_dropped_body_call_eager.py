@@ -196,3 +196,69 @@ def test_an_input_refusal_during_trace_is_not_swallowed_by_the_decline(monkeypat
     with pytest.raises(jit_module.TesseraJitError, match="NVFP4 ingest codes") as info:
         fn._trace_frontend_capture((_x(),), {})
     assert not isinstance(info.value, jit_module._DroppedCallTraceDecline)
+
+
+# ── A call statement whose result is unused (2026-11-23) ───────────────────
+#
+# ``log.append(x)`` / ``print(y)`` as a bare statement had no AST handler: the
+# call vanished unrecorded, so every AST lane ran the body with the effect
+# silently skipped on every call (the Apple routes included). It is now a
+# recorded dropped call, so the guard above runs the original function.
+
+_EFFECT_LOG: list = []
+
+
+def _logs_then_relu(x: Tensor["N"]):
+    _EFFECT_LOG.append(1)
+    return tessera.ops.relu(x)
+
+
+def _declares_then_relu(x: Tensor["N"]):
+    """A docstring is an expression statement too; it is not a call."""
+    tessera.require(tessera.constraint.Divisible("N", 4))
+    return tessera.ops.relu(x)
+
+
+def _catalogued_statement_then_relu(x: Tensor["N"]):
+    tessera.ops.relu(x)
+    return tessera.ops.relu(x)
+
+
+@pytest.mark.parametrize("target", [None, "cpu", "apple_cpu"])
+def test_an_unused_result_call_statement_runs_on_every_call(target):
+    fn = tessera.jit(target=target)(_logs_then_relu) if target else tessera.jit(_logs_then_relu)
+    assert fn.graph_ir.frontend_unlowered_calls == ["_EFFECT_LOG.append"]
+    del _EFFECT_LOG[:]
+    x = _x()
+    for _ in range(2):
+        np.testing.assert_allclose(np.asarray(fn(x)), np.maximum(x, 0.0))
+    assert len(_EFFECT_LOG) == 2
+    assert fn.last_fallback_reason is REASON
+
+
+@pytest.mark.hardware_apple_gpu
+def test_an_unused_result_call_statement_runs_on_the_apple_gpu_lane():
+    fn = tessera.jit(target="apple_gpu")(_logs_then_relu)
+    del _EFFECT_LOG[:]
+    x = _x()
+    fn(x)
+    fn(x)
+    assert len(_EFFECT_LOG) == 2
+    assert fn.last_fallback_reason is REASON
+
+
+def test_native_required_refuses_a_body_with_an_effect_statement():
+    fn = tessera.jit(native_required=True)(_logs_then_relu)
+    with pytest.raises(TesseraNativeRequiredError) as info:
+        fn(_x())
+    assert info.value.reason is REASON
+    assert "_EFFECT_LOG.append" in str(info.value)
+
+
+@pytest.mark.parametrize("body", [_declares_then_relu, _catalogued_statement_then_relu])
+def test_declarations_docstrings_and_catalogued_statements_are_not_dropped_calls(body):
+    fn = tessera.jit(body)
+    assert fn.graph_ir.frontend_unlowered_calls == []
+    x = _x()
+    np.testing.assert_allclose(np.asarray(fn(x)), np.maximum(x, 0.0))
+    assert fn.last_fallback_reason is None

@@ -16532,7 +16532,8 @@ Slices, in order: (1) admission + frame export for `apple_gpu` under the request
     - The receipt reports 1 command buffer, 2 dispatches, 1 private device buffer and a positive GPU time.
     - The receipt is owner-reported: the owner creates exactly one command buffer by construction. No independent per-process command-buffer counter exists.
   - The GPU time is one command buffer's clock, not a performance claim.
-  - The sealed Apple GPU E2E packet is re-recorded from this commit's runtime source (see the e2e fleet log).
+  - The sealed Apple GPU E2E packet is re-recorded from this runtime source (`156f42ed6`, tested commit `681ad9ca2`). Every row has GPU placement proven, and the routes are unchanged.
+  - Re-sealing first needed a recorder fix (`681ad9ca2`). The recorder built the matmul fixture as a rank-3 `tessera.matmul`, which the Graph verifier now rejects, and passed it to `package_native`, which no longer owns plain matmul. So **no** Apple GPU runtime edit on `main` could have been re-sealed. The plan is now a rank-2 scheduled matmul with the same `apple_gpu_bmm_f32_batch1` route.
   - **Not yet:** the Python binding into the public `@jit` path, `RuntimeArtifact` restoration, and members beyond softmax / f16 simdgroup GEMM. These are slice 4 and later.
 
 ### APPLE-NTBI-3 — attention JVP (forward mode)

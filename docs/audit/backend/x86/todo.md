@@ -12721,3 +12721,6 @@ Differentiation-request decorations now defer the AST module; no x86 lowering or
 Each conversion requires a probe of the host to confirm the capability is absent. On a host that has the backend, the same message is still a failure, so this box's evidence is unchanged.
 
 The `TESSERA_LLVM_BIN` reads in the device and unit tests now go through `tests._support.environment.require_llvm_bin()`, which skips with a reason instead of raising `KeyError`. Apple gaps found by the same audit are APPLE-NTBI-1..4 in the Apple todo.
+
+
+## `AR-DECODE-PROGRAM-1-S1b-2026-11-22`: sibling outcome — not applicable — the x86 `tile.argreduce_kernel` producer (`NativeX86Kernel.h`) and its AVX-512 consumer are unchanged; the sm_120 producer adds `nan_mode`/`schedule` attributes only on its own Tile kernels. Note (code read, not run): `avx512_argreduce_f32.cpp`'s strict `v > best` never selects a NaN, so it does not implement NumPy's first-NaN rule that the sm_120 contract declares — record it if x86 joins the decode program in S7. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4c-s1b--row-argmaxargmin-on-sm_120-2026-11-22))

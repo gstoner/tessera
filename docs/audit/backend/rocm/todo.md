@@ -19614,3 +19614,6 @@ Differentiation-request decorations now defer the AST module; no ROCm lowering c
 Each conversion requires a probe of the host to confirm the capability is absent. On a host that has the backend, the same message is still a failure, so this box's evidence is unchanged.
 
 The `TESSERA_LLVM_BIN` reads in the device and unit tests now go through `tests._support.environment.require_llvm_bin()`, which skips with a reason instead of raising `KeyError`. Apple gaps found by the same audit are APPLE-NTBI-1..4 in the Apple todo.
+
+
+## `AR-DECODE-PROGRAM-1-S1b-2026-11-22`: sibling outcome — not applicable — ROCm already has a native row arg-reduce (`rocm_argreduce_compiled`). The new `schedule.argreduce` claims only `nvidia_sm120` modules; a ROCm module passes through Schedule untouched (`test_non_sm120_module_is_left_to_its_own_owner`). A decode-program argmax on gfx1151/gfx1201 belongs to slice S7 with its own proof. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4c-s1b--row-argmaxargmin-on-sm_120-2026-11-22))

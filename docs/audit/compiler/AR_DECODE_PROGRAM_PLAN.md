@@ -52,7 +52,7 @@ targets.
 | KV **append** | none | composed from scatter/gather with host glue | `kv_cache_append`: Tile/Target `not_applicable` (`e2e_op_coverage.md:401`). **Gap.** |
 | Attention / MLA decode | `nvidia_flash_attn_compiled`, `nvidia_mla_decode_fused_compiled` | composed; gfx1201 attention scheduled packages | Single-query decode shape must be admitted inside the layer program. |
 | Embedding gather | none named | none named | `tessera.gather` is cataloged (`op_catalog.py:124`). **Gap.** |
-| argmax / top-k | **none** | `rocm_argreduce_compiled`, `rocm_sort_compiled` | x86 has both. **Gap on sm_120.** |
+| argmax / top-k | **none** (argmax/argmin: per-op native lane since S1b, §4c) | `rocm_argreduce_compiled`, `rocm_sort_compiled` | x86 has both. **Gap on sm_120.** |
 | Bounded loop with device-resident state | `nvidia_control_flow_compiled` — static rank-1 f32 state only | gfx1151/gfx1201 control flow; EBM Langevin row program | State must widen from one f32 vector to a program state (token, position, cache view). |
 | Prefill→decode handoff | `CacheHandoff` / `verify_phase_split` exist as Python types and oracle | same | Must become a typed IR boundary. |
 
@@ -160,7 +160,7 @@ every other target needs its own proof.
 | Slice | Deliverable | Start | Acceptance (all fail closed outside the envelope) |
 |---|---|---|---|
 | **S0** (landed, §4a) | Oracle and fixture. Freeze a tiny dense config (2 layers, d=64, GQA 4/2 heads, vocab 256, page 16) and a seeded weight set; declare `moe_transformer_runtime` greedy decode the #31(a) oracle; write the Graph-level `decode_step` contract and envelope. | host-free | Oracle reproduces cached ≡ recompute on the fixture; contract doc names every semantic attribute; negative fixtures for missing dtype/policy/EOS. |
-| **S1** (S1a landed, §4b) | Three missing ops on sm_120 through Graph→Schedule→Tile→Target: row **argmax** (first-occurrence tie-break, i32 index), **embedding gather**, **kv_cache.append** into paged storage (in-place, DPS). | device (sm_120) | Bitwise equality with the oracle per op; append+read round-trip across a page boundary; lit fixtures for each lowering; execution-matrix rows. |
+| **S1** (S1a §4b, S1b §4c landed) | Three missing ops on sm_120 through Graph→Schedule→Tile→Target: row **argmax** (first-occurrence tie-break, i32 index), **embedding gather**, **kv_cache.append** into paged storage (in-place, DPS). | device (sm_120) | Bitwise equality with the oracle per op; append+read round-trip across a page boundary; lit fixtures for each lowering; execution-matrix rows. |
 | **S2** | **One decoder layer** at M=1 as a native tensor program: RMSNorm, QKV matmul, RoPE, append, paged attention read, O-proj, residual, MLP — one Graph function, one retained frame. | device (sm_120) | Per-layer output and updated KV pages match the oracle (f32 bitwise or declared f16/bf16 tolerance with fp32 accumulation); zero host contact inside the layer; replay byte-identity of the package. |
 | **S3** | **Whole decode step**: L layers + final norm + LM head + argmax; `DecodeState` resident across calls; host loop calls the step program. | device (sm_120) | Token sequence identical to the oracle for 64 steps; per-step logits parity (not only argmax, so ties cannot hide errors); host contact per step = one submit + completion (+ optional token readback), counted by the frame. |
 | **S4** | **Device-resident loop**: `generate` as a compiled bounded `while` over `decode_step` with EOS early exit. Widen the control-flow lane from rank-1 f32 state to structured state; an explicit, IR-visible graph-capture ABI is an acceptable physical route if it is declared, not hidden. | device (sm_120) | One program invocation produces N tokens identical to S3; no host round-trip between steps; EOS stops the loop on device. |
@@ -243,6 +243,48 @@ follow.
     - An in-place write touches only its rows.
     - Five refused writes (negative position, past capacity, physical page out of range, negative page, two written logical pages aliasing one physical page) each leave the pages bitwise unchanged with status 1; an alias outside the written range is not refused (review on #1073).
 - **Host-copy ABI, not yet resident.** This launcher still copies pages host↔device per call, like the read. Resident pages, a device-side position across calls, and composition with the paged read inside one program are S1d/S2 work.
+
+### 4c. S1b — row argmax/argmin on sm_120 (2026-11-22)
+
+- **Op design.** No new Graph or Tile op. The existing Graph
+  `tessera.argmax|argmin` and the shared `tile.argreduce_kernel` envelope
+  (source, i32 destination, rows, columns), which the x86 contract already
+  produces, get an sm_120 producer and consumer. The new record is
+  `schedule.argreduce`, owned by `NativeArgReduce.h`.
+- **Ownership is by target.** Only a module naming
+  `tessera.target = "nvidia_sm120"` is claimed. Inside one, anything outside
+  the envelope fails closed at Schedule (lit `argreduce_invalid.mlir`, seven
+  refusals). The envelope is a static f32 rank ≥ 1 operand, the last axis or
+  `axis=None` (flatten), `keepdims`, and an i32 result under 2^31 elements.
+  Other targets pass through untouched.
+- **Semantics are contract fields, not defaults** (Decision #21a): the hashed
+  contract carries `tie_break = "first"`, `nan_mode = "first_nan"` (NumPy:
+  the first NaN wins over every number) and
+  `schedule = "cta_128_warp_shuffle"`.
+- **Kernel.** One 128-thread CTA per row. Each thread scans a strided column
+  slice, the warp combines (value, index) with five `shfl.sync.bfly`, and
+  thread 0 combines the four warp partials from shared memory. The combine is
+  a total order, so the result does not depend on combine order. This is the
+  first warp-shuffle reduction in the tree (§2a listed none).
+- **Python** (`scheduled_argreduce.py`, `nvidia_native.package_argreduce`)
+  only builds the Graph text, replays both passes and re-reads every launch
+  field from the replayed `tessera.native_contract`.
+- **Evidence:**
+  - Mac (NDEBUG LLVM 23.1.1): lit `argreduce_schedule_tile.mlir` and
+    `argreduce_invalid.mlir`; `tests/unit/test_argreduce_contract.py`
+    (replay, tamper and relabel refusal, NumPy axis rules, envelope refusals).
+  - Tajasarus (assertions-ON LLVM 23.1.1): both Graph fixtures and the NVIDIA
+    kernel fixture `sm120_argreduce_kernel.mlir`.
+  - The-Super-Bear (RTX 5070): `tests/device/nvidia/test_argreduce.py`, 22 passed.
+    The tests cover the S0 oracle's 32 greedy tokens and NumPy bitwise over 14
+    shapes up to a 151,936-column row. They also cover ties spread across warps,
+    signed zeros, NaN and infinity rows, and the flatten and `keepdims` forms.
+    The S1a paged-write suite still passes on the same build.
+- **Public routing is not in this slice.** `tessera.ops.argmax` under `@jit`
+  does not reach this lane yet, so the `nvidia_sm120` manifest rows for
+  argmax/argmin are `planned` and name the device test instead of claiming it.
+- **Host-copy ABI, like S1a.** The logits are copied to the device per call.
+  Composing argmax with the LM head inside one program is S3.
 
 Performance is out of scope until S4 passes. Timing rows follow the
 device-clock admission rules and must carry their route (Decision #12); no

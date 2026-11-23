@@ -17126,3 +17126,13 @@ This adds `tessera.paged_kv_write`, the destination-passing twin of the paged re
 Each conversion requires a probe of the host to confirm the capability is absent. On a host that has the backend, the same message is still a failure, so this box's evidence is unchanged.
 
 The `TESSERA_LLVM_BIN` reads in the device and unit tests now go through `tests._support.environment.require_llvm_bin()`, which skips with a reason instead of raising `KeyError`. Apple gaps found by the same audit are APPLE-NTBI-1..4 in the Apple todo.
+
+
+## `AR-DECODE-PROGRAM-1-S1b-2026-11-22`: owning slice — row argmax/argmin (sm_120)
+
+This gives the decode program its greedy token selection on sm_120.
+- **Route:** Graph `tessera.argmax|argmin` → `schedule.argreduce` (`NativeArgReduce.h`) → the shared `tile.argreduce_kernel` → NVVM.
+- **Kernel:** one 128-thread CTA per row. Lanes scan strided columns, the warp combines with `shfl.sync.bfly`, and thread 0 combines the warp partials. The contract hashes first-occurrence ties and first-NaN-wins.
+- **Launcher:** `invokeArgReduce`.
+- **Evidence (RTX 5070):** the device tests pass 22/22, bitwise against NumPy and the S0 oracle's greedy tokens. On Tajasarus's assertions-ON LLVM, the Graph fixtures and `sm120_argreduce_kernel.mlir` pass.
+- **Not routed from the public frontend:** the manifest rows are `planned`. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4c-s1b--row-argmaxargmin-on-sm_120-2026-11-22))

@@ -16513,3 +16513,6 @@ These need nothing on Apple:
 - FP8 cast lowering through ROCDL (Apple has its own Metal 4.1 pack/unpack, APPLE-DTYPE-1-REJECT).
 
 The sibling-refusal cases that name `apple_gpu` still run and pass on the Mac.
+
+
+## `AR-DECODE-PROGRAM-1-S1b-2026-11-22`: sibling outcome — not applicable — no Apple lowering changed; `schedule.argreduce` claims only `nvidia_sm120` modules. Apple belongs to slice S7. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4c-s1b--row-argmaxargmin-on-sm_120-2026-11-22))

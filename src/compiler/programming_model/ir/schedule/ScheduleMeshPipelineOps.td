@@ -708,6 +708,13 @@ def Schedule_PagedKVWriteOp : Op<ScheduleDialect, "paged_kv_write"> {
   let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
 }
 
+def Schedule_ArgReduceOp : Op<ScheduleDialect, "argreduce"> {
+  let summary = "Content-addressed sm_120 row argmax/argmin schedule (AR-DECODE S1b)";
+  let arguments = (ins AnyRankedTensor:$subject, StrAttr:$artifact_hash, DictionaryAttr:$contract);
+  let results = (outs AnyRankedTensor:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+}
+
 def Schedule_MoeDispatchOp : Op<ScheduleDialect, "moe_dispatch"> {
   let summary = "Content-addressed gfx1151 MoE token-gather schedule";
   let arguments = (ins AnyRankedTensor:$subject, StrAttr:$artifact_hash,

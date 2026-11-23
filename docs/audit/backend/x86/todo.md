@@ -12726,6 +12726,9 @@ Each conversion requires a probe of the host to confirm the capability is absent
 
 The `TESSERA_LLVM_BIN` reads in the device and unit tests now go through `tests._support.environment.require_llvm_bin()`, which skips with a reason instead of raising `KeyError`. Apple gaps found by the same audit are APPLE-NTBI-1..4 in the Apple todo.
 
+
 ## `APPLE-NTBI-1-attention-vjp-2026-11-22`: sibling outcome — parity validated on Zen 5 (Tajasarus)
 
 The plugin's x86 branch was refactored with the Apple consumer; the identity values are unchanged. The x86 attention-VJP routing and plugin-binding suites ran on Tajasarus's AVX-512 build with identical failing node IDs at a213fa18e and 284765cf5. (Apple owner: `docs/audit/backend/apple/todo.md` APPLE-NTBI-1.)
+
+## `AR-DECODE-PROGRAM-1-S1b-2026-11-22`: sibling outcome — not applicable — the x86 `tile.argreduce_kernel` producer (`NativeX86Kernel.h`) and its AVX-512 consumer are unchanged; the sm_120 producer adds `nan_mode`/`schedule` attributes only on its own Tile kernels. Note (code read, not run): `avx512_argreduce_f32.cpp`'s strict `v > best` never selects a NaN, so it does not implement NumPy's first-NaN rule that the sm_120 contract declares — record it if x86 joins the decode program in S7. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4c-s1b--row-argmaxargmin-on-sm_120-2026-11-22))

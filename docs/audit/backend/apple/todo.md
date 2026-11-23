@@ -16519,6 +16519,7 @@ These need nothing on Apple:
 
 The sibling-refusal cases that name `apple_gpu` still run and pass on the Mac.
 
+
 ## `APPLE-NTBI-1-attention-vjp-2026-11-22`: the attention VJP plugin has an Apple consumer
 
 `native_backward` on an `apple_gpu` program whose body is one `flash_attn`, `gqa_attention` or `mqa_attention` now runs the `attention_backward` native-VJP plugin. It refused before ("native_backward currently supports target='cpu'/'x86', verified ROCm lanes, or verified NVIDIA SM120 lanes"). The plugin lowers the traced reverse carrier (`tessera.flash_attn_bwd`) through `lower_scheduled_attention_backward(target="apple_gpu")`, which selects `apple7_recompute`. It packages the result with the existing `apple_native.package_scheduled_attention_backward`: the APPLE-ATTN-BWD-1 split route, with fp32 dQ/dK/dV and an fp32 bias. `runtime._execute_native_attention_vjp_package` launches that package; it never receives the forward Graph. The target consumer is `apple.metal_attention_backward`, with `execution_mode` `metal_runtime`, and the attestation comes from the live Metal device and names the package's artifact hash.
@@ -16530,3 +16531,5 @@ Measured on the Mac (M1 Max, macOS 27.2, unsandboxed, a fresh `TesseraAppleRunti
 - `tests/device/apple/test_native_vjp_execution_certificates.py` now carries an attention row, so the `frontend_authority` dashboard's new `apple_gpu` `exact_device_packet` claim for `attention_backward` is backed by a run.
 
 Steps 2 and 3 of APPLE-NTBI-1 stay open (above).
+
+## `AR-DECODE-PROGRAM-1-S1b-2026-11-22`: sibling outcome — not applicable — no Apple lowering changed; `schedule.argreduce` claims only `nvidia_sm120` modules. Apple belongs to slice S7. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4c-s1b--row-argmaxargmin-on-sm_120-2026-11-22))

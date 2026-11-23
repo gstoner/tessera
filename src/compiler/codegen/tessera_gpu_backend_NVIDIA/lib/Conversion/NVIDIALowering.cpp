@@ -4000,6 +4000,169 @@ static LogicalResult materializeSm120NVFP4ExpandKernel(
   return success();
 }
 
+// AR-DECODE-PROGRAM-1 S1b. Shared-memory slot for one warp-partial of the row
+// argreduce: four warps per 128-thread CTA, one (value, index) pair each.
+static FailureOr<Value> sm120ArgReduceScratch(Operation *anchor, OpBuilder &builder,
+                                              StringRef symbol, Type element) {
+  ModuleOp module = anchor->getParentOfType<ModuleOp>();
+  if (!module) return failure();
+  auto global = module.lookupSymbol<LLVM::GlobalOp>(symbol);
+  auto arrayTy = LLVM::LLVMArrayType::get(element, 4);
+  if (!global) {
+    OpBuilder globalBuilder(module.getBodyRegion());
+    globalBuilder.setInsertionPointToStart(module.getBody());
+    global = LLVM::GlobalOp::create(
+        globalBuilder, anchor->getLoc(), arrayTy, /*isConstant=*/false,
+        LLVM::Linkage::Internal, symbol, Attribute(), /*alignment=*/16,
+        /*addrSpace=*/3, /*dsoLocal=*/false, /*threadLocal=*/false,
+        SymbolRefAttr(), ArrayRef<NamedAttribute>{}, ArrayRef<Attribute>{});
+  } else if (global.getType() != arrayTy) {
+    return failure();
+  }
+  return Value(LLVM::AddressOfOp::create(builder, anchor->getLoc(), global));
+}
+
+// Row argmax/argmin over [rows, columns] f32 with an i32 index result. One
+// 128-thread CTA owns a row: each thread scans a strided column slice, the
+// warp combines with five butterfly shuffles, and thread 0 combines the four
+// warp partials. The combine is total, so the result does not depend on the
+// combine order: a NaN beats every number (the first NaN wins), a strictly
+// better value wins, and equal values keep the lower index (first occurrence).
+// That is NumPy's argmax/argmin, including -0.0 == +0.0.
+static LogicalResult materializeSm120ArgReduceKernel(
+    tessera::tile::ArgReduceKernelOp kernel, OpBuilder &builder) {
+  if (failed(kernel.verify())) return failure();
+  Operation *op = kernel.getOperation();
+  ValueRange in = kernel.getInputs();
+  auto kind = op->getAttrOfType<StringAttr>("kind");
+  auto nanMode = op->getAttrOfType<StringAttr>("nan_mode");
+  auto schedule = op->getAttrOfType<StringAttr>("schedule");
+  if (in.size() != 4 || !nanMode || nanMode.getValue() != "first_nan" || !schedule ||
+      schedule.getValue() != "cta_128_warp_shuffle") {
+    op->emitError("sm_120 argreduce_kernel requires nan_mode=first_nan and "
+                  "schedule=cta_128_warp_shuffle over (x, indices, rows, columns)");
+    return failure();
+  }
+  bool argmax = kind.getValue() == "argmax";
+  Location loc = op->getLoc();
+  Type i32 = builder.getI32Type(), i64 = builder.getI64Type();
+  auto f32 = builder.getF32Type();
+  Value rows = in[2], columns = in[3];
+  Value row = arith::ExtUIOp::create(builder, loc, i64,
+      NVVM::BlockIdXOp::create(builder, loc, i32));
+  Value thread32 = NVVM::ThreadIdXOp::create(builder, loc, i32);
+  Value thread = arith::ExtUIOp::create(builder, loc, i64, thread32);
+  FailureOr<Value> values = sm120ArgReduceScratch(
+      op, builder, "__tessera_sm120_argreduce_values_f32", f32);
+  FailureOr<Value> indices = sm120ArgReduceScratch(
+      op, builder, "__tessera_sm120_argreduce_indices_i32", i32);
+  if (failed(values) || failed(indices)) {
+    op->emitError("failed to materialize sm_120 argreduce scratch");
+    return failure();
+  }
+  auto i32c = [&](int64_t value) -> Value {
+    return arith::ConstantIntOp::create(builder, loc, value, 32);
+  };
+  // (value, index) beats (best, bestIndex) under the documented total order.
+  auto beats = [&](Value value, Value index, Value best, Value bestIndex) -> Value {
+    Value valueNaN = arith::CmpFOp::create(builder, loc, arith::CmpFPredicate::UNO, value, value);
+    Value bestNaN = arith::CmpFOp::create(builder, loc, arith::CmpFPredicate::UNO, best, best);
+    Value lower = arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::slt, index, bestIndex);
+    Value strictly = arith::CmpFOp::create(builder, loc,
+        argmax ? arith::CmpFPredicate::OGT : arith::CmpFPredicate::OLT, value, best);
+    Value equal = arith::CmpFOp::create(builder, loc, arith::CmpFPredicate::OEQ, value, best);
+    Value numberWins = arith::OrIOp::create(builder, loc, strictly,
+        arith::AndIOp::create(builder, loc, equal, lower));
+    Value bothNaN = arith::AndIOp::create(builder, loc, valueNaN, bestNaN);
+    Value neitherNaN = arith::AndIOp::create(builder, loc,
+        arith::XOrIOp::create(builder, loc, valueNaN, arith::ConstantIntOp::create(builder, loc, 1, 1)),
+        arith::XOrIOp::create(builder, loc, bestNaN, arith::ConstantIntOp::create(builder, loc, 1, 1)));
+    Value onlyValueNaN = arith::AndIOp::create(builder, loc, valueNaN,
+        arith::XOrIOp::create(builder, loc, bestNaN, arith::ConstantIntOp::create(builder, loc, 1, 1)));
+    return arith::OrIOp::create(builder, loc, onlyValueNaN,
+        arith::OrIOp::create(builder, loc,
+            arith::AndIOp::create(builder, loc, bothNaN, lower),
+            arith::AndIOp::create(builder, loc, neitherNaN, numberWins)));
+  };
+  auto guarded = scf::IfOp::create(builder, loc, lessI64(builder, loc, row, rows), false);
+  {
+    // `row` is the block index, so the branch is CTA-uniform and every thread
+    // reaches the barrier and the full-mask shuffles below.
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(guarded.thenBlock());
+    Value identity = arith::ConstantFloatOp::create(builder, loc, f32,
+        APFloat::getInf(APFloat::IEEEsingle(), /*negative=*/argmax));
+    Value noIndex = i32c(INT32_MAX);
+    Value rowBase = mulI64(builder, loc, row, columns);
+    auto scan = scf::ForOp::create(builder, loc, thread, columns,
+        i64Constant(builder, loc, 128), ValueRange{identity, noIndex});
+    {
+      OpBuilder::InsertionGuard loopGuard(builder);
+      builder.setInsertionPointToStart(scan.getBody());
+      Value column = scan.getInductionVar();
+      Value ptr = LLVM::GEPOp::create(builder, loc, in[0].getType(), f32, in[0],
+          ValueRange{addI64(builder, loc, rowBase, column)});
+      Value value = LLVM::LoadOp::create(builder, loc, f32, ptr, 4);
+      Value index = arith::TruncIOp::create(builder, loc, i32, column);
+      Value best = scan.getRegionIterArgs()[0], bestIndex = scan.getRegionIterArgs()[1];
+      Value take = beats(value, index, best, bestIndex);
+      scf::YieldOp::create(builder, loc, ValueRange{
+          arith::SelectOp::create(builder, loc, take, value, best),
+          arith::SelectOp::create(builder, loc, take, index, bestIndex)});
+    }
+    builder.setInsertionPointAfter(scan);
+    Value best = scan.getResult(0), bestIndex = scan.getResult(1);
+    Value fullMask = i32c(-1), clamp = i32c(31);
+    for (int64_t offset : {16, 8, 4, 2, 1}) {
+      Value other = NVVM::ShflOp::create(builder, loc, f32, fullMask, best, i32c(offset),
+                                         clamp, NVVM::ShflKind::bfly, UnitAttr());
+      Value otherIndex = NVVM::ShflOp::create(builder, loc, i32, fullMask, bestIndex,
+                                              i32c(offset), clamp, NVVM::ShflKind::bfly, UnitAttr());
+      Value take = beats(other, otherIndex, best, bestIndex);
+      best = arith::SelectOp::create(builder, loc, take, other, best);
+      bestIndex = arith::SelectOp::create(builder, loc, take, otherIndex, bestIndex);
+    }
+    Value lane = arith::AndIOp::create(builder, loc, thread, i64Constant(builder, loc, 31));
+    Value warp = arith::ShRUIOp::create(builder, loc, thread, i64Constant(builder, loc, 5));
+    auto leader = scf::IfOp::create(builder, loc,
+        arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq, lane,
+                              i64Constant(builder, loc, 0)), false);
+    {
+      OpBuilder::InsertionGuard leaderGuard(builder);
+      builder.setInsertionPointToStart(leader.thenBlock());
+      LLVM::StoreOp::create(builder, loc, best, LLVM::GEPOp::create(builder, loc,
+          values->getType(), f32, *values, ValueRange{warp}), 4);
+      LLVM::StoreOp::create(builder, loc, bestIndex, LLVM::GEPOp::create(builder, loc,
+          indices->getType(), i32, *indices, ValueRange{warp}), 4);
+    }
+    builder.setInsertionPointAfter(leader);
+    NVVM::BarrierOp::create(builder, loc);
+    auto finish = scf::IfOp::create(builder, loc,
+        arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq, thread,
+                              i64Constant(builder, loc, 0)), false);
+    {
+      OpBuilder::InsertionGuard finishGuard(builder);
+      builder.setInsertionPointToStart(finish.thenBlock());
+      Value total = LLVM::LoadOp::create(builder, loc, f32, *values, 4);
+      Value totalIndex = LLVM::LoadOp::create(builder, loc, i32, *indices, 4);
+      for (int64_t w = 1; w < 4; ++w) {
+        Value value = LLVM::LoadOp::create(builder, loc, f32, LLVM::GEPOp::create(builder, loc,
+            values->getType(), f32, *values, ValueRange{i64Constant(builder, loc, w)}), 4);
+        Value index = LLVM::LoadOp::create(builder, loc, i32, LLVM::GEPOp::create(builder, loc,
+            indices->getType(), i32, *indices, ValueRange{i64Constant(builder, loc, w)}), 4);
+        Value take = beats(value, index, total, totalIndex);
+        total = arith::SelectOp::create(builder, loc, take, value, total);
+        totalIndex = arith::SelectOp::create(builder, loc, take, index, totalIndex);
+      }
+      LLVM::StoreOp::create(builder, loc, totalIndex, LLVM::GEPOp::create(builder, loc,
+          in[1].getType(), i32, in[1], ValueRange{row}), 4);
+    }
+  }
+  builder.setInsertionPointAfter(guarded);
+  op->erase();
+  return success();
+}
+
 static LogicalResult materializeSm120PagedKVReadKernel(
     tessera::tile::PagedKVReadKernelOp kernel, OpBuilder &builder) {
   Operation *op = kernel.getOperation();
@@ -6327,6 +6490,7 @@ struct LowerTileToNVIDIAPass
           name == "tile.training_kernel" ||
           name == "tile.paged_kv_read_kernel" ||
           name == "tile.paged_kv_write_kernel" ||
+          name == "tile.argreduce_kernel" ||
           name == "tile.nvfp4_expand_kernel" ||
           name == "tile.paged_attention_kernel" ||
           name == "tile.replay_ssm_decode_kernel" ||
@@ -6604,6 +6768,18 @@ struct LowerTileToNVIDIAPass
         createContractOp(builder, loc, "tessera_nvidia.cuda_math_kernel",
                          kernel.getInputs(), TypeRange{}, mathAttrs);
         op->erase();
+        continue;
+      }
+
+      if (isTileOp(op, "tile.argreduce_kernel")) {
+        if (smVersion < kConsumerBlackwellSM ||
+            failed(materializeSm120ArgReduceKernel(
+                cast<tessera::tile::ArgReduceKernelOp>(op), builder))) {
+          if (smVersion < kConsumerBlackwellSM)
+            op->emitError("tile.argreduce_kernel currently requires sm_120");
+          signalPassFailure();
+          return;
+        }
         continue;
       }
 

@@ -19619,6 +19619,9 @@ Each conversion requires a probe of the host to confirm the capability is absent
 
 The `TESSERA_LLVM_BIN` reads in the device and unit tests now go through `tests._support.environment.require_llvm_bin()`, which skips with a reason instead of raising `KeyError`. Apple gaps found by the same audit are APPLE-NTBI-1..4 in the Apple todo.
 
+
 ## `APPLE-NTBI-1-attention-vjp-2026-11-22`: sibling outcome — parity validated on gfx1201 and gfx1151
 
 The attention VJP plugin's ROCm branch was refactored alongside the new Apple consumer (execution identity table, package validation compares the scheduled target directly); no ROCm lowering changed. The attention-VJP unit suites plus every `tests/device/rocm` file naming attention backward have identical failing node IDs at a213fa18e and 284765cf5 on Tajasarus (gfx1201, 12 failed at both) and Princess-Luna (gfx1151, none failed; most of that device suite skips there at both revisions, so the gfx1151 evidence is thin). (Apple owner: `docs/audit/backend/apple/todo.md` APPLE-NTBI-1.)
+
+## `AR-DECODE-PROGRAM-1-S1b-2026-11-22`: sibling outcome — not applicable — ROCm already has a native row arg-reduce (`rocm_argreduce_compiled`). The new `schedule.argreduce` claims only `nvidia_sm120` modules; a ROCm module passes through Schedule untouched (`test_non_sm120_module_is_left_to_its_own_owner`). A decode-program argmax on gfx1151/gfx1201 belongs to slice S7 with its own proof. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4c-s1b--row-argmaxargmin-on-sm_120-2026-11-22))

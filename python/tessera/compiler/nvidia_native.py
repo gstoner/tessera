@@ -196,6 +196,8 @@ SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI = "tessera.nvidia.sm120.attention_backward_
 SM120_PAGED_KV_F32_ABI = "tessera.nvidia.paged_kv.pages_table_o_dims.f32_i32.v1"
 # AR-DECODE-PROGRAM-1 S1a: in-place write; pages are inout, status is the refusal word.
 SM120_PAGED_KV_WRITE_F32_ABI = "tessera.nvidia.paged_kv_write.pages_table_values_position_status_dims.f32_i32.v1"
+# AR-DECODE-PROGRAM-1 S1b: row argmax/argmin, one i32 index per row.
+SM120_ARGREDUCE_F32_ABI = "tessera.nvidia.argreduce.x_indices_rows_cols.f32_i32.v1"
 SM120_PAGED_ATTN_F32_ABI = "tessera.nvidia.paged_attention.q_kp_vp_table_indices_o_dims.f32_i32_i64.v1"
 SM120_REPLAY_DECODE_F32_ABI = "tessera.nvidia.replay_ssm.delta_x_b_s0_c_a_y_dims.f32.v1"
 SM120_REPLAY_FLUSH_F32_ABI = "tessera.nvidia.replay_ssm.delta_x_b_s0_a_dims.f32.v1"
@@ -4997,6 +4999,66 @@ def package_paged_kv_write(
         lower_scheduled_paged_kv_write(names, dims), pipeline_name=pipeline_name)
 
 
+def package_scheduled_argreduce(artifact: Any, *, pipeline_name: str) -> NVIDIANativePackage:
+    """Package one replayed sm_120 row argmax/argmin (AR-DECODE-PROGRAM-1 S1b).
+
+    Every launch field comes from the replayed artifact, which re-read it from
+    the native Tile contract; the logical shapes are guarded so a caller cannot
+    hand a different tensor the same row count.
+    """
+    artifact.validate()
+    x_name, indices_name = artifact.names
+    entry, tile_ir = artifact.entry, artifact.tile_ir
+    (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = _compile_tile_ir(
+        tile_ir, entry
+    )
+    image = NativeImageArtifact(
+        target="nvidia_sm120", architecture="sm_120a", pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp, toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(),
+        binary_format="ptx", payload=ptx.encode("ascii"),
+        entry_points=(NativeEntryPoint(entry, SM120_ARGREDUCE_F32_ABI),),
+        compile_state=compile_state, device_libraries=device_libraries,
+        resource_record=ResourceRecord(provenance="ptxas --arch=sm_120a -v", metrics=metrics),
+    )
+    guards = tuple(ShapeGuard(x_name, axis, "eq", dim) for axis, dim in enumerate(artifact.shape)) + tuple(
+        ShapeGuard(indices_name, axis, "eq", dim) for axis, dim in enumerate(artifact.result_shape))
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=entry, abi_id=SM120_ARGREDUCE_F32_ABI,
+        buffers=(
+            BufferBinding(0, x_name, "input", "fp32", len(artifact.shape), "row_major", 4),
+            BufferBinding(1, indices_name, "output", "int32", len(artifact.result_shape), "row_major", 4),
+        ),
+        scalars=(ScalarArgument(2, "Rows", "int64"), ScalarArgument(3, "Cols", "int64")),
+        shape_guards=guards,
+        geometry=LaunchGeometry(policy="sm120_argreduce_cta_128_per_row"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("completion",)
+        ),
+        provenance={
+            "work_item": "AR-DECODE-PROGRAM-1", "slice": "S1b",
+            "route": "canonical_scheduled_tile_consumer", "kind": artifact.kind,
+            "shape": list(artifact.shape), "rows": artifact.rows, "columns": artifact.columns,
+            "axis_mode": artifact.axis_mode, "keepdims": artifact.keepdims,
+            "storage": "f32", "output_storage": "i32", "tie_break": "first",
+            "nan_mode": "first_nan", "schedule": "cta_128_warp_shuffle",
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
+        },
+    )
+    return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+
+
+def package_argreduce(
+    kind: str, names: tuple[str, str], shape: tuple[int, ...], *,
+    axis: int | None = -1, keepdims: bool = False, pipeline_name: str,
+) -> NVIDIANativePackage:
+    from .scheduled_argreduce import lower_scheduled_argreduce
+    return package_scheduled_argreduce(
+        lower_scheduled_argreduce(kind, names, shape, axis=axis, keepdims=keepdims),
+        pipeline_name=pipeline_name)
+
+
 def package_paged_attention(
     *, physical_pages: int, logical_pages: int, page_size: int, heads: int,
     query_length: int, tokens: int, dim: int, scale: float,
@@ -5387,6 +5449,8 @@ __all__ = [
     "package_scheduled_paged_kv",
     "package_paged_kv_write",
     "package_scheduled_paged_kv_write",
+    "package_argreduce",
+    "package_scheduled_argreduce",
     "package_paged_attention",
     "package_replay_ssm_kernels",
     "package_moe_kernels",

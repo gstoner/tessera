@@ -108,6 +108,8 @@ def _find_runtime_source() -> Optional[Path]:
 # stale sentinel is accepted and then fails at the *call site* with a missing
 # symbol, which reads as a broken consumer rather than the stale runtime it is.
 _SENTINEL_SYMBOLS = (
+    # APPLE-NTBI-2 slice 3: the native tensor program frame owner.
+    "tessera_apple_gpu_tensor_frame_execute",
     # Resident ReplaySSM native checkpoint fold + ring clear.
     "tessera_apple_gpu_ssm_replay_flush_dev_f32_enc",
     # Normalization VJP (E2E-REAL-6 / WS-2).
@@ -598,6 +600,8 @@ APPLE_ABI: dict[str, tuple[tuple, object]] = {
     "tessera_apple_gpu_tile_last_device_time_ns": ((), ctypes.c_int64),
     "tessera_apple_gpu_tile_last_counter_delta": ((), ctypes.c_int64),
     "tessera_apple_gpu_tile_counter_sampling_supported": ((), ctypes.c_int32),
+    # APPLE-NTBI-2 slice 3: the native tensor program frame owner (one command buffer).
+    "tessera_apple_gpu_tensor_frame_execute": ((ctypes.POINTER(ctypes.c_int64), ctypes.POINTER(ctypes.c_void_p), ctypes.c_int32, ctypes.POINTER(ctypes.c_int64), ctypes.POINTER(ctypes.c_char_p), ctypes.POINTER(ctypes.c_char_p), ctypes.c_int32, ctypes.POINTER(ctypes.c_int64)), ctypes.c_int32),
     "tessera_apple_gpu_dispatch_telemetry_set_enabled": ((ctypes.c_int32,), None),
     "tessera_apple_gpu_dispatch_telemetry_enabled": ((), ctypes.c_int32),
     "tessera_apple_gpu_dispatch_telemetry_clear": ((), None),

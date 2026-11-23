@@ -5200,9 +5200,32 @@ struct ScheduleToTilePass
       }
       SmallVector<tile::ProgramInvokeOp> invokes;
       mod.walk([&](tile::ProgramInvokeOp invoke) { invokes.push_back(invoke); });
+      const bool appleProgram = native_tensor_program::programTarget(mod) ==
+          native_tensor_program::ProgramTarget::Apple7;
       for (auto invoke : invokes) {
         auto child = dyn_cast_or_null<ModuleOp>(SymbolTable::lookupSymbolIn(
             mod, invoke.getCalleeAttr().getRootReference()));
+        if (appleProgram) {
+          // APPLE-NTBI-2: an Apple member ends at the launch-level Tile
+          // carrier its Apple scheduled package consumes (the same carrier a
+          // standalone apple_gpu op lowers to); its dispatch is that package's
+          // runtime policy, so the invoke names the carrier, not a kernel.
+          SmallVector<Operation *> carriers;
+          if (child) child.walk([&](Operation *op) {
+            auto name = op->getName().getStringRef();
+            if (name == "tile.matmul_kernel" || name == "tile.softmax_kernel")
+              carriers.push_back(op);
+          });
+          auto source = child ? child.lookupSymbol<func::FuncOp>("source") : func::FuncOp{};
+          if (carriers.size() != 1 || !source) {
+            invoke.emitError("APPLE_TENSOR_PROGRAM_UNSUPPORTED: an Apple program member "
+                             "must lower to exactly one launch-level Tile carrier");
+            return signalPassFailure();
+          }
+          invoke->setAttr("carrier", StringAttr::get(&getContext(),
+              carriers.front()->getName().getStringRef()));
+          continue;
+        }
         SmallVector<LLVM::LLVMFuncOp> kernels;
         if (child) for (auto kernel : child.getOps<LLVM::LLVMFuncOp>())
           if (kernel->hasAttr("nvvm.kernel")) kernels.push_back(kernel);

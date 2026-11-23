@@ -3199,6 +3199,25 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="Portable Tile fragment ABI",
     ),
     DiagnosticCode(
+        code="APPLE_TENSOR_PROGRAM_UNSUPPORTED",
+        pass_origin="GraphToSchedulePass",
+        severity="error",
+        summary=(
+            "A module requesting the apple7 native tensor program "
+            "(tessera.native.apple_tensor_program_request) is outside the "
+            "owner's profile: one function ending in an f16-storage / f32-"
+            "accumulate matrix product whose producers are tessera.softmax or "
+            "tessera.matmul members, static shapes only."
+        ),
+        fix_hint=(
+            "Drop the request to keep the program on its existing Apple lanes, "
+            "or reshape it to the supported profile; members without an Apple "
+            "scheduled package (relu, add, norms) are later APPLE-NTBI-2 slices."
+        ),
+        spec="docs/audit/backend/apple/todo.md",
+        sprint="APPLE-NTBI-2",
+    ),
+    DiagnosticCode(
         code="APPLE_FRAGMENT_UNSUPPORTED_ARCH",
         language="python",
         pass_origin="apple_fragment.select_apple_simdgroup_fragment",

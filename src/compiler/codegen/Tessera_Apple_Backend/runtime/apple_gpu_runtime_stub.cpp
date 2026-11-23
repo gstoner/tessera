@@ -1286,6 +1286,13 @@ extern "C" int32_t tessera_apple_gpu_tile_simdgroup_gemm_f16(
   return 0;
 }
 
+// APPLE-NTBI-2 frame owner: no Metal device on this host (-2), nothing written.
+extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
+    const int64_t*, const void* const*, int32_t, const int64_t*,
+    const char* const*, const char* const*, int32_t, int64_t*) {
+  return -2;
+}
+
 extern "C" int32_t tessera_apple_gpu_tile_simdgroup_gemm_bf16(
     const char*, const char*, const uint16_t*, const uint16_t*, float*,
     int32_t, int32_t, int32_t, int32_t, int32_t, int32_t) {

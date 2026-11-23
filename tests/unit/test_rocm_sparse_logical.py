@@ -13,6 +13,7 @@ import pytest
 
 from tessera.compiler.rocm_sparse_logical import sparse_logical_schedule_ir
 from tessera.compiler.scheduled_matmul import find_tessera_opt
+from tests._support.environment import require_llvm_bin
 
 # `rocm_isa` is imported inside each test on purpose. `rocm_sparse_runtime`
 # runs its kernels in a multiprocessing worker, and under spawn/forkserver the
@@ -55,7 +56,7 @@ def test_sparse_logical_device_packing_and_k_accumulation(shape,dtype,tmp_path):
     env = {key: val for key,val in os.environ.items() if not key.startswith('ROCP') and key != 'LD_PRELOAD'}
     lowered = subprocess.check_output([os.environ['TESSERA_OPT'],'--tessera-schedule-to-tile',
         '--lower-tile-to-rocm','--lower-tessera-target-to-rocdl'],input=source,text=True,env=env)
-    llvm = Path(os.environ['TESSERA_LLVM_BIN'])
+    llvm = require_llvm_bin()
     pipeline = 'builtin.module(gpu.module(convert-vector-to-llvm,convert-scf-to-cf,convert-gpu-to-rocdl,reconcile-unrealized-casts),rocdl-attach-target{chip=gfx1201},gpu-module-to-binary{toolkit='+os.environ['ROCM_PATH']+'})'
     binary = subprocess.check_output([str(llvm/'mlir-opt'),'--pass-pipeline='+pipeline],input=lowered,text=True,env=env)
     image = _decode_image(re.findall(r'"((?:\\.|[^"\\])*)"',binary)[-1])

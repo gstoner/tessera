@@ -12710,3 +12710,14 @@ The conformance dashboard now proves its IR rungs on the traced module; the dash
 Differentiation-request decorations now defer the AST module; no x86 lowering or kernel path changed, and no x86 device lane was run. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-differentiation-requests-defer-the-ast-module))
 
 ## `AR-DECODE-PROGRAM-1-S1a-2026-11-22`: sibling outcome — not applicable — no x86 lowering exists; the Schedule contract admits sm_120 only and refuses every other target by name. x86 belongs to slice S7. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4b-s1a--in-place-paged-kv-write-on-sm_120-2026-11-22))
+
+## `MAC-HOST-HYGIENE-2026-11-22`: sibling outcome — not applicable (test infrastructure)
+
+`tests/_support/backend_absence.py` now recognizes more "backend not built here" failures and converts them to skips:
+- an unregistered NVIDIA/ROCm pass, whether passed as an option, named in a textual pipeline, or present in a failed command's argv;
+- an unloaded `tessera_nvidia`/`tessera_rocm` dialect;
+- a missing AMD clang or hipcc.
+
+Each conversion requires a probe of the host to confirm the capability is absent. On a host that has the backend, the same message is still a failure, so this box's evidence is unchanged.
+
+The `TESSERA_LLVM_BIN` reads in the device and unit tests now go through `tests._support.environment.require_llvm_bin()`, which skips with a reason instead of raising `KeyError`. Apple gaps found by the same audit are APPLE-NTBI-1..4 in the Apple todo.

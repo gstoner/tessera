@@ -103,6 +103,28 @@ def test_out_of_range_token_is_refused_and_nothing_is_copied(bad):
     assert (out == -7.0).all()
 
 
+@pytest.mark.parametrize("readonly", ["x", "status"])
+def test_read_only_output_or_status_is_refused_before_launch(readonly):
+    table = np.ones((8, 4), np.float32)
+    out = np.full((2, 4), -7.0, np.float32)
+    status = np.zeros(1, np.int32)
+    {"x": out, "status": status}[readonly].flags.writeable = False
+    from tessera import runtime as rt
+    from tessera.compiler import nvidia_native as native
+    package = native.package_embedding_gather(NAMES, vocab=8, hidden=4, batch=2, pipeline_name=PIPELINE)
+    artifact = rt.RuntimeArtifact(
+        tile_ir=package.tile_ir, target_ir=package.target_ir, metadata={"target": "nvidia_sm120"},
+        native_image=package.image, launch_descriptor=package.descriptor)
+    bindings = {"embed": table, "token": np.array([1, 2], np.int32), "x": out, "status": status,
+                "V": 8, "H": 4, "B": 2}
+    try:
+        result = rt.launch(artifact, bindings)
+    except (RuntimeError, ValueError):
+        result = {"ok": False}
+    assert result.get("ok") is not True, result
+    assert (out == -7.0).all() and status[0] == 0
+
+
 def test_mismatched_buffer_is_refused():
     from tessera import runtime as rt
     from tessera.compiler import nvidia_native as native

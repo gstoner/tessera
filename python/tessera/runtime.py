@@ -3869,7 +3869,9 @@ def _submit_nvidia_sm120_native(
                 or str(table.dtype) != "float32" or str(tokens.dtype) != "int32"
                 or str(rows.dtype) != "float32" or str(status.dtype) != "int32"
                 or not table.flags.c_contiguous or not tokens.flags.c_contiguous
-                or not rows.flags.c_contiguous or not rows.flags.writeable):
+                or not rows.flags.c_contiguous or not rows.flags.writeable
+                # The launcher writes the refusal word through a raw pointer.
+                or not status.flags.c_contiguous or not status.flags.writeable):
             raise RuntimeError("SM120 embedding gather buffers disagree with descriptor scalars")
         output = rows
     elif descriptor.abi_id in SM120_ATTN_LSE_SCALED_KV_ABIS:

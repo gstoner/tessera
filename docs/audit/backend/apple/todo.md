@@ -16539,7 +16539,29 @@ Slices, in order: (1) admission + frame export for `apple_gpu` under the request
   - The GPU time is one command buffer's clock, not a performance claim.
   - The sealed Apple GPU E2E packet is re-recorded from this runtime source (`156f42ed6`, tested commit `681ad9ca2`). Every row has GPU placement proven, and the routes are unchanged.
   - Re-sealing first needed a recorder fix (`681ad9ca2`). The recorder built the matmul fixture as a rank-3 `tessera.matmul`, which the Graph verifier now rejects, and passed it to `package_native`, which no longer owns plain matmul. So **no** Apple GPU runtime edit on `main` could have been re-sealed. The plan is now a rank-2 scheduled matmul with the same `apple_gpu_bmm_f32_batch1` route.
-  - **Not yet:** the Python binding into the public `@jit` path, `RuntimeArtifact` restoration, and members beyond softmax / f16 simdgroup GEMM. These are slice 4 and later.
+  - Slice 3 left the public `@jit` binding and `RuntimeArtifact` restoration to slice 4. Both landed below.
+- **Slice 4 landed (public `@jit` + `RuntimeArtifact`), sync `APPLE-NTBI-2-jit-2026-11-23`.**
+  - `@jit(target="apple_gpu")` now tries the tensor program route (`JitFn._try_apple_tensor_program_call`) after the sm_120 one. A traced f16 `softmax` → `matmul` body runs through the frame owner in one command buffer. Warm calls reuse the compiled program per input signature (shape, dtype), without tracing or compiling again.
+  - **This reroutes a live lane, and the old one was wrong.** Before, this body ran on `apple_gpu_mps` and returned **fp16**, silently dropping the requested `output_dtype="fp32"`. The tensor program returns fp32. The MPS lane's dtype drop is not fixed for bodies the program declines.
+  - **Declines before admission; raises after.** The route steps aside, leaving the existing Apple lanes eligible, when:
+    - the compiler or runtime is missing;
+    - any input is not 2-D f16;
+    - the tracer cannot represent the body;
+    - the traced body is not a softmax/matmul chain ending in its product;
+    - the compiler refuses with `APPLE_TENSOR_PROGRAM_UNSUPPORTED`.
+    Any failure once the compiler has formed the program raises. Declines are cached per signature.
+  - `JitFn.runtime_artifact()` exports `compiler_path = "canonical_apple_tensor_program"`, a new execution-matrix row with executor `apple_tensor_program`. The artifact carries:
+    - the program's Graph as a narrow data record (ops, operands, types, scalar keywords, source locations);
+    - the source, Schedule and Tile text;
+    - a digest of every member package (ABI, route, Target IR sha256, image digest).
+    It carries **no executable payload**. Restoration (`restore_runtime_artifact`) requires the same compiler identity, rebuilds the Graph, requires it to print the recorded source byte for byte, recompiles, and refuses unless Schedule, Tile, every member record and the Target IR all match. Export refuses a Graph whose record would not rebuild its source.
+  - **Mac proof** (M1 Max, Metal, unsandboxed), `test_apple_native_tensor_program.py` (24 pass):
+    - public `@jit` at ragged 100×37×53: 1 command buffer, 2 dispatches, 1 private buffer; bit-identical to `execute_frame`; within 2e-3 of the numpy reference;
+    - a warm call that does not recompile;
+    - `runtime.launch(artifact)` replays bit for bit;
+    - four tampered artifacts refused (Tile, member digest, compiler identity, Graph record);
+    - fp32 inputs and a `relu` producer decline to the existing lanes.
+  - **Not yet:** members beyond softmax / f16 simdgroup GEMM (`relu`/`add` need an Apple scheduled kernel, the norms a scheduled carrier), dynamic shapes, AD through the program, and a resident (device-buffer) input ABI.
 
 ### APPLE-NTBI-3 — attention JVP (forward mode)
 - **Gap:** there is no Apple tangent consumer or Metal result lease; the attention tangent interface is gated to sm_120.

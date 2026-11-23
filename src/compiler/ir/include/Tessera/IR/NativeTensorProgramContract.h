@@ -14,6 +14,21 @@
 #include <cstdint>
 
 namespace tessera::native_tensor_program {
+// The two targets a native tensor program frame may name. sm_120 owns PTX
+// members and the CUDA frame owner; apple7 (APPLE-NTBI-2) owns members that
+// end at a launch-level Tile carrier packaged by the Apple scheduled routes.
+enum class ProgramTarget { None, SM120, Apple7 };
+inline ProgramTarget programTarget(mlir::Operation *module) {
+  if (!module) return ProgramTarget::None;
+  auto target = module->getAttrOfType<mlir::StringAttr>("tessera.target");
+  auto arch = module->getAttrOfType<mlir::StringAttr>("tessera.arch");
+  if (!target || !arch) return ProgramTarget::None;
+  if (target.getValue() == "nvidia_sm120" && arch.getValue() == "sm_120")
+    return ProgramTarget::SM120;
+  if (target.getValue() == "apple_gpu" && arch.getValue() == "apple7")
+    return ProgramTarget::Apple7;
+  return ProgramTarget::None;
+}
 inline bool isInvocation(mlir::Operation *op) {
   auto name = op->getName().getStringRef();
   return name == "tile.program_invoke" || name == "tessera_nvidia.program_invoke";
@@ -244,10 +259,15 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
   auto schema = host ? host->getAttrOfType<IntegerAttr>(
       "tessera.native.tensor_program") : IntegerAttr{};
   auto module = op->getParentOfType<ModuleOp>();
-  auto target = module ? module->getAttrOfType<StringAttr>("tessera.target") : StringAttr{};
-  auto arch = module ? module->getAttrOfType<StringAttr>("tessera.arch") : StringAttr{};
-  if (!target || target.getValue() != "nvidia_sm120" || !arch || arch.getValue() != "sm_120")
-    return emitOpError("requires exact nvidia_sm120 program target and sm_120 architecture");
+  auto programKind = programTarget(module);
+  if (programKind == ProgramTarget::None)
+    return emitOpError("requires exact nvidia_sm120/sm_120 or apple_gpu/apple7 program target");
+  // An Apple frame is static only until its bounded/shaped owners exist.
+  if (programKind == ProgramTarget::Apple7) {
+    auto apple = module->getAttrOfType<IntegerAttr>("tessera.native.tensor_program");
+    if (!apple || apple.getInt() != 1)
+      return emitOpError("apple7 native program supports the static frame schema only");
+  }
   auto moduleSchema = module->getAttrOfType<IntegerAttr>("tessera.native.tensor_program");
   if (!moduleSchema || !moduleSchema.getType().isInteger(64) ||
       (moduleSchema.getInt() != 1 && moduleSchema.getInt() != 2 && moduleSchema.getInt() != 3))

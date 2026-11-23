@@ -303,3 +303,129 @@ def run_members_sequentially(program: AppleTensorProgram, inputs: Mapping[str, A
     receipt = {"schema": "tessera.apple.tensor_program_sequential.v1", "frame_owned": False,
                "member_launches": len(launches), "launches": launches}
     return values[function.return_values[0].removeprefix("%")], receipt
+
+
+#: The member ABIs that have encode-only entry points in the frame owner.
+_FRAME_KINDS = {"tile.softmax_kernel": 1, "tile.matmul_kernel": 2}
+_FRAME_ERRORS = {
+    -1: "the runtime refused the frame contract",
+    -2: "no Metal device",
+    -3: "a member pipeline did not compile",
+    -4: "a frame buffer could not be allocated",
+    -5: "the frame command buffer failed or timed out",
+}
+
+
+def _frame_stage(stage: AppleTensorStage, record: dict, frame: dict):
+    """One stage as the owner's flat record, re-checked against its package."""
+    from .apple_native import (
+        APPLE_SIMDGROUP_GEMM_F16_ABI, APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR,
+        APPLE_SOFTMAX_F16_ABI)
+
+    descriptor = stage.package.descriptor
+    buffers = frame["buffers"]
+    if stage.carrier == "tile.softmax_kernel":
+        if descriptor.abi_id != APPLE_SOFTMAX_F16_ABI:
+            raise AppleTensorProgramError(
+                f"Apple member {stage.index} has no frame encoder for {descriptor.abi_id}")
+        rows, columns = buffers[record["inputs"][0]]["shape"]
+        return [1, record["inputs"][0], -1, record["output"], rows, 1, columns, 0, 0, 0], None, None
+    if descriptor.abi_id != APPLE_SIMDGROUP_GEMM_F16_ABI:
+        raise AppleTensorProgramError(
+            f"Apple member {stage.index} has no frame encoder for {descriptor.abi_id}")
+    from .apple_target import AppleGPUArch, AppleGPUTargetProfile
+    from .msl_gemm_emit import materialize_apple_simdgroup_tile_msl
+
+    artifact = stage.artifact
+    (m, k), (k2, n) = (buffers[i]["shape"] for i in record["inputs"])
+    if (m, n, k) != (artifact.m, artifact.n, artifact.k) or k2 != k:
+        raise AppleTensorProgramError(f"Apple member {stage.index} extents differ from its package")
+    bm, bn, bk = (int(value) for value in descriptor.provenance["block"])
+    # The same materialization the standalone launch of this package uses.
+    msl = materialize_apple_simdgroup_tile_msl(
+        AppleGPUTargetProfile(AppleGPUArch.APPLE7), "fp16", bm, bn, bk,
+        accumulator_dtype=APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR, double_buffer=True)
+    threads = int(msl.resources.threadgroup[0])
+    a, b = record["inputs"]
+    return ([2, a, b, record["output"], m, n, k, msl.shape.m, msl.shape.n, threads],
+            msl.msl, msl.entry)
+
+
+def execute_frame(program: AppleTensorProgram, inputs: Mapping[str, Any]):
+    """Run the whole program in one Metal command buffer (the frame owner).
+
+    Every member is encoded by its encode-only entry point into one serial
+    compute encoder; program-owned intermediates live in device-only
+    (``MTLStorageModePrivate``) buffers. Returns ``(output, receipt)``.
+    A failure raises; it never runs a reference path.
+    """
+    import ctypes
+
+    import numpy as np
+    from tessera._apple_gpu_dispatch import apple_gpu_runtime_handle, bind_registered
+
+    if not isinstance(program, AppleTensorProgram):
+        raise TypeError("the Apple frame owner requires a compiled Apple tensor program")
+    frame = program.frame
+    function = program.graph.functions[0]
+    roots = [arg.name for arg in function.args]
+    if set(inputs) != set(roots):
+        raise ValueError(f"Apple tensor program inputs must be exactly {roots}")
+    handle, dylib, reason = apple_gpu_runtime_handle()
+    # A prebuilt image reports no build path; the loaded handle names its file.
+    dylib = dylib or (getattr(handle, "_name", None) if handle is not None else None)
+    if not dylib or not Path(dylib).is_file():
+        raise RuntimeError(f"the Apple frame owner requires the Apple GPU runtime: {reason}")
+    loaded = hashlib.sha256(Path(dylib).read_bytes()).hexdigest()
+    for stage in program.stages:
+        if hashlib.sha256(stage.package.image.payload).hexdigest() != loaded:
+            raise AppleTensorProgramError(
+                f"Apple member {stage.index} was packaged against a different runtime image")
+    owner = bind_registered("tessera_apple_gpu_tensor_frame_execute")
+    if owner is None:
+        raise RuntimeError("the Apple GPU runtime lacks tessera_apple_gpu_tensor_frame_execute")
+
+    host: list[Any] = []
+    flat: list[int] = []
+    keep: list[Any] = []
+    output = None
+    for spec in frame["buffers"]:
+        flat += [{"input": 0, "private": 1, "output": 2}[spec["role"]], spec["bytes"]]
+        dtype = np.dtype(_NUMPY[spec["storage"]])
+        if spec["role"] == "input":
+            name = roots[frame["roots"].index(spec["id"])]
+            array = np.asarray(inputs[name])
+            if array.dtype != dtype or array.shape != tuple(spec["shape"]):
+                raise ValueError(f"Apple tensor input {name} differs from its frame buffer")
+            array = np.ascontiguousarray(array)
+            keep.append(array)
+            host.append(array.ctypes.data_as(ctypes.c_void_p))
+        elif spec["role"] == "output":
+            output = np.empty(tuple(spec["shape"]), dtype)
+            host.append(output.ctypes.data_as(ctypes.c_void_p))
+        else:
+            host.append(None)
+    records, sources, entries = [], [], []
+    for stage, record in zip(program.stages, frame["stages"], strict=True):
+        row, source, entry = _frame_stage(stage, record, frame)
+        records += row
+        sources.append(source.encode() if source else None)
+        entries.append(entry.encode() if entry else None)
+    count, stage_count = len(frame["buffers"]), len(frame["stages"])
+    receipt = (ctypes.c_int64 * 4)()
+    status = owner(
+        (ctypes.c_int64 * len(flat))(*flat), (ctypes.c_void_p * count)(*host), count,
+        (ctypes.c_int64 * len(records))(*records), (ctypes.c_char_p * stage_count)(*sources),
+        (ctypes.c_char_p * stage_count)(*entries), stage_count, receipt)
+    if status != 1:
+        raise RuntimeError("Apple tensor frame did not execute: "
+                           + _FRAME_ERRORS.get(status, f"status {status}"))
+    if receipt[0] != 1 or receipt[1] != stage_count:
+        raise RuntimeError("Apple tensor frame receipt differs from the frame")
+    return output, {
+        "schema": "tessera.apple.tensor_frame_receipt.v1", "frame_owned": True,
+        "command_buffers": int(receipt[0]), "dispatches": int(receipt[1]),
+        "private_device_buffers": int(receipt[2]),
+        "gpu_time_ns": int(receipt[3]) if receipt[3] >= 0 else None,
+        "members": [record["member"] for record in frame["stages"]],
+    }

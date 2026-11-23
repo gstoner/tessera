@@ -16521,6 +16521,19 @@ Slices, in order: (1) admission + frame export for `apple_gpu` under the request
 - **Sibling outcome:**
   - NVIDIA sm_120: not applicable. The shared `outline` change refuses only for an Apple program; `decline` returns success for every other target, so sm_120 admission is unchanged.
   - ROCm and x86: not applicable (no tensor-program owner).
+- **Slice 3 landed (frame owner), sync `APPLE-NTBI-2-frame-2026-11-23`.**
+  - `tessera_apple_gpu_tensor_frame_execute` in `apple_gpu_runtime.mm` executes the exported frame in **one command buffer with one serial compute encoder**.
+  - The members are encoded by encode-only entry points factored out of the existing standalone ABIs, so one kernel has two submission owners: `encode_softmax_f16` from `tessera_apple_gpu_softmax_f16_status`, and `encode_tile_simdgroup_gemm` from `tessera_apple_gpu_tile_simdgroup_gemm_f16`.
+  - Program-owned intermediates are `MTLStorageModePrivate` (device-only). Inputs are copied in once and the output is copied out once.
+  - The runtime re-checks the frame contract (roles, byte sizes against each stage's extents, write-once / read-after-write) and refuses with a negative code. It never runs a reference path.
+  - Python: `apple_tensor_program.execute_frame`. It refuses unless every member was packaged against the runtime image that will run it (payload digest). The GEMM's MSL comes from the same materialization the standalone package launch uses.
+  - **Mac proof** (M1 Max, Metal, unsandboxed), `test_apple_native_tensor_program.py` (14 pass):
+    - The frame output equals the per-member launches **bit for bit** at 64×32×48 and ragged 100×37×53.
+    - The receipt reports 1 command buffer, 2 dispatches, 1 private device buffer and a positive GPU time.
+    - The receipt is owner-reported: the owner creates exactly one command buffer by construction. No independent per-process command-buffer counter exists.
+  - The GPU time is one command buffer's clock, not a performance claim.
+  - The sealed Apple GPU E2E packet is re-recorded from this commit's runtime source (see the e2e fleet log).
+  - **Not yet:** the Python binding into the public `@jit` path, `RuntimeArtifact` restoration, and members beyond softmax / f16 simdgroup GEMM. These are slice 4 and later.
 
 ### APPLE-NTBI-3 — attention JVP (forward mode)
 - **Gap:** there is no Apple tangent consumer or Metal result lease; the attention tangent interface is gated to sm_120.

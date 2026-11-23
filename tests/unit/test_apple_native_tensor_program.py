@@ -142,3 +142,51 @@ def test_member_packages_compute_the_program_on_metal(fn, shapes, names):
     reference = probabilities.astype(np.float32) @ arrays[-1].astype(np.float32)
     assert output.dtype == np.float32 and output.shape == reference.shape
     np.testing.assert_allclose(output, reference, rtol=0, atol=2e-3)
+
+
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.parametrize("shapes", [((64, 32), (32, 48)), ((100, 37), (37, 53))])
+def test_frame_owner_runs_the_program_in_one_command_buffer(shapes):
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    s, v = (_half(*shape, seed=i + 7) for i, shape in enumerate(shapes))
+    program = atp.compile_apple_tensor_program(_graph(_scores_values, (s, v), ("s", "v")))
+    output, receipt = atp.execute_frame(program, {"s": s, "v": v})
+    assert receipt["frame_owned"] is True
+    assert (receipt["command_buffers"], receipt["dispatches"]) == (1, 2)
+    # The softmax result is a device-only (MTLStorageModePrivate) buffer.
+    assert receipt["private_device_buffers"] == 1
+    assert receipt["gpu_time_ns"] is not None and receipt["gpu_time_ns"] > 0
+    # Same kernels, same order: the frame equals the per-member launches exactly.
+    sequential, _ = atp.run_members_sequentially(program, {"s": s, "v": v})
+    assert output.dtype == np.float32 and output.tobytes() == sequential.tobytes()
+
+
+@pytest.mark.hardware_apple_gpu
+def test_frame_owner_refuses_a_member_packaged_against_another_runtime(program):
+    stage = program.stages[1]
+    image = dataclasses.replace(stage.package.image, payload=stage.package.image.payload + b"\0")
+    other = dataclasses.replace(stage, package=dataclasses.replace(stage.package, image=image))
+    drifted = dataclasses.replace(program, stages=(program.stages[0], other))
+    with pytest.raises(atp.AppleTensorProgramError, match="different runtime image"):
+        atp.execute_frame(drifted, {"s": _half(64, 32), "v": _half(32, 48)})
+
+
+@pytest.mark.hardware_apple_gpu
+def test_frame_owner_refuses_a_frame_whose_buffers_do_not_fit_the_stage():
+    import ctypes
+
+    from tessera._apple_gpu_dispatch import bind_registered
+
+    owner = bind_registered("tessera_apple_gpu_tensor_frame_execute")
+    assert owner is not None
+    x, out = np.zeros((4, 8), np.float16), np.full((4, 8), -1, np.float16)
+    # The output is declared one element short of the softmax result.
+    buffers = (ctypes.c_int64 * 4)(0, x.nbytes, 2, out.nbytes - 2)
+    hosts = (ctypes.c_void_p * 2)(x.ctypes.data, out.ctypes.data)
+    stage = (ctypes.c_int64 * 10)(1, 0, -1, 1, 4, 1, 8, 0, 0, 0)
+    none = (ctypes.c_char_p * 1)(None)
+    receipt = (ctypes.c_int64 * 4)()
+    assert owner(buffers, hosts, 2, stage, none, none, 1, receipt) == -1
+    assert list(receipt) == [0, 0, 0, 0] and (out == -1).all()

@@ -818,7 +818,10 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         # refuses a forward product it cannot bind to an exact profile.
         diagnostic_codes=("MATMUL_SCHEDULE_ACCUM_UNSUPPORTED", "ROCM_SPLIT_K_NOT_APPLIED",
                           "ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED",
-                          "SPECTRAL_JVP_SCHEDULE_REFUSED"),
+                          "SPECTRAL_JVP_SCHEDULE_REFUSED",
+                          # APPLE-NTBI-2: a requested apple7 native tensor
+                          # program outside the owner's profile.
+                          "APPLE_TENSOR_PROGRAM_UNSUPPORTED"),
     ),
     PassMetadata(
         name="tessera-ir-contracts",

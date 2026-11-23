@@ -90,14 +90,21 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
   if (programKind == tessera::native_tensor_program::ProgramTarget::None ||
       (apple && !module->hasAttr("tessera.native.apple_tensor_program_request")))
     return success();
+  // A requested Apple program the owner cannot form refuses; it never falls
+  // back silently to a lane the request asked not to use (Decision #21).
+  auto decline = [&](const char *why) -> LogicalResult {
+    if (!apple) return success();
+    return module.emitError("APPLE_TENSOR_PROGRAM_UNSUPPORTED: ") << why;
+  };
   SmallVector<func::FuncOp> functions(module.getOps<func::FuncOp>());
   if (functions.size() != 1 || !functions[0].getBody().hasOneBlock())
-    return success();
+    return decline("the Apple native tensor program owns one single-block function");
   auto root = functions[0];
   SmallVector<Operation *> operations;
   for (auto &op : root.getBody().front().without_terminator())
     operations.push_back(&op);
-  if (operations.size() < 2) return success();
+  if (operations.size() < 2)
+    return decline("the Apple native tensor program needs a producer and a matrix product");
   auto product = operations.back();
   // The existing matmul epilogue lowering owns matrix-result consumers.
   // Do not replace a fused native image with separate program launches.
@@ -105,13 +112,13 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
     return op->getName().getStringRef() == "tessera.matmul";
   });
   if (hasMatmul && product->getName().getStringRef() != "tessera.matmul")
-    return success();
+    return decline("the Apple native tensor program must end in its matrix product");
   // SM120-W11-FP8-RHS-20261026: matmul(A, dequantize_scaled(Bq, s)) is one
   // scheduled matmul whose B gather decodes the codes; it is not a DAG.
   if (operations.size() == 2 && product->getNumOperands() == 2)
     if (Operation *rhs = product->getOperand(1).getDefiningOp())
       if (rhs->getName().getStringRef() == "tessera.dequantize_scaled")
-        return success();
+        return decline("an Apple member must be tessera.matmul or tessera.softmax");
   // The first Apple profile (APPLE-NTBI-2 slice 1): a matrix product whose
   // producers are Apple-scheduled semantic kernels, static shapes only. relu
   // and add have no Apple scheduled kernel yet; rmsnorm/layer_norm no Apple
@@ -144,7 +151,7 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
       })) return success();
   if (!llvm::any_of(product->getOperands(), [](Value input) {
         return input.getDefiningOp() != nullptr;
-      })) return success();
+      })) return decline("the Apple matrix product must consume a program producer");
   auto reject = [&]() {
     return root.emitError("Graph->Schedule native tensor program requires a compact typed "
                           "producer DAG with verified static or bounded leading rows");

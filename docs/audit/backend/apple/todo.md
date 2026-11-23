@@ -16508,6 +16508,20 @@ What the sm_120 owner is, by stage, and what each stage needs on Apple:
 
 Slices, in order: (1) admission + frame export for `apple_gpu` under the request, with Schedule → Tile refusing an Apple member by a stable diagnostic until (2) lands; (2) Apple member carriers and packages for `relu`/`add`/`rmsnorm` → `matmul` (f16 storage, f32 accumulate); (3) the Metal frame owner and encode-only member entry points; (4) the Python binding and a Mac device proof that one command buffer ran the whole frame and matches the reference.
 
+**Status (2026-11-23, sync `APPLE-NTBI-2-members-2026-11-23`).**
+- **Slice 1 landed** (`7cd912906`): admission + frame export under `tessera.native.apple_tensor_program_request`. The first profile is `softmax` → `matmul` (f16 storage, f32 accumulate), static shapes. `relu`/`add` have no Apple scheduled kernel and the norms no Apple scheduled carrier, so they wait for their own packages.
+- **Slice 2 landed** (`python/tessera/compiler/apple_tensor_program.py`):
+  - Every frame stage is bound to the traced Graph op it came from: buffer ids, carrier and result type are all checked.
+  - Each op is lowered on its own and packaged by the existing Apple scheduled packager, giving `apple_softmax_native_library` and `apple_gpu_simdgroup_gemm_f16`.
+  - The package's Tile carrier must equal the member the program projects (`tensor-member=<i>`), content-addressed schedule digest included.
+  - `validate()` replays the source and re-derives every member and package.
+- **Slice 1 fix carried here:** under the request, a DAG the owner cannot form now refuses with `APPLE_TENSOR_PROGRAM_UNSUPPORTED` instead of declining silently. Affected: a lone product, a product that is not last, and a product with no program producer. The code is now registered in `diagnostic_codes.py`; slice 1 had left it unregistered, failing `test_every_cpp_code_is_registered`.
+- **Mac proof** (M1 Max, Metal, unsandboxed): `tests/unit/test_apple_native_tensor_program.py` runs the member packages one after another. The receipt is labelled `frame_owned = False`: one runtime launch per member, with the private intermediate round-tripping through host memory. The output matches a numpy softmax → matmul reference within 2e-3 absolute.
+  - This is **not** the frame owner and not one command buffer; that is slice 3.
+- **Sibling outcome:**
+  - NVIDIA sm_120: not applicable. The shared `outline` change refuses only for an Apple program; `decline` returns success for every other target, so sm_120 admission is unchanged.
+  - ROCm and x86: not applicable (no tensor-program owner).
+
 ### APPLE-NTBI-3 — attention JVP (forward mode)
 - **Gap:** there is no Apple tangent consumer or Metal result lease; the attention tangent interface is gated to sm_120.
 - **Tests that name this item:** `test_native_bounded_attention_jvp_runtime.py`.

@@ -17126,3 +17126,7 @@ This adds `tessera.paged_kv_write`, the destination-passing twin of the paged re
 Each conversion requires a probe of the host to confirm the capability is absent. On a host that has the backend, the same message is still a failure, so this box's evidence is unchanged.
 
 The `TESSERA_LLVM_BIN` reads in the device and unit tests now go through `tests._support.environment.require_llvm_bin()`, which skips with a reason instead of raising `KeyError`. Apple gaps found by the same audit are APPLE-NTBI-1..4 in the Apple todo.
+
+## `APPLE-NTBI-1-attention-vjp-2026-11-22`: sibling outcome — not applicable
+
+The sm_120 attention VJP returns before the shared code this change touched; no NVIDIA lowering or runtime path changed, and no NVIDIA device lane was run. (Apple owner: `docs/audit/backend/apple/todo.md` APPLE-NTBI-1.)

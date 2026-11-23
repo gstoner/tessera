@@ -11137,6 +11137,46 @@ def _execute_native_attention_vjp_package(
             expected_device_arch=package.native.image.architecture,
         )
 
+    if package.target == "apple_gpu":
+        from tessera.compiler.apple_native import AppleNativePackage
+        if not isinstance(package.native, AppleNativePackage):
+            raise TypeError("Apple attention VJP requires its Metal package")
+        storage = q.dtype
+        if any(array.dtype != storage for array in (key, value, dout)):
+            raise ValueError("Apple attention VJP requires one storage dtype for dO/Q/K/V")
+        if bias is not None and bias.dtype != np.float32:
+            raise ValueError("Apple attention VJP bias must be fp32")
+        artifact = RuntimeArtifact(
+            metadata={"target": "apple_gpu"},
+            native_image=package.native.image,
+            launch_descriptor=package.native.descriptor,
+            tile_ir=package.native.tile_ir,
+            target_ir=package.native.target_ir,
+        )
+        result = launch(artifact, buffers)
+        if not result.get("ok") or result.get("execution_kind") != "native_gpu":
+            raise RuntimeError(
+                "Apple attention VJP launch did not execute natively: "
+                + str(result.get("reason") or result.get("runtime_status")))
+        # The launch wrote the fp32 gradients into the bound output buffers.
+        # Physical proof must originate in the descriptor submission itself:
+        # a ``launch`` replaced by a test double returns ok/native_gpu but no
+        # attestation, and probing device availability here would turn that
+        # into exact-device evidence. Only a launch-origin apple7 attestation
+        # is rebound to the package's identity (as the ROCm branch binds it);
+        # otherwise the execution stays runtime-unattested.
+        launched = result.get("physical_attestation")
+        if not (isinstance(launched, Mapping) and launched.get("target") == "apple_gpu"
+                and launched.get("device_arch") == "apple7"
+                and launched.get("execution_mode") == "metal_runtime"):
+            return (dq, dk, dv), None
+        return (dq, dk, dv), _physical_execution_attestation(
+            target="apple_gpu",
+            execution_kind="native_gpu",
+            execution_mode="metal_runtime",
+            artifact_hash=package.artifact_hash,
+        )
+
     if package.target != "x86" or not isinstance(package.native, X86NativePackage):
         raise TypeError("native attention VJP package has a mismatched target image")
     if any(array.dtype != np.float32 for array in (dout, q, key, value)):
@@ -36144,6 +36184,14 @@ def _launch_native_descriptor(
         kernel_elapsed_ms=kernel_ms,
         cpu_wall_ms=elapsed_ms if native_cpu_target else None,
     )
+    # Launch-origin proof for an Apple GPU image: produced here, after the
+    # descriptor's Metal submission returned, from the live Metal device.
+    # A ``launch`` test double never reaches this line, so it cannot carry it.
+    physical_attestation = (
+        _physical_execution_attestation(
+            target="apple_gpu", execution_kind="native_gpu",
+            execution_mode="metal_runtime", artifact_hash=artifact.artifact_hash)
+        if image.target == "apple_gpu" else None)
     return {
         "ok": True,
         "runtime_status": "success",
@@ -36153,6 +36201,7 @@ def _launch_native_descriptor(
         "artifact_hash": artifact.artifact_hash,
         "image_digest": image.image_digest,
         "launch_descriptor_digest": descriptor.descriptor_digest,
+        "physical_attestation": physical_attestation,
         "output": output,
         "profile": {
             "launch_overhead_ms": elapsed_ms,

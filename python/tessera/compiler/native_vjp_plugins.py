@@ -1220,6 +1220,8 @@ def _execute_sequence_mixer(
         "x86": "x86.avx512_attention_backward",
         "rocm": _rocm_consumer("attention_backward_program"),
         "nvidia_sm120": "nvidia.sm120_saved_lse_vjp",
+        # APPLE-NTBI-1: the Apple7 split Metal backward (APPLE-ATTN-BWD-1).
+        "apple_gpu": "apple.metal_attention_backward",
     },
     target_schedule_consumers={"nvidia_sm120":"schedule.artifact"},
     target_graph_consumers={"nvidia_sm120":("tessera.flash_attn",)},
@@ -1286,21 +1288,24 @@ def _execute_attention(
             "attention VJP has no physical gradient for operands: "
             + ", ".join(missing)
         )
-    execution_mode = "cpu_avx512" if target == "x86" else "hip_runtime"
+    execution_mode, evidence_target = {
+        "x86": ("cpu_avx512", "x86_avx512"),
+        "apple_gpu": ("metal_runtime", "apple7"),
+    }.get(target, ("hip_runtime", "rocm_" + package.scheduled.architecture))
     return NativeVJPResult(
         gradients=tuple(by_name[name] for name in wrt_names),
         execution={
             "compiler_path": f"{target}_flash_attn_bwd_compiled",
             "execution_kind": "native_cpu" if target == "x86" else "native_gpu",
             "execution_mode": execution_mode,
-            "evidence_target": "x86_avx512" if target == "x86" else "rocm_" + package.scheduled.architecture,
+            "evidence_target": evidence_target,
             "implementation": "family_plugin",
             "residual_policy": package.scheduled.lse_checkpoint_selection,
             "family": declaration.family,
             "graph_consumer": source.op_name,
             "schedule_consumer": declaration.schedule_consumer,
             "tile_consumer": declaration.tile_consumer,
-            "target_consumer": (declaration.target_consumers[target] if target == "x86" else
+            "target_consumer": (declaration.target_consumers[target] if target in {"x86", "apple_gpu"} else
                                 f"rocm.{package.scheduled.architecture}_attention_backward_program"),
             "source_graph_ir_digest": package.source_graph_ir_digest,
             "schedule_artifact_hash": package.schedule_artifact_hash,

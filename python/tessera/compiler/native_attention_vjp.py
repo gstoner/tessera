@@ -13,6 +13,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
+from .apple_native import AppleNativePackage, package_scheduled_attention_backward as package_apple
 from .graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, tensor_ir_type
 from .rocm_native import ROCMNativeProgram, package_scheduled_attention_backward as package_rocm
 from .scheduled_attention_backward import (
@@ -21,6 +22,11 @@ from .scheduled_attention_backward import (
 )
 from .x86_native import X86NativePackage, package_scheduled_attention_backward as package_x86
 
+
+# Targets with a physical reverse owner: the x86 AVX-512 image, a ROCm
+# program for the exact live architecture, and the Apple7 Metal backward
+# (APPLE-ATTN-BWD-1's split route, APPLE-NTBI-1).
+_PHYSICAL_OWNERS = frozenset({"x86", "rocm", "apple_gpu"})
 
 _ATTENTION_FORWARD_OPS = {
     "flash_attn",
@@ -60,7 +66,7 @@ class NativeAttentionVJPPackage:
     source_graph_ir: str
     source_graph_ir_digest: str
     scheduled: ScheduledAttentionBackwardArtifact
-    native: X86NativePackage | ROCMNativeProgram
+    native: X86NativePackage | ROCMNativeProgram | AppleNativePackage
     target: str
     operand_names: tuple[str, str, str]
     bias_name: str | None
@@ -93,13 +99,12 @@ class NativeAttentionVJPPackage:
         return _digest(identity)
 
     def validate(self) -> None:
-        if self.target not in {"x86", "rocm"}:
+        if self.target not in _PHYSICAL_OWNERS:
             raise ValueError("native attention VJP target has no physical owner")
         if _digest(self.source_graph_ir) != self.source_graph_ir_digest:
             raise ValueError("native attention VJP source Graph digest is stale")
         self.scheduled.validate()
-        expected_target = "x86" if self.target == "x86" else "rocm"
-        if self.scheduled.target != expected_target:
+        if self.scheduled.target != self.target:
             raise ValueError("native attention VJP Schedule target is stale")
         if (self.target == "rocm" and
                 (self.native.image.architecture != self.scheduled.architecture or
@@ -107,9 +112,14 @@ class NativeAttentionVJPPackage:
             raise ValueError("native attention VJP image architecture is stale")
         if self.native.tile_ir != self.scheduled.tile_ir:
             raise ValueError("native attention VJP package did not consume the exact Tile artifact")
+        if self.target == "apple_gpu" and (
+                not isinstance(self.native, AppleNativePackage)
+                or self.native.image.target != "apple_gpu"
+                or self.scheduled.architecture != "apple7"):
+            raise ValueError("native attention VJP Apple image is stale")
         descriptors = (
             (self.native.descriptor,)
-            if isinstance(self.native, X86NativePackage)
+            if isinstance(self.native, (X86NativePackage, AppleNativePackage))
             else self.native.descriptors
         )
         if not descriptors or any(
@@ -219,7 +229,7 @@ def build_native_attention_vjp_package(
 
     if not source_graph_ir:
         raise ValueError("native attention VJP requires tracer-owned source Graph IR")
-    if target not in {"x86", "rocm"}:
+    if target not in _PHYSICAL_OWNERS:
         raise ValueError(f"native attention VJP has no physical owner for {target!r}")
     module, operand_names, bias_name = _backward_module(
         source=source,
@@ -235,11 +245,19 @@ def build_native_attention_vjp_package(
             architecture = _rocm_live_arch()
         if architecture not in {"gfx1151", "gfx1201"}:
             raise ValueError("native attention VJP requires a supported exact ROCm architecture")
-    scheduled_target = "x86" if target == "x86" else f"rocm_{architecture}"
+    scheduled_target = (target if target in {"x86", "apple_gpu"}
+                        else f"rocm_{architecture}")
     scheduled = lower_scheduled_attention_backward(module, target=scheduled_target)
+    native: X86NativePackage | ROCMNativeProgram | AppleNativePackage
     if target == "x86":
-        native: X86NativePackage | ROCMNativeProgram = package_x86(
+        native = package_x86(
             scheduled, pipeline_name="tessera-lower-to-x86"
+        )
+    elif target == "apple_gpu":
+        # The split, fixed-order Metal backward; it recomputes the row
+        # statistics (``apple7_recompute``), so the carrier asks for no LSE.
+        native = package_apple(
+            scheduled, pipeline_name="tessera-lower-to-apple_gpu"
         )
     else:
         native = package_rocm(

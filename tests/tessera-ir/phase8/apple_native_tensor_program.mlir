@@ -41,3 +41,24 @@ module @unrequested attributes {tessera.target = "apple_gpu", tessera.arch = "ap
     return %o : tensor<64x48xf32>
   }
 }
+
+// -----
+
+// APPLE-NTBI-2 slice 5: the tanh GELU activation is an Apple producer member;
+// it ends at the shared activation launch carrier the scheduled GELU package
+// consumes.
+// CHECK-LABEL: module @gelu_requested
+// CHECK-SAME: tessera.native.tensor_program = 1
+// CHECK: %[[G:.*]] = memref.alloc() : memref<64x32xf16>
+// CHECK: tile.program_invoke %arg0, %[[G]] {callee = @tensor_stage_0::@source, carrier = "tile.activation_kernel"
+// CHECK: tile.program_invoke %[[G]], %arg1, %{{.*}} {callee = @tensor_stage_1::@source, carrier = "tile.matmul_kernel"
+// CHECK: module @tensor_stage_0
+// CHECK: tile.activation_kernel
+module @gelu_requested attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
+                                   tessera.native.apple_tensor_program_request} {
+  func.func @gelu_product(%x: tensor<64x32xf16>, %w: tensor<32x48xf16>) -> tensor<64x48xf32> {
+    %g = tessera.gelu %x : (tensor<64x32xf16>) -> tensor<64x32xf16>
+    %o = tessera.matmul %g, %w {output_dtype = "fp32"} : (tensor<64x32xf16>, tensor<32x48xf16>) -> tensor<64x48xf32>
+    return %o : tensor<64x48xf32>
+  }
+}

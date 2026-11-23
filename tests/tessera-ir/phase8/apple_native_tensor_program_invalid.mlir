@@ -6,7 +6,7 @@
 // RUN: not tessera-opt %s --split-input-file --tessera-graph-to-schedule 2>&1 | FileCheck %s
 
 // relu has no Apple scheduled kernel.
-// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: an Apple member must be tessera.matmul or tessera.softmax
+// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: an Apple member must be tessera.matmul, tessera.softmax or tessera.gelu
 module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
                    tessera.native.apple_tensor_program_request} {
   func.func @relu_product(%a: tensor<64x32xf16>, %b: tensor<32x48xf16>) -> tensor<64x48xf32> {
@@ -64,5 +64,19 @@ module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
     %p = tessera.softmax %s {axis = -1 : i64} : (tensor<32x32xf16>) -> tensor<32x32xf16>
     %o = tessera.matmul %a, %a {output_dtype = "fp32"} : (tensor<32x32xf16>, tensor<32x32xf16>) -> tensor<32x32xf32>
     return %o : tensor<32x32xf32>
+  }
+}
+
+// -----
+
+// The Apple GELU kernel is the tanh approximation; exact (erf) GELU has no
+// apple7 scheduled kernel, so the member is refused, not approximated.
+// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: no apple7 scheduled kernel for this producer
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
+                   tessera.native.apple_tensor_program_request} {
+  func.func @exact_gelu_product(%x: tensor<64x32xf16>, %w: tensor<32x48xf16>) -> tensor<64x48xf32> {
+    %g = tessera.gelu %x {approximate = "none"} : (tensor<64x32xf16>) -> tensor<64x32xf16>
+    %o = tessera.matmul %g, %w {output_dtype = "fp32"} : (tensor<64x32xf16>, tensor<32x48xf16>) -> tensor<64x48xf32>
+    return %o : tensor<64x48xf32>
   }
 }

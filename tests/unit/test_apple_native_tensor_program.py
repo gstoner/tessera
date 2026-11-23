@@ -125,7 +125,7 @@ def test_frame_stages_must_bind_the_traced_operands(program):
 
 @pytest.mark.parametrize("fn, arrays, why", [
     (lambda a, b: ts.ops.matmul(ts.ops.relu(a), b, output_dtype="fp32"),
-     (_half(64, 32), _half(32, 48)), "must be tessera.matmul or tessera.softmax"),
+     (_half(64, 32), _half(32, 48)), "must be tessera.matmul, tessera.softmax or tessera.gelu"),
     (lambda a, b: ts.ops.softmax(ts.ops.matmul(a, b, output_dtype="fp32"), axis=-1),
      (_half(64, 32), _half(32, 48)), "must end in its matrix product"),
     (lambda a: ts.ops.matmul(a, a, output_dtype="fp32"),
@@ -358,3 +358,115 @@ def test_public_jit_declines_an_effectful_body_before_tracing(monkeypatch):
     monkeypatch.setattr(type(program), "_traced_autodiff_module",
                         lambda *_: pytest.fail("an effectful body was traced"))
     assert program._compile_apple_tensor_program((_half(64, 32), _half(32, 48))) is None
+
+
+# --- Slice 5: the tanh GELU activation as a producer member ----------------
+
+
+def _gelu_product(x, w):
+    return ts.ops.matmul(ts.ops.gelu(x), w, output_dtype="fp32")
+
+
+def _gelu_softmax_product(x, w):
+    return ts.ops.matmul(ts.ops.softmax(ts.ops.gelu(x), axis=-1), w, output_dtype="fp32")
+
+
+def _both_operands_gelu(x, w):
+    return ts.ops.matmul(ts.ops.gelu(x), ts.ops.gelu(w), output_dtype="fp32")
+
+
+def _gelu_f16(x):
+    """The kernel's GELU: tanh approximation in f32, rounded to f16 storage."""
+    v = x.astype(np.float32)
+    t = np.clip(np.float32(0.7978845608028654) * (v + np.float32(0.044715) * v ** 3), -30, 30)
+    return (np.float32(0.5) * v * (1 + np.tanh(t))).astype(np.float16)
+
+
+def _softmax_f16(x):
+    v = x.astype(np.float32)
+    w = np.exp(v - v.max(-1, keepdims=True))
+    return (w / w.sum(-1, keepdims=True)).astype(np.float16)
+
+
+def test_a_gelu_member_binds_the_shared_activation_carrier():
+    gelu = atp.compile_apple_tensor_program(
+        _graph(_gelu_product, (_half(64, 32), _half(32, 48)), ("x", "w")))
+    activation, product = gelu.stages
+    assert (activation.op_name, activation.carrier) == ("tessera.gelu", "tile.activation_kernel")
+    provenance = activation.package.descriptor.provenance
+    assert provenance["route"] == "apple_gelu_native_library"
+    assert provenance["approximation"] == "tanh"
+    assert activation.package.descriptor.abi_id == apple_native.APPLE_GELU_F16_ABI
+    assert product.inputs == (activation.output, "w")
+    assert [b["role"] for b in gelu.frame["buffers"]] == ["input", "input", "private", "output"]
+    gelu.validate()
+
+
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.parametrize("fn, shapes, members, private", [
+    (_gelu_product, ((64, 32), (32, 48)), 2, 1),
+    (_gelu_product, ((100, 37), (37, 53)), 2, 1),
+    # A producer chain: GELU feeds softmax feeds the product.
+    (_gelu_softmax_product, ((100, 37), (37, 53)), 3, 2),
+    # A producer on each operand.
+    (_both_operands_gelu, ((64, 32), (32, 48)), 3, 2),
+])
+def test_frame_owner_runs_gelu_programs_in_one_command_buffer(fn, shapes, members, private):
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    x, w = (_half(*shape, seed=i + 21) for i, shape in enumerate(shapes))
+    program = atp.compile_apple_tensor_program(_graph(fn, (x, w), ("x", "w")))
+    assert len(program.stages) == members
+    output, receipt = atp.execute_frame(program, {"x": x, "w": w})
+    assert (receipt["command_buffers"], receipt["dispatches"]) == (1, members)
+    assert receipt["private_device_buffers"] == private
+    # Same kernels, same order: the frame equals the per-member launches exactly.
+    sequential, _ = atp.run_members_sequentially(program, {"x": x, "w": w})
+    assert output.dtype == np.float32 and output.tobytes() == sequential.tobytes()
+    lhs = _gelu_f16(x)
+    if fn is _gelu_softmax_product:
+        lhs = _softmax_f16(lhs)
+    rhs = _gelu_f16(w) if fn is _both_operands_gelu else w
+    reference = lhs.astype(np.float32) @ rhs.astype(np.float32)
+    # The softmax program's bound (measured max error ~3e-4 on the M1 Max).
+    np.testing.assert_allclose(output, reference, rtol=0, atol=2e-3)
+
+
+@pytest.mark.hardware_apple_gpu
+def test_frame_owner_refuses_a_gelu_stage_whose_output_does_not_fit():
+    import ctypes
+
+    from tessera._apple_gpu_dispatch import bind_registered
+
+    owner = bind_registered("tessera_apple_gpu_tensor_frame_execute")
+    assert owner is not None
+    x, out = np.zeros((4, 8), np.float16), np.full((4, 8), -1, np.float16)
+    # The output is declared one element short of the GELU result.
+    buffers = (ctypes.c_int64 * 4)(0, x.nbytes, 2, out.nbytes - 2)
+    hosts = (ctypes.c_void_p * 2)(x.ctypes.data, out.ctypes.data)
+    stage = (ctypes.c_int64 * 10)(3, 0, -1, 1, 4, 1, 8, 0, 0, 0)
+    none = (ctypes.c_char_p * 1)(None)
+    receipt = (ctypes.c_int64 * 4)()
+    assert owner(buffers, hosts, 2, stage, none, none, 1, receipt) == -1
+    assert list(receipt) == [0, 0, 0, 0] and (out == -1).all()
+
+
+@pytest.mark.hardware_apple_gpu
+def test_public_jit_runs_a_gelu_program_in_one_command_buffer():
+    from tests._support.apple import require_apple_chip_identity
+    from tessera import runtime as rt
+
+    require_apple_chip_identity()
+    x, w = _half(100, 37, seed=31), _half(37, 53, seed=32)
+    program = ts.jit(target="apple_gpu")(_gelu_softmax_product)
+    output = program(x, w)
+    receipt = program._apple_tensor_last_receipt
+    assert receipt["compiler_path"] == "canonical_apple_tensor_program"
+    assert (receipt["command_buffers"], receipt["dispatches"]) == (1, 3)
+    roots = [arg.name for arg in program._apple_tensor_last_program.graph.functions[0].args]
+    framed, _ = atp.execute_frame(program._apple_tensor_last_program, dict(zip(roots, (x, w))))
+    assert output.dtype == np.float32 and output.tobytes() == framed.tobytes()
+    artifact = program.runtime_artifact()
+    launched = rt.launch(artifact, {"x": x, "w": w})
+    assert launched["ok"] and np.asarray(launched["output"]).tobytes() == output.tobytes()

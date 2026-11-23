@@ -8429,8 +8429,7 @@ extern "C" void tessera_apple_gpu_gelu_f32(const float* X, float* Out,
 
 namespace {
 
-bool dispatch_gelu_msl_f16(MetalDeviceContext &ctx, const uint16_t* X,
-                           uint16_t* Out, int32_t N) {
+id<MTLComputePipelineState> gelu_f16_pipeline(MetalDeviceContext &ctx) {
   static NSString *const kGeluSourceF16 = @R"MSL(
 #include <metal_stdlib>
 using namespace metal;
@@ -8450,10 +8449,29 @@ kernel void gelu_f16(
     out[gid] = half(0.5f * v * (1.0f + tanh(t)));
 }
 )MSL";
+  return compile_msl_kernel(ctx, kGeluSourceF16, @"gelu_f16");
+}
 
+// Encode-only: one element per thread over X[N] -> Out[N]; no commit. The
+// standalone ABI and the tensor frame owner (APPLE-NTBI-2 slice 5) share it.
+void encode_gelu_f16(id<MTLComputeCommandEncoder> enc,
+                     id<MTLComputePipelineState> pso, id<MTLBuffer> bufX,
+                     id<MTLBuffer> bufO, int32_t N) {
+  [enc setComputePipelineState:pso];
+  [enc setBuffer:bufX offset:0 atIndex:0];
+  [enc setBuffer:bufO offset:0 atIndex:1];
+  [enc setBytes:&N length:sizeof(int32_t) atIndex:2];
+  MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(N), 1, 1);
+  NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(N),
+                                         pso.maxTotalThreadsPerThreadgroup);
+  if (tg_x == 0) tg_x = 1;
+  [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+}
+
+bool dispatch_gelu_msl_f16(MetalDeviceContext &ctx, const uint16_t* X,
+                           uint16_t* Out, int32_t N) {
   @autoreleasepool {
-    id<MTLComputePipelineState> pso =
-        compile_msl_kernel(ctx, kGeluSourceF16, @"gelu_f16");
+    id<MTLComputePipelineState> pso = gelu_f16_pipeline(ctx);
     if (!pso) return false;
 
     NSUInteger byteCount = sizeof(uint16_t) * static_cast<NSUInteger>(N);
@@ -8463,17 +8481,7 @@ kernel void gelu_f16(
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
-    [enc setComputePipelineState:pso];
-    [enc setBuffer:bufX offset:0 atIndex:0];
-    [enc setBuffer:bufO offset:0 atIndex:1];
-    [enc setBytes:&N length:sizeof(int32_t) atIndex:2];
-
-    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(N), 1, 1);
-    NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(N),
-                                           pso.maxTotalThreadsPerThreadgroup);
-    if (tg_x == 0) tg_x = 1;
-    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
-    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    encode_gelu_f16(enc, pso, bufX, bufO, N);
     [enc endEncoding];
     // Migration batch 3 (2026-06-01) — GELU MSL (f32/f16).
     if (!commit_and_wait_with_timeout(ctx, cb, 30000,
@@ -10861,7 +10869,7 @@ extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
     const int64_t* stages, const char* const* sources,
     const char* const* entries, int32_t stage_count, int64_t* receipt) {
   constexpr int64_t kInput = 0, kPrivate = 1, kOutput = 2;
-  constexpr int64_t kSoftmax = 1, kGemm = 2;
+  constexpr int64_t kSoftmax = 1, kGemm = 2, kGelu = 3;
   if (!buffers || !hosts || !stages || !sources || !entries || !receipt ||
       buffer_count < 2 || buffer_count > 128 || stage_count < 1 ||
       stage_count > 64)
@@ -10889,10 +10897,12 @@ extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
         K > INT32_MAX || !in_range(in0) || !in_range(out) ||
         buffers[2 * out] == kInput || written[out] || !written[in0])
       return -1;
-    if (kind == kSoftmax) {
-      // X[M,K] -> Out[M,K], f16; N is unused and must be 1.
+    if (kind == kSoftmax || kind == kGelu) {
+      // X[M,K] -> Out[M,K], f16; N is unused and must be 1. GELU is
+      // elementwise over the M*K elements, which must fit its int32 extent.
       if (in1 != -1 || N != 1 || sources[j] || entries[j] ||
-          buffers[2 * in0 + 1] != 2 * M * K || buffers[2 * out + 1] != 2 * M * K)
+          buffers[2 * in0 + 1] != 2 * M * K || buffers[2 * out + 1] != 2 * M * K ||
+          (kind == kGelu && M * K > INT32_MAX))
         return -1;
     } else if (kind == kGemm) {
       if (!in_range(in1) || !written[in1] || !sources[j] || !entries[j] ||
@@ -10915,6 +10925,8 @@ extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
     for (int32_t j = 0; j < stage_count; ++j) {
       if (stages[10 * j] == kSoftmax) {
         psos[j] = softmax_f16_pipeline(ctx);
+      } else if (stages[10 * j] == kGelu) {
+        psos[j] = gelu_f16_pipeline(ctx);
       } else {
         psos[j] = compile_msl_kernel(ctx, [NSString stringWithUTF8String:sources[j]],
                                      [NSString stringWithUTF8String:entries[j]]);
@@ -10957,6 +10969,9 @@ extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
       const int32_t M = (int32_t)st[4], N = (int32_t)st[5], K = (int32_t)st[6];
       if (st[0] == kSoftmax)
         encode_softmax_f16(enc, psos[j], metal[st[1]], metal[st[3]], M, K);
+      else if (st[0] == kGelu)
+        encode_gelu_f16(enc, psos[j], metal[st[1]], metal[st[3]],
+                        static_cast<int32_t>(st[4] * st[6]));
       else
         encode_tile_simdgroup_gemm(enc, psos[j], metal[st[1]], metal[st[2]],
                                    metal[st[3]], M, N, K, (int32_t)st[7],

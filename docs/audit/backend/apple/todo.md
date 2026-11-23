@@ -16561,7 +16561,22 @@ Slices, in order: (1) admission + frame export for `apple_gpu` under the request
     - `runtime.launch(artifact)` replays bit for bit;
     - four tampered artifacts refused (Tile, member digest, compiler identity, Graph record);
     - fp32 inputs and a `relu` producer decline to the existing lanes.
-  - **Not yet:** members beyond softmax / f16 simdgroup GEMM (`relu`/`add` need an Apple scheduled kernel, the norms a scheduled carrier), dynamic shapes, AD through the program, and a resident (device-buffer) input ABI.
+  - **Not yet (slice 4):** members beyond softmax / f16 simdgroup GEMM, dynamic shapes, AD through the program, and a resident (device-buffer) input ABI. Slice 5 below adds the GELU member.
+- **Slice 5 landed (tanh GELU producer member), sync `APPLE-NTBI-2-gelu-2026-11-23`.**
+  - `tessera.gelu` is an Apple program member. It was the one producer with an Apple scheduled kernel besides softmax: the shared `tile.activation_kernel` carrier (rank 2, tanh approximation), packaged by `package_scheduled_kernel` as `apple_gelu_native_library` with ABI `tessera.apple.gelu.x_o_elements.f16.v2`.
+  - Compiler: `NativeTensorProgram.h` admits `tessera.gelu` for an Apple program only (the sm_120 producer set is unchanged), and Schedule → Tile accepts `tile.activation_kernel` as an Apple member carrier. An exact (erf) GELU request has no apple7 scheduled kernel and refuses with `APPLE_TENSOR_PROGRAM_UNSUPPORTED`, never approximated.
+  - Runtime: `encode_gelu_f16` / `gelu_f16_pipeline` are factored out of `tessera_apple_gpu_gelu_f16_status`, so the standalone ABI and the frame owner share one kernel. The frame owner gains stage kind 3 (elementwise over M·K, refused above `INT32_MAX` elements) with the same contract checks as softmax.
+  - Python: the carrier map, the frame stage (which also requires the package's `approximation = "tanh"`), and the public `@jit` profile all take GELU, including producer chains (`gelu → softmax → matmul`) and a producer on each operand (`matmul(gelu(x), gelu(w))`).
+  - **Mac proof** (M1 Max, Metal, unsandboxed), `test_apple_native_tensor_program.py` (34 pass):
+    - `gelu → matmul` at 64×32×48 and ragged 100×37×53: 1 command buffer, 2 dispatches, 1 private buffer, bit-equal to the per-member launches.
+    - `gelu → softmax → matmul` (3 dispatches, 2 private buffers) and `matmul(gelu(x), gelu(w))` (3 dispatches, 2 private buffers), both bit-equal to the per-member launches.
+    - Every program within 2e-3 of a numpy reference (measured max ≈3e-4).
+    - Public `@jit` runs `gelu → softmax → matmul` in one command buffer, and `runtime.launch(artifact)` replays it bit for bit.
+    - The frame owner refuses a GELU stage whose output does not fit.
+  - Lit: `apple_native_tensor_program.mlir` (GELU projects to `tile.activation_kernel`) and `apple_native_tensor_program_invalid.mlir` (exact GELU refused).
+  - The runtime edit re-seals the Apple GPU E2E packet and re-measures the strict retune ledger.
+  - **Sibling outcome:** NVIDIA sm_120: not applicable (the GELU admission and carrier are gated to an Apple program). ROCm and x86: not applicable (no tensor-program owner).
+  - **Not yet:** `relu`/`add` (no Apple scheduled kernel), the norms (no Apple scheduled carrier), bf16/f32 GELU members (the frame owner encodes f16 only), dynamic shapes, AD through the program, a resident input ABI.
 
 ### APPLE-NTBI-3 — attention JVP (forward mode)
 - **Gap:** there is no Apple tangent consumer or Metal result lease; the attention tangent interface is gated to sm_120.

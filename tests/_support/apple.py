@@ -127,6 +127,28 @@ def require_apple_gpu_memory_abi() -> None:
         )
 
 
+def require_apple_gpu_runtime_dylib() -> str:
+    """Path of the Apple GPU runtime dylib under test, or skip.
+
+    Resolved through ``build_artifacts.built_artifact``: an explicit
+    ``TESSERA_APPLE_GPU_RUNTIME_LIB`` or ``TESSERA_BUILD_DIR`` selection is
+    honored and never falls back to another tree, so a stale ``build/`` dylib
+    cannot stand in for the selected build. A host with no runtime cannot
+    evaluate the lane -- rebuild with ``ninja -C build
+    TesseraAppleRuntimeShared`` before citing it.
+    """
+    from tests._support.build_artifacts import built_artifact
+
+    found = built_artifact(
+        "src/compiler/codegen/Tessera_Apple_Backend/libTesseraAppleRuntime.dylib",
+        env=("TESSERA_APPLE_GPU_RUNTIME_LIB",),
+    )
+    if found is None:
+        pytest.skip("no Apple GPU runtime dylib in the selected build: build "
+                    "TesseraAppleRuntimeShared or set TESSERA_APPLE_GPU_RUNTIME_LIB")
+    return str(found)
+
+
 def require_apple_accelerate() -> None:
     """Skip an Apple CPU integration test without conflating it with Metal."""
     if sys.platform != "darwin":

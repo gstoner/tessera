@@ -2,7 +2,7 @@
 audit_role: plan
 plan_state: open
 owner: Compiler foundation (correctness tooling)
-last_updated: 2026-11-22
+last_updated: 2026-11-23
 ---
 
 # Lean 4 validation pilot: three theorems before any broader commitment
@@ -103,6 +103,78 @@ Candidate follow-ons, **not committed**: the online-softmax recurrence
 with broadcasting (`mul` + `_sum_to_shape`); CuTe-style layout composition
 (`TileToROCM.cpp` composed-layout rem/div chain); a registry-driven sweep of
 VJP/JVP rules if the per-rule cost is low.
+
+### 5a. Two further directions, examined 2026-11-23 (not committed)
+
+Both were read against the code before being written down; neither widens the
+pilot, which stays at three theorems.
+
+**LDS data-race freedom and barrier safety.**
+
+* *What already exists.* `TileBarrierReuseLegalityPass` checks Tile IR
+  write/write reuse of `m`/`lds`/`tlane`/`tcol` footprints and async-copy
+  completion (typed tokens, `wait_async`, `mbarrier.wait`; a CTA rendezvous does
+  not complete DMA). It models program order of ops, not per-thread address
+  sets, and a plain buffer *read* is refused as an unsupported access rather than
+  checked. The ROCm kernel generators (e.g. `GenerateWMMAFlashAttnKernel.cpp`)
+  build `memref` workgroup buffers and `gpu.barrier` directly in C++ and never
+  pass through that pass, so their LDS synchronization is checked by nothing but
+  device results. Upstream `--gpu-eliminate-barriers` (present in the fleet's
+  LLVM 23.1.1) removes barriers using memory effects; it is an optimization, not
+  a checker.
+* *Proof shape.* Barrier-interval semantics: split a kernel at uniformly reached
+  workgroup barriers; a phase is race-free iff no two distinct threads touch the
+  same LDS address with at least one write. Async DMA is an access that stays
+  live until its completing wait, the rule the pass already encodes. Proven once
+  in Lean, this is the lemma that "race-free per phase ⇒ the result does not
+  depend on the wave schedule".
+* *First instance.* The split-K partial merge in
+  `GenerateWMMAFlashAttnKernel.cpp`: each wave stores
+  `sPartial[wave*256 + qi*16 + l15]` (with `qi = 2e+half` on RDNA3.5 and
+  `e + 8*half` on RDNA4), then `gpu.barrier`, then wave 0 reads `pidx` and
+  `256 + pidx`. Statements: the write map is injective (no write/write race),
+  the reads are covered by the previous phase's writes (RAW coverage, which is
+  what makes the merge *correct*, not only race-free), and every index is below
+  the allocation size. Pure `Nat`, no Mathlib.
+* *Where it should end up.* The per-kernel facts are affine index maps over
+  finite thread grids: a Presburger question that MLIR's own
+  `mlir/Analysis/Presburger` can decide inside the compiler on every kernel
+  (Decision #30, derive don't ask). The useful split is Lean for the semantic
+  rule, proved once, and a compiler analysis for its instances. A Lean proof per
+  kernel would not scale and would duplicate that analysis.
+* *Non-claims to carry.* It would not cover the lowering of `gpu.barrier` to
+  `s_waitcnt` + `s_barrier`, the hardware LDS memory model, divergent barriers
+  (assumed absent, not proven), or bank conflicts (a performance property).
+
+**Bounded error with [FloatLib](https://github.com/lean-dojo/FloatLib).**
+
+* *Facts checked (2026-11-23).* MIT-licensed, active (last push 2026-11-20), and
+  its `lean-toolchain` is `v4.36.0`, the pilot's own pin. Whether its Mathlib
+  commit matches ours is **unverified**, and a mismatch would force a joint bump.
+  It models IEEE binary formats with subnormals, signed zeros, NaN, rounding
+  modes and flags; FP8/FP6/FP4; and OCP MX and NVFP4 quantizers proved to compute
+  the real formats. `float_decide` checks closed float facts in the kernel
+  (`decide +kernel`, not `native_decide`, so the gate's escape-hatch ban still
+  holds). Its native Half/BFloat16 *arithmetic* is tested, not proved. It is a
+  young project: pin a commit, never `@ "main"`.
+* *Highest-value first target: block-scaled quantizer conformance.* Model
+  Tessera's NVFP4 / MXFP4 / MXFP8 scale selection and element rounding
+  (`nvfp4_tensor.py`, `rocm_mxfp4_*`) and prove it equal to FloatLib's OCP MX /
+  NVFP4 definitions, or exhibit the inputs where it differs. This is the
+  candidate most likely to *find* something (§5 criterion 3): scale-selection
+  and saturation rules are where implementations diverge, and Tessera has
+  device programs riding on them.
+* *Second: tolerances derived, not guessed.* An `accum=fp32` dot-product error
+  bound (the standard `γ_n` form), and a binary32 error bound for the
+  max-shifted softmax extending theorem 3, with the `exp` ulp bound as an
+  explicit *hypothesis*. libdevice / ROCDL / MSL `exp` are not correctly
+  rounded, so the bound is only as good as that premise. The consumer
+  (Decision #29) would be device tests asserting the derived tolerance instead
+  of a hand-picked `rtol`.
+* *What it cannot catch.* The float bugs Tessera actually hit (`llvm.tanh`
+  computed as 0 on AMDGPU, the fast-math `tanh` gelu NaN) were *lowering* defects.
+  A proof about a float model says nothing about whether the device computes
+  that model, so these proofs need a differential device test beside them.
 
 ## 6. Cross-backend assessment
 

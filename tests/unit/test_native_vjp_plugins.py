@@ -61,7 +61,9 @@ def test_attention_vjp_declares_only_canonical_rank4_consumers() -> None:
         assert declaration.family == "attention_backward"
         assert declaration.schedule_consumer == "schedule.attention_backward"
         assert declaration.tile_consumer == "tile.attention_backward_kernel"
-        assert set(declaration.target_consumers) == {"x86", "rocm", "nvidia_sm120"}
+        # apple_gpu: the Apple7 split Metal backward (APPLE-NTBI-1).
+        assert set(declaration.target_consumers) == {"x86", "rocm", "nvidia_sm120", "apple_gpu"}
+        assert declaration.target_consumers["apple_gpu"] == "apple.metal_attention_backward"
         selected=declaration.for_target("nvidia_sm120")
         assert selected.schedule_consumer=="schedule.artifact"
         assert selected.graph_consumers==("tessera.flash_attn",)
@@ -152,7 +154,9 @@ def test_unmigrated_vjp_family_remains_a_compatibility_path() -> None:
     assert not native_vjp_plugin_available("tessera.relu", "x86")
     assert native_vjp_plugin_available("tessera.sgd", "x86")
     assert native_vjp_plugin_available("tessera.flash_attn", "x86")
-    assert not native_vjp_plugin_available("tessera.flash_attn", "apple_gpu")
+    # A target the family registers no consumer for has no plugin route.
+    assert native_vjp_plugin_available("tessera.flash_attn", "apple_gpu")
+    assert not native_vjp_plugin_available("tessera.flash_attn", "nvidia_sm90")
 
 
 def test_attention_differential_policy_rejects_active_dropout() -> None:

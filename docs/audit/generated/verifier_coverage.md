@@ -6,11 +6,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 304 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 305 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier` | 0 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 304 | |
+| **Total** | 305 | |
 
 ## Per-dialect details
 
@@ -220,6 +220,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `NesterovOp` | `real` |
 | `NormalizationStatsOp` | `real` |
 | `PagedKVReadOp` | `real` |
+| `PagedKVWriteOp` | `real` |
 | `PermuteOp` | `real` |
 | `PopcountOp` | `real` |
 | `PowOp` | `real` |

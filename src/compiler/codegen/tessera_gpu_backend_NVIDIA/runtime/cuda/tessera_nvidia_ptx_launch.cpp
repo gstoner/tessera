@@ -119,6 +119,7 @@ constexpr const char* kTileAttentionPrefix = "tessera_tile_attention_";
 constexpr const char* kTileAttentionBackwardPrefix =
     "tessera_tile_attention_backward_";
 constexpr const char* kTilePagedKV = "tessera_tile_paged_kv_read_f32_direct";
+constexpr const char* kTilePagedKVWrite = "tessera_tile_paged_kv_write_f32_direct";
 // Compiler-owned static FP4 expansion image (SM120-FP4-EXPAND-NATIVE-20261103):
 // entry `tessera_nvfp4_expand_<schedule hash prefix>`.
 constexpr const char* kNvfp4ExpandPrefix = "tessera_nvfp4_expand_";
@@ -1329,6 +1330,54 @@ int invokePagedKV(CUfunction fn, void** buffers, size_t nbuf,
             !cuOk(cuMemcpyDtoH(buffers[2],device[2],output), "cuMemcpyDtoH")) rc=3;
     }
     for(CUdeviceptr ptr:device) if(ptr) cuMemFree(ptr);
+    return rc;
+}
+
+// AR-DECODE-PROGRAM-1 S1a. Buffers: pages (in/out), table, values, position,
+// status (out). The kernel checks every data-dependent bound and reports a
+// refusal in status[0]; on refusal the host pages are left untouched (rc 6),
+// so a refused write is atomic from the caller's view.
+int invokePagedKVWrite(CUfunction fn, void** buffers, size_t nbuf,
+                       const int64_t* dims, size_t ndim) {
+    if (nbuf != 5 || ndim != 6) return 5;
+    const long long P=dims[0], LP=dims[1], PS=dims[2], H=dims[3], D=dims[4], T=dims[5];
+    if (P<=0 || LP<=0 || PS<=0 || H<=0 || D<=0 || T<=0 || T > LP*PS) return 5;
+    auto checkedBytes=[](std::initializer_list<size_t> extents,size_t width,size_t& out) {
+        out=width; for(size_t extent:extents){if(extent && out>SIZE_MAX/extent)return false;out*=extent;} return true;
+    };
+    size_t pageBytes=0, tableBytes=0, valueBytes=0;
+    if (!checkedBytes({(size_t)P,(size_t)PS,(size_t)H,(size_t)D},4,pageBytes) ||
+        !checkedBytes({(size_t)LP},4,tableBytes) ||
+        !checkedBytes({(size_t)T,(size_t)H,(size_t)D},4,valueBytes)) return 5;
+    const size_t count = valueBytes / 4;
+    if (count == 0 || count > (size_t)0x7fffffffU * 256) return 5;
+    size_t sizes[5] = {pageBytes, tableBytes, valueBytes, 4, 4};
+    CUdeviceptr device[5] = {};
+    int rc = 0;
+    for (int i=0;i<5;++i) if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) { rc=3; break; }
+    if (!rc) for (int i=0;i<4;++i)
+        if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) { rc=3; break; }
+    if (!rc && !cuOk(cuMemsetD32(device[4], 0, 1), "cuMemsetD32")) rc=3;
+    int status = 0;
+    if (!rc) {
+        long long args64[6]; for(int i=0;i<6;++i) args64[i]=dims[i];
+        void* args[11]; size_t arg=0;
+        for (int i=0;i<5;++i) args[arg++]=&device[i];
+        for (int i=0;i<6;++i) args[arg++]=&args64[i];
+        if (!cuOk(cuLaunchKernel(fn,(unsigned)((count+255)/256),1,1,256,1,1,0,0,args,0), "cuLaunchKernel") ||
+            !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+            !cuOk(cuMemcpyDtoH(&status, device[4], 4), "cuMemcpyDtoH")) rc=3;
+    }
+    if (!rc) {
+        std::memcpy(buffers[4], &status, 4);
+        if (status != 0) {
+            g_last_error = "paged KV write refused: position or physical page out of range, or two written pages alias one physical page";
+            rc = 6;
+        } else if (!cuOk(cuMemcpyDtoH(buffers[0], device[0], pageBytes), "cuMemcpyDtoH")) {
+            rc = 3;
+        }
+    }
+    for (CUdeviceptr ptr:device) if (ptr) cuMemFree(ptr);
     return rc;
 }
 
@@ -2931,6 +2980,8 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
         return invokeAttention(fn, kernel_name, buffers, nbuf, dims, ndim);
     if (std::strcmp(kernel_name, kTilePagedKV) == 0)
         return invokePagedKV(fn, buffers, nbuf, dims, ndim);
+    if (std::strcmp(kernel_name, kTilePagedKVWrite) == 0)
+        return invokePagedKVWrite(fn, buffers, nbuf, dims, ndim);
     if (std::strncmp(kernel_name, kNvfp4ExpandPrefix,
                      std::strlen(kNvfp4ExpandPrefix)) == 0)
         return invokeNvfp4Expand(fn, buffers, nbuf, dims, ndim);

@@ -194,6 +194,8 @@ SM120_ATTN_BWD_LSE_TYPED_ABI = "tessera.nvidia.sm120.attention_backward_lse.type
 SM120_ATTN_BWD_LSE_COMPACT_F32_ABI = "tessera.nvidia.sm120.attention_backward_lse.compact.f32.v1"
 SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI = "tessera.nvidia.sm120.attention_backward_lse.cotangent.f32.v1"
 SM120_PAGED_KV_F32_ABI = "tessera.nvidia.paged_kv.pages_table_o_dims.f32_i32.v1"
+# AR-DECODE-PROGRAM-1 S1a: in-place write; pages are inout, status is the refusal word.
+SM120_PAGED_KV_WRITE_F32_ABI = "tessera.nvidia.paged_kv_write.pages_table_values_position_status_dims.f32_i32.v1"
 SM120_PAGED_ATTN_F32_ABI = "tessera.nvidia.paged_attention.q_kp_vp_table_indices_o_dims.f32_i32_i64.v1"
 SM120_REPLAY_DECODE_F32_ABI = "tessera.nvidia.replay_ssm.delta_x_b_s0_c_a_y_dims.f32.v1"
 SM120_REPLAY_FLUSH_F32_ABI = "tessera.nvidia.replay_ssm.delta_x_b_s0_a_dims.f32.v1"
@@ -4929,6 +4931,72 @@ def package_scheduled_paged_kv(artifact: Any, *, pipeline_name: str) -> NVIDIANa
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
 
 
+def package_scheduled_paged_kv_write(artifact: Any, *, pipeline_name: str) -> NVIDIANativePackage:
+    """Package one replayed in-place paged write (AR-DECODE-PROGRAM-1 S1a).
+
+    Pages bind ``inout``: the kernel writes through the caller's pages and the
+    launcher copies them back only when the kernel's status word reports no
+    refusal. The status buffer is launch-owned and returned to the caller.
+    """
+    artifact.validate()
+    pages_name, table_name, values_name, position_name = artifact.names
+    p, logical_pages, page_size, heads, dim, tokens = artifact.dims
+    entry, tile_ir = artifact.entry, artifact.tile_ir
+    (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = _compile_tile_ir(
+        tile_ir, entry
+    )
+    image = NativeImageArtifact(
+        target="nvidia_sm120", architecture="sm_120a", pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp, toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(),
+        binary_format="ptx", payload=ptx.encode("ascii"),
+        entry_points=(NativeEntryPoint(entry, SM120_PAGED_KV_WRITE_F32_ABI),),
+        compile_state=compile_state, device_libraries=device_libraries,
+        resource_record=ResourceRecord(provenance="ptxas --arch=sm_120a -v", metrics=metrics),
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=entry, abi_id=SM120_PAGED_KV_WRITE_F32_ABI,
+        buffers=(
+            BufferBinding(0, pages_name, "inout", "fp32", 4, "row_major", 4),
+            BufferBinding(1, table_name, "input", "int32", 1, "row_major", 4),
+            BufferBinding(2, values_name, "input", "fp32", 3, "row_major", 4),
+            BufferBinding(3, position_name, "input", "int32", 1, "row_major", 4),
+            BufferBinding(4, "status", "output", "int32", 1, "row_major", 4),
+        ),
+        scalars=tuple(ScalarArgument(5 + index, name, "int64") for index, name in enumerate(
+            ("P", "LP", "PageSize", "H", "D", "Tokens")
+        )),
+        shape_guards=(
+            ShapeGuard(pages_name, 0, "eq", p), ShapeGuard(pages_name, 1, "eq", page_size),
+            ShapeGuard(pages_name, 2, "eq", heads), ShapeGuard(pages_name, 3, "eq", dim),
+            ShapeGuard(table_name, 0, "eq", logical_pages),
+            ShapeGuard(values_name, 0, "eq", tokens), ShapeGuard(values_name, 1, "eq", heads),
+            ShapeGuard(values_name, 2, "eq", dim), ShapeGuard(position_name, 0, "eq", 1),
+            ShapeGuard("status", 0, "eq", 1),
+        ),
+        geometry=LaunchGeometry(policy="sm120_paged_kv_write_direct_256"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("completion",)
+        ),
+        provenance={
+            "work_item": "AR-DECODE-PROGRAM-1", "slice": "S1a",
+            "route": "direct", "shape": list(artifact.dims), "storage": "f32",
+            "schedule_digest": artifact.schedule_digest,
+            "page_ownership": "in_place", "refusal": "i32_status_word",
+            "table_storage": "i32", "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
+        },
+    )
+    return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+
+
+def package_paged_kv_write(
+    names: tuple[str, str, str, str], dims: tuple[int, ...], *, pipeline_name: str
+) -> NVIDIANativePackage:
+    from .scheduled_paged_kv import lower_scheduled_paged_kv_write
+    return package_scheduled_paged_kv_write(
+        lower_scheduled_paged_kv_write(names, dims), pipeline_name=pipeline_name)
+
+
 def package_paged_attention(
     *, physical_pages: int, logical_pages: int, page_size: int, heads: int,
     query_length: int, tokens: int, dim: int, scale: float,
@@ -5317,6 +5385,8 @@ __all__ = [
     "package_packed_decode",
     "package_paged_kv_read",
     "package_scheduled_paged_kv",
+    "package_paged_kv_write",
+    "package_scheduled_paged_kv_write",
     "package_paged_attention",
     "package_replay_ssm_kernels",
     "package_moe_kernels",

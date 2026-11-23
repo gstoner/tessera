@@ -15,7 +15,7 @@ Rows are derived from the `register_native_vjp_plugin` declarations, so a family
 | family | ops | migration state | differential policy | certifier | execution certificate | schedule consumer | tile consumer | targets |
 |---|---|---|---|---|---|---|---|---|
 | `adafactor_vjp` | `adafactor` | canonical_composite | non_reexecuting_state_lineage | `certify_frontends_non_reexecuting` | `tessera.native_vjp_execution.v1` | `schedule.adafactor_vjp` | `tile.training_kernel` | nvidia_sm120, rocm, x86 |
-| `attention_backward` | `flash_attn`, `gqa_attention`, `mqa_attention` | canonical_composite | zero_dropout_attention | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.attention_backward` | `tile.attention_backward_kernel` | nvidia_sm120, rocm, x86 |
+| `attention_backward` | `flash_attn`, `gqa_attention`, `mqa_attention` | canonical_composite | zero_dropout_attention | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.attention_backward` | `tile.attention_backward_kernel` | apple_gpu, nvidia_sm120, rocm, x86 |
 | `binary_loss_backward` | `binary_cross_entropy_loss`, `loss.binary_cross_entropy` | canonical_composite | pure_only | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.loss_backward` | `tile.loss_backward_kernel` | nvidia_sm120, rocm, x86 |
 | `class_loss_backward` | `cross_entropy_loss`, `label_smoothed_cross_entropy`, `loss.cross_entropy` | canonical_composite | pure_only | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.loss_backward` | `tile.loss_backward_kernel` | nvidia_sm120, rocm, x86 |
 | `distribution_loss_backward` | `js_divergence`, `kl_divergence`, `loss.js_divergence`, `loss.kl_divergence` | canonical_composite | pure_only | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.loss_backward` | `tile.loss_backward_kernel` | rocm |
@@ -39,12 +39,13 @@ The distinction matters because the failure it guards against is specific: a fam
 
 A declaration is not execution evidence. Target-owned packets run every declared family in one process, validate independent numerical oracles, require runtime-origin physical attestations, and compare the observed family/target set exactly with the live declarations. Family-specific packets cover their named architecture and envelope; they do not inherit coverage from legacy whole-target packets. A test double produces only `runtime_unattested` evidence and cannot satisfy these packets.
 
-- declared family/target rows: **35**
-- exact-device packet rows: **35**
+- declared family/target rows: **36**
+- exact-device packet rows: **36**
 - blocking rows without a packet: **0**
 
 | family | target | evidence status | evidence gate |
 |---|---|---|---|
+| `attention_backward` | `apple_gpu` | `exact_device_packet` | `tests/device/apple/test_native_vjp_execution_certificates.py` |
 | `normalization` | `apple_gpu` | `exact_device_packet` | `tests/device/apple/test_native_vjp_execution_certificates.py` |
 | `adafactor_vjp` | `nvidia_sm120` | `exact_device_packet` | `tests/device/nvidia/test_native_vjp_execution_certificates.py` |
 | `attention_backward` | `nvidia_sm120` | `exact_device_packet` | `tests/device/nvidia/test_native_vjp_execution_certificates.py` |

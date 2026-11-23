@@ -39,6 +39,12 @@ def _apple_layer_norm(x, gamma, beta):
     return ts.ops.layer_norm(x, gamma=gamma, beta=beta, eps=_EPS)
 
 
+@ts.jit(target="apple_gpu", autodiff="reverse", wrt=("q", "key", "value"))
+def _apple_gqa_attention(q, key, value):
+    return ts.ops.gqa_attention(q, key, value, num_query_heads=4, num_kv_heads=2,
+                                scale=0.25, causal=True)
+
+
 def _reference(x, gamma, dy, *, layer: bool):
     """Analytic normalization VJP in float64; returns (dx, dgamma, dbeta)."""
     x64 = np.asarray(x, np.float64)
@@ -54,17 +60,19 @@ def _reference(x, gamma, dy, *, layer: bool):
     return dx, (dy64 * y_hat).reshape(-1, n).sum(0), dy64.reshape(-1, n).sum(0)
 
 
-def _run(compiled, args, dy, expected, op_name):
+def _run(compiled, args, dy, expected, op_name,
+         consumer="apple.metal_normalization", tolerance=(2e-4, 2e-5)):
     gradients = compiled.native_backward(*args, out_cotangents=dy)
     assert len(gradients) == len(expected)
     for actual, reference in zip(gradients, expected):
         np.testing.assert_allclose(
-            np.asarray(actual, np.float64), reference, rtol=2e-4, atol=2e-5
+            np.asarray(actual, np.float64), reference,
+            rtol=tolerance[0], atol=tolerance[1]
         )
     execution = compiled.last_backward_execution
     assert execution["execution_kind"] == "native_gpu"
     assert execution["execution_mode"] == "metal_runtime"
-    assert execution["target_consumer"] == "apple.metal_normalization"
+    assert execution["target_consumer"] == consumer
     certificate = execution["execution_certificate"]
     assert certificate["graph_consumer"] == op_name
     assert certificate["evidence_scope"] == "exact_device"
@@ -105,6 +113,22 @@ def test_every_declared_apple_gpu_vjp_family_records_an_exact_certificate() -> N
     digests.add(
         _run(_apple_layer_norm, (x, gamma, beta), dy, (dx, dg, db), "tessera.layer_norm")
     )
+
+    # Attention backward (APPLE-NTBI-1): the split Metal backward, against
+    # the definitions' two-way split-reduced VJP evaluated in float64.
+    from tessera.compiler.attention_contract import (
+        reference_attention_backward_split_reduced,
+    )
+    q = rng.normal(0.0, 0.2, (1, 4, 9, 16)).astype(np.float32)
+    key = rng.normal(0.0, 0.2, (1, 2, 11, 16)).astype(np.float32)
+    value = rng.normal(0.0, 0.2, key.shape).astype(np.float32)
+    dout = rng.normal(0.0, 0.2, q.shape).astype(np.float32)
+    expected = reference_attention_backward_split_reduced(
+        *(array.astype(np.float64) for array in (dout, q, key, value)),
+        split_count=2, scale=0.25, causal=True)
+    digests.add(_run(_apple_gqa_attention, (q, key, value), dout, expected,
+                     "tessera.gqa_attention", consumer="apple.metal_attention_backward",
+                     tolerance=(2e-4, 4e-5)))
 
     required = {
         (row.family, "apple_gpu") for row in collect_rows() if "apple_gpu" in row.targets

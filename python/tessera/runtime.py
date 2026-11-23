@@ -11112,6 +11112,37 @@ def _execute_native_attention_vjp_package(
             expected_device_arch=package.native.image.architecture,
         )
 
+    if package.target == "apple_gpu":
+        from tessera.compiler.apple_native import AppleNativePackage
+        if not isinstance(package.native, AppleNativePackage):
+            raise TypeError("Apple attention VJP requires its Metal package")
+        storage = q.dtype
+        if any(array.dtype != storage for array in (key, value, dout)):
+            raise ValueError("Apple attention VJP requires one storage dtype for dO/Q/K/V")
+        if bias is not None and bias.dtype != np.float32:
+            raise ValueError("Apple attention VJP bias must be fp32")
+        artifact = RuntimeArtifact(
+            metadata={"target": "apple_gpu"},
+            native_image=package.native.image,
+            launch_descriptor=package.native.descriptor,
+            tile_ir=package.native.tile_ir,
+            target_ir=package.native.target_ir,
+        )
+        result = launch(artifact, buffers)
+        if not result.get("ok") or result.get("execution_kind") != "native_gpu":
+            raise RuntimeError(
+                "Apple attention VJP launch did not execute natively: "
+                + str(result.get("reason") or result.get("runtime_status")))
+        # The launch wrote the fp32 gradients into the bound output buffers.
+        # Attested against the package (as the ROCm branch is), measured from
+        # the Metal device that just ran it.
+        return (dq, dk, dv), _physical_execution_attestation(
+            target="apple_gpu",
+            execution_kind="native_gpu",
+            execution_mode="metal_runtime",
+            artifact_hash=package.artifact_hash,
+        )
+
     if package.target != "x86" or not isinstance(package.native, X86NativePackage):
         raise TypeError("native attention VJP package has a mismatched target image")
     if any(array.dtype != np.float32 for array in (dout, q, key, value)):

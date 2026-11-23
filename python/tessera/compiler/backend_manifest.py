@@ -6754,10 +6754,29 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             shape_envelope="pages[P,PS,H,D] f32, i32 page_table[LP], values[T,H,D], "
                 "device i32 position; T <= LP*PS; written logical pages map to distinct physical pages",
             cuda_arch_min="sm_120",
-            notes="Public kv_cache.append routing is planned (AR-DECODE S1b). The internal "
+            notes="Public kv_cache.append routing is planned (a later AR-DECODE slice, after S1d "
+                  "admits the memory effect into the native program). The internal "
                   "Graph->Schedule->Tile->NVVM tessera.paged_kv_write lane is device-proved on "
                   "the RTX 5070 by tests/device/nvidia/test_paged_kv_write.py, refusing "
                   "out-of-range positions/pages and aliased physical pages through a status word.",
+        ))
+
+    # AR-DECODE-PROGRAM-1 S1b: the Graph ops ``tessera.argmax|argmin`` execute
+    # natively on sm_120 (NativeArgReduce.h -> tile.argreduce_kernel -> NVVM)
+    # when a module is packaged for that lane, but the public frontend does not
+    # route ``tessera.ops.argmax`` there yet, so the row stays ``planned``: the
+    # lane's device proof is named, never transferred to the public op.
+    if op_name in ("argmax", "argmin"):
+        entries.append(BackendKernelEntry(
+            target="nvidia_sm120", status=_PLANNED_STATUS, dtypes=("fp32",),
+            feature_flags=("reduction", "cuda"),
+            shape_envelope="static f32 rank>=1 -> i32; last axis or flattened (axis=None); "
+                "rows*cols < 2^31; first-occurrence ties, first NaN wins",
+            cuda_arch_min="sm_120",
+            notes=f"Public {op_name} routing is planned. The Graph->Schedule->Tile->NVVM "
+                  "native lane (one 128-thread CTA per row, warp-shuffle combine) is device-proved "
+                  "on the RTX 5070 by tests/device/nvidia/test_argreduce.py, bitwise against "
+                  "NumPy and the AR-decode oracle's greedy tokens.",
         ))
 
     # x86 AMX / AVX-512

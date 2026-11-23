@@ -201,6 +201,7 @@ src/compiler/ir/TesseraOps.td,NeighborsTopologyCreateOp,1,1,real
 src/compiler/ir/TesseraOps.td,NesterovOp,1,1,real
 src/compiler/ir/TesseraOps.td,NormalizationStatsOp,1,1,real
 src/compiler/ir/TesseraOps.td,PagedKVReadOp,1,1,real
+src/compiler/ir/TesseraOps.td,PagedKVWriteOp,1,1,real
 src/compiler/ir/TesseraOps.td,PermuteOp,1,1,real
 src/compiler/ir/TesseraOps.td,PopcountOp,1,1,real
 src/compiler/ir/TesseraOps.td,PowOp,1,1,real

@@ -3564,6 +3564,20 @@ def Tessera_PagedKVReadOp : Op<Tessera_Dialect, "paged_kv_read", [MemoryEffects<
   let hasVerifier = 1;
 }
 
+// AR-DECODE-PROGRAM-1 S1a: in-place write of T tokens into explicit physical
+// pages through a logical page map, at a runtime logical position held in
+// device memory. The result is the updated pages value; native lowering binds
+// it to the input pages buffer (destination passing), so no page is copied.
+// Bounds that depend on runtime data (position, physical page indices) are
+// checked by the kernel, which reports refusal through a status word.
+def Tessera_PagedKVWriteOp : Op<Tessera_Dialect, "paged_kv_write", [MemoryEffects<[MemWrite]>]> {
+  let arguments = (ins AnyRankedTensor:$pages, AnyRankedTensor:$page_table,
+                       AnyRankedTensor:$values, AnyRankedTensor:$position);
+  let results = (outs AnyRankedTensor:$updated);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 // Public shape-preserving absolute. Native x86 Schedule owns the first
 // physical consumer; other dtypes/backends retain their existing admission.
 def Tessera_AbsoluteOp : Op<Tessera_Dialect, "absolute", [Pure]> {

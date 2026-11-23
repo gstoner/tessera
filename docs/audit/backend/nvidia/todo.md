@@ -17105,6 +17105,16 @@ The conformance dashboard now proves its IR rungs on the traced module; the dash
 
 Differentiation-request decorations now defer the AST module; no NVIDIA lowering changed. The-Super-Bear unit and `tests/device/nvidia` failing node IDs match dfebdc397. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-21--e2e-real-6f-differentiation-requests-defer-the-ast-module))
 
+## `AR-DECODE-PROGRAM-1-S1a-2026-11-22`: owning slice — in-place paged KV write (sm_120)
+
+This adds `tessera.paged_kv_write`, the destination-passing twin of the paged read, for the compiled AR decode program.
+- **Route:** Graph → Schedule → `tile.paged_kv_write_kernel` → NVVM.
+- **Kernel:** the logical position is an `i32` read on the device. The kernel checks the signed position, the capacity and each physical page index, and reports a refusal through a status word.
+- **Launcher:** `invokePagedKVWrite` copies pages back only when nothing was refused.
+- **Evidence (RTX 5070):**
+  - The contract tests pass 9/9.
+  - The device tests pass 7/7, bitwise against the S0 oracle's paged layout; refused writes leave the pages unchanged.
+- **Still host-copy:** the pages are not yet resident on the device. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4b-s1a--in-place-paged-kv-write-on-sm_120-2026-11-22))
 
 ## `MAC-HOST-HYGIENE-2026-11-22`: sibling outcome — not applicable (test infrastructure)
 

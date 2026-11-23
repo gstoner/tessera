@@ -3151,6 +3151,31 @@ LogicalResult PagedKVReadKernelOp::verify() {
   return success();
 }
 
+LogicalResult PagedKVWriteKernelOp::verify() {
+  if (getInputs().size() != 11)
+    return emitOpError(
+        "expects pages, page table, values, position, status, and six dimensions (P, LP, page size, H, D, tokens)");
+  for (Value pointer : getInputs().take_front(5))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("pages, page table, values, position and status must be !llvm.ptr");
+  for (Value dim : getInputs().drop_front(5))
+    if (!dim.getType().isInteger(64))
+      return emitOpError("paged-KV write dimensions must be i64");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto table = getOperation()->getAttrOfType<StringAttr>("table_storage");
+  auto route = getOperation()->getAttrOfType<StringAttr>("route");
+  auto ownership = getOperation()->getAttrOfType<StringAttr>("page_ownership");
+  if (!storage || storage.getValue() != "f32")
+    return emitOpError("currently requires storage=\"f32\"");
+  if (!table || table.getValue() != "i32")
+    return emitOpError("requires table_storage=\"i32\"");
+  if (!route || route.getValue() != "direct")
+    return emitOpError("canonical materializer currently requires route=\"direct\"");
+  if (!ownership || ownership.getValue() != "in_place")
+    return emitOpError("requires page_ownership=\"in_place\"");
+  return success();
+}
+
 LogicalResult PagedAttentionKernelOp::verify() {
   if (getInputs().size() != 14)
     return emitOpError(

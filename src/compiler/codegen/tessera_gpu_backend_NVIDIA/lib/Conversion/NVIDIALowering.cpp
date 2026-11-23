@@ -6490,6 +6490,7 @@ struct LowerTileToNVIDIAPass
           name == "tile.training_kernel" ||
           name == "tile.paged_kv_read_kernel" ||
           name == "tile.paged_kv_write_kernel" ||
+          name == "tile.argreduce_kernel" ||
           name == "tile.nvfp4_expand_kernel" ||
           name == "tile.paged_attention_kernel" ||
           name == "tile.replay_ssm_decode_kernel" ||

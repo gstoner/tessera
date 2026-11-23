@@ -12721,3 +12721,7 @@ Differentiation-request decorations now defer the AST module; no x86 lowering or
 Each conversion requires a probe of the host to confirm the capability is absent. On a host that has the backend, the same message is still a failure, so this box's evidence is unchanged.
 
 The `TESSERA_LLVM_BIN` reads in the device and unit tests now go through `tests._support.environment.require_llvm_bin()`, which skips with a reason instead of raising `KeyError`. Apple gaps found by the same audit are APPLE-NTBI-1..4 in the Apple todo.
+
+## `APPLE-NTBI-1-attention-vjp-2026-11-22`: sibling outcome — parity validated on Zen 5 (Tajasarus)
+
+The plugin's x86 branch was refactored with the Apple consumer; the identity values are unchanged. The x86 attention-VJP routing and plugin-binding suites ran on Tajasarus's AVX-512 build with identical failing node IDs at a213fa18e and 284765cf5. (Apple owner: `docs/audit/backend/apple/todo.md` APPLE-NTBI-1.)

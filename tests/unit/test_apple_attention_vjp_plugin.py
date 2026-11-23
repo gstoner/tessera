@@ -131,3 +131,22 @@ def test_biased_attention_vjp_binds_an_fp32_bias(storage):
     for observed, reference in zip(actual, expected, strict=True):
         np.testing.assert_allclose(observed, reference, rtol=5e-3, atol=1e-4)
     _assert_metal_authority(_biased.last_backward_execution)
+
+
+@pytest.mark.hardware_apple_gpu
+def test_a_launch_without_its_own_attestation_is_not_exact_device(monkeypatch):
+    # A ``launch`` test double reports ok/native_gpu but ran no Metal kernel
+    # and carries no launch-origin attestation: the package proof must stay
+    # runtime-unattested rather than be manufactured from device availability.
+    _require_metal()
+    from tessera import runtime
+
+    def fake_launch(artifact, args, stream=None):
+        return {"ok": True, "execution_kind": "native_gpu"}
+
+    monkeypatch.setattr(runtime, "launch", fake_launch)
+    q, key, value, dout = _gqa_inputs(np.float32)
+    _gqa.native_backward(q, key, value, out_cotangents=dout)
+    proof = _gqa.last_backward_execution
+    assert proof["physical_attestation"] is None
+    assert proof["execution_certificate"]["evidence_scope"] == "runtime_unattested"

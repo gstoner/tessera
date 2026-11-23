@@ -172,7 +172,17 @@ def test_frame_owner_runs_the_program_in_one_command_buffer(shapes):
     require_apple_chip_identity()
     s, v = (_half(*shape, seed=i + 7) for i, shape in enumerate(shapes))
     program = atp.compile_apple_tensor_program(_graph(_scores_values, (s, v), ("s", "v")))
-    output, receipt = atp.execute_frame(program, {"s": s, "v": v})
+    import ctypes
+
+    from tessera._apple_gpu_dispatch import apple_gpu_runtime
+
+    # The GPU clock is opt-in, like every dispatch clock in the runtime.
+    telemetry = apple_gpu_runtime().tessera_apple_gpu_dispatch_telemetry_set_enabled
+    telemetry(ctypes.c_int32(1))
+    try:
+        output, receipt = atp.execute_frame(program, {"s": s, "v": v})
+    finally:
+        telemetry(ctypes.c_int32(0))
     assert receipt["frame_owned"] is True
     assert (receipt["command_buffers"], receipt["dispatches"]) == (1, 2)
     # The softmax result is a device-only (MTLStorageModePrivate) buffer.

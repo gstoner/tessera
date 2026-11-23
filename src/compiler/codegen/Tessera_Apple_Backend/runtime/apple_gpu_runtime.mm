@@ -10923,22 +10923,28 @@ extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
       if (!psos[j]) return -3;
     }
     NSMutableArray<id<MTLBuffer>> *metal = [NSMutableArray arrayWithCapacity:buffer_count];
+    // Inputs and the output come from the shared host pool (released, or
+    // quarantined after a timeout, by their guards). Private intermediates are
+    // device-only MTLStorageModePrivate buffers, which that pool does not hold;
+    // the command buffer retains them until it completes.
+    std::vector<MetalBufferGuard> pooled;
+    pooled.reserve(static_cast<size_t>(buffer_count));
     int64_t private_count = 0;
     for (int32_t i = 0; i < buffer_count; ++i) {
       const int64_t role = buffers[2 * i];
       const NSUInteger bytes = static_cast<NSUInteger>(buffers[2 * i + 1]);
       id<MTLBuffer> buffer = nil;
-      if (role == kInput)
-        buffer = [ctx.device newBufferWithBytes:hosts[i] length:bytes
-                                        options:MTLResourceStorageModeShared];
-      else if (role == kPrivate)
+      if (role == kPrivate) {
         buffer = [ctx.device newBufferWithLength:bytes
                                          options:MTLResourceStorageModePrivate];
-      else
-        buffer = [ctx.device newBufferWithLength:bytes
-                                         options:MTLResourceStorageModeShared];
+        ++private_count;
+      } else {
+        pooled.emplace_back(ctx, role == kInput
+            ? metal_buffer_acquire_with_bytes(ctx, hosts[i], bytes)
+            : metal_buffer_acquire(ctx, bytes), bytes);
+        buffer = pooled.back().buf;
+      }
       if (!buffer) return -4;
-      if (role == kPrivate) ++private_count;
       [metal addObject:buffer];
     }
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -10957,12 +10963,11 @@ extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
                                    (int32_t)st[8], (int32_t)st[9]);
     }
     [enc endEncoding];
-    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "tensor_frame_execute"))
+    // prefer_command_buffer: when dispatch telemetry is on, the bounded helper
+    // records this buffer's GPU interval (the documented completed-buffer mode).
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "tensor_frame_execute",
+                                      /*prefer_command_buffer=*/true))
       return -5;
-    // The completion event can tick before the buffer publishes its status and
-    // GPU clocks; it has finished, so this returns at once.
-    [cb waitUntilCompleted];
-    if (cb.status != MTLCommandBufferStatusCompleted || cb.error != nil) return -5;
     for (int32_t i = 0; i < buffer_count; ++i)
       if (buffers[2 * i] == kOutput)
         std::memcpy(const_cast<void *>(hosts[i]), [metal[i] contents],
@@ -10970,8 +10975,9 @@ extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
     receipt[0] = 1;
     receipt[1] = stage_count;
     receipt[2] = private_count;
-    const double elapsed = cb.GPUEndTime - cb.GPUStartTime;
-    receipt[3] = elapsed > 0 ? (int64_t)(elapsed * 1e9) : -1;
+    // Opt-in like every dispatch clock: -1 unless dispatch telemetry is enabled.
+    receipt[3] = g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)
+        ? g_last_dispatch_device_time_ns : -1;
     return 1;
   }
 }

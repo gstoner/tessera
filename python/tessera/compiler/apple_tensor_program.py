@@ -39,7 +39,8 @@ FRAME_SCHEMA = "tessera.native.tensor_program_frame.v1"
 _FRAME = r'tessera.native.tensor_program_frame_json = "([^"]+)"'
 _SOURCE = r'tessera.native.tensor_program_source_sha256 = "([0-9a-f]{64})"'
 #: Graph op -> the launch-level Tile carrier its Apple scheduled package consumes.
-_CARRIERS = {"tessera.matmul": "tile.matmul_kernel", "tessera.softmax": "tile.softmax_kernel"}
+_CARRIERS = {"tessera.matmul": "tile.matmul_kernel", "tessera.softmax": "tile.softmax_kernel",
+             "tessera.gelu": "tile.activation_kernel"}
 _STORAGE = {"fp16": "f16", "fp32": "f32"}
 _NUMPY = {"f16": "float16", "f32": "float32"}
 
@@ -322,7 +323,7 @@ def run_members_sequentially(program: AppleTensorProgram, inputs: Mapping[str, A
 
 
 #: The member ABIs that have encode-only entry points in the frame owner.
-_FRAME_KINDS = {"tile.softmax_kernel": 1, "tile.matmul_kernel": 2}
+_FRAME_KINDS = {"tile.softmax_kernel": 1, "tile.matmul_kernel": 2, "tile.activation_kernel": 3}
 _FRAME_ERRORS = {
     -1: "the runtime refused the frame contract",
     -2: "no Metal device",
@@ -335,8 +336,8 @@ _FRAME_ERRORS = {
 def _frame_stage(stage: AppleTensorStage, record: dict, frame: dict):
     """One stage as the owner's flat record, re-checked against its package."""
     from .apple_native import (
-        APPLE_SIMDGROUP_GEMM_F16_ABI, APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR,
-        APPLE_SOFTMAX_F16_ABI)
+        APPLE_GELU_F16_ABI, APPLE_SIMDGROUP_GEMM_F16_ABI,
+        APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR, APPLE_SOFTMAX_F16_ABI)
 
     descriptor = stage.package.descriptor
     buffers = frame["buffers"]
@@ -346,6 +347,15 @@ def _frame_stage(stage: AppleTensorStage, record: dict, frame: dict):
                 f"Apple member {stage.index} has no frame encoder for {descriptor.abi_id}")
         rows, columns = buffers[record["inputs"][0]]["shape"]
         return [1, record["inputs"][0], -1, record["output"], rows, 1, columns, 0, 0, 0], None, None
+    if stage.carrier == "tile.activation_kernel":
+        # Only the tanh GELU activation has an encode-only entry point; it is
+        # elementwise, so the owner launches rows * columns threads.
+        if (descriptor.abi_id != APPLE_GELU_F16_ABI
+                or descriptor.provenance.get("approximation") != "tanh"):
+            raise AppleTensorProgramError(
+                f"Apple member {stage.index} has no frame encoder for {descriptor.abi_id}")
+        rows, columns = buffers[record["inputs"][0]]["shape"]
+        return [3, record["inputs"][0], -1, record["output"], rows, 1, columns, 0, 0, 0], None, None
     if descriptor.abi_id != APPLE_SIMDGROUP_GEMM_F16_ABI:
         raise AppleTensorProgramError(
             f"Apple member {stage.index} has no frame encoder for {descriptor.abi_id}")

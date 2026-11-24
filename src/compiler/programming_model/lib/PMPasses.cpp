@@ -5213,7 +5213,8 @@ struct ScheduleToTilePass
           SmallVector<Operation *> carriers;
           if (child) child.walk([&](Operation *op) {
             auto name = op->getName().getStringRef();
-            if (name == "tile.matmul_kernel" || name == "tile.softmax_kernel")
+            if (name == "tile.matmul_kernel" || name == "tile.softmax_kernel" ||
+                name == "tile.activation_kernel")
               carriers.push_back(op);
           });
           auto source = child ? child.lookupSymbol<func::FuncOp>("source") : func::FuncOp{};

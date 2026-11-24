@@ -16047,6 +16047,13 @@ Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Extends J
 
 Apple: `apple_cpu` and `apple_gpu` skipped the effect before this change and now run eagerly with the reason recorded; the APPLE-NTBI-2 tensor-program route already declined effectful bodies. No Metal execution claim.
 
+## JIT-NATIVE-STATEMENT-EFFECT-2026-11-24
+
+Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Closes the follow-up JIT-STATEMENT-CALL-2026-11-23 left open on NVIDIA and ROCm. Native routes ran before the dropped-call guard and traced the live function, so a body with a call statement -- `log.append(x)`, a helper run for its effect -- had the statement run once while tracing, and the cached native program then skipped it on every warm call. Measured before the fix, 3 calls each: gfx1201 and gfx1151 ran the side effect 1 time, sm_120 ran it 4 times (once in the trace, then 3 times eagerly after the route declined). `effect_scan.CallScan` now reports `statement_calls`: unresolved calls the body (or a helper it scans through) runs as an expression statement. `JitFn._call_concrete` checks it before any native route; a non-empty list declines every route before tracing, and the existing guard runs the original function with `FallbackReason.FRONTEND_UNLOWERED_CALL` (`native_required=True` raises). Value calls (`np.float32(2.0)`, raw numpy whose result feeds the graph), registered Graph ops, constraint declarations and an uncalled nested def do not count, so the gate is not keyed on the effect lattice (raw numpy reads `top`, and gating on it would refuse native bodies that use numpy scalars -- the JIT-DROPPED-CALL-GUARD-PLACEMENT-2026-10-24 trap). Tests: `tests/unit/test_jit_dropped_body_call_eager.py` (JIT-NATIVE-STATEMENT-EFFECT section), `tests/device/{nvidia,rocm}/test_statement_effect_native_route.py`. Census (a plugin recording every gate fire): Mac full `tests/unit/` sweep, fires only in this change's own tests (551 passed / 361 skipped / 0 failed on the rerun of the files that first failed for want of a `tessera-opt` build in the fresh worktree); a static scan finds no `@jit` body in `tests/device/` with a call statement.
+
+Apple: no behaviour change -- the APPLE-NTBI-2 tensor-program route already declined non-pure bodies, and the AST lanes were fixed by JIT-STATEMENT-CALL-2026-11-23. The gate now runs ahead of the Apple routes too; on the Mac census it fired only in this change's tests. No Metal execution claim.
+
+
 ## GFX1201-W8A8-SMALLGRID-64X32-20261025 — under-filled small-grid tiles split to 64x32
 
 Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.

@@ -16777,6 +16777,12 @@ Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Corrects 
 
 NVIDIA (RTX 5070, The-Super-Bear, build-nvidia-cuda at dd1c9af38, lane environment exported): 36 device tests that pass at 8b1fdb83f failed at dd1c9af38 (native tensor MLP 20, FP32 roots 9, shipped GEMM delegate 5, solver children 1, plugin 1); all 36 pass with this change. The 111 other residual device failures are identical at 8b1fdb83f and with this change (pre-existing). The earlier note "native sm_120 tensor-program and prepared routes are bypassed" described the regression, not intended behaviour.
 
+## JIT-STATEMENT-CALL-2026-11-23
+
+Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Extends JIT-DROPPED-CALL-EAGER-2026-10-23 to call statements. The AST front end (`_OpExtractor`) had no handler for an expression statement, so a call whose result is unused -- `log.append(x)`, `print(y)`, a user helper run for its effect -- vanished without being recorded in `frontend_unlowered_calls`. Every AST-executing lane then ran the body with the call silently skipped on every call; reproduced on the Mac on `target=None`, `cpu`, `apple_cpu` and `apple_gpu` (0 of 2 side effects ran). `_OpExtractor.visit_Expr` now records such a call as dropped, so the existing guard runs the original function with `FallbackReason.FRONTEND_UNLOWERED_CALL` (and `native_required=True` raises). Unchanged: a registered Graph op used as a statement, a docstring, and a constraint declaration (`tessera.require`, `tessera.constraint.*`, resolved by object identity in the function's scope, as the effect scan does). Tests: `tests/unit/test_jit_dropped_body_call_eager.py` (statement-call section). Evidence: Mac full `tests/unit/` sweep, 32,983 passed / 8,255 skipped / 3 failed; the 3 are the energy/Clifford/visual-complex round-trips, which need the EBM and Clifford dialects that sweep's build left off, and pass on a build with them on.
+
+NVIDIA: native routes run before the guard and are not changed here. They trace the live function, which runs the statement once while tracing; whether a cached sm_120 program then skips it on warm calls was **not checked** (no CUDA box run) -- the APPLE-NTBI-2 route had exactly that gap and now declines non-pure bodies before tracing. Open follow-up. A body whose native route declines now runs eagerly instead of skipping the effect.
+
 ## GFX1201-W8A8-SMALLGRID-64X32-20261025 — under-filled small-grid tiles split to 64x32
 
 Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.

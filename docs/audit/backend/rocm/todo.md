@@ -19330,6 +19330,12 @@ Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Corrects 
 
 ROCm: gfx1201 (Tajasarus) -- the 7 `rocm_nvfp4_expansion_jit` / `rocm_nvfp4_ingest_jit` tests that pass at 8b1fdb83f and failed at dd1c9af38 pass with this change, and the full gfx1201 unit sweep shows no other difference from the dd1c9af38 baseline. gfx1151 (Princess-Luna): its dd1c9af38 baseline showed no regression from the earlier placement (the NVFP4 lanes are gfx1201-only); this change was not re-swept there.
 
+## JIT-STATEMENT-CALL-2026-11-23
+
+Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Extends JIT-DROPPED-CALL-EAGER-2026-10-23 to call statements. The AST front end (`_OpExtractor`) had no handler for an expression statement, so a call whose result is unused -- `log.append(x)`, `print(y)`, a user helper run for its effect -- vanished without being recorded in `frontend_unlowered_calls`. Every AST-executing lane then ran the body with the call silently skipped on every call; reproduced on the Mac on `target=None`, `cpu`, `apple_cpu` and `apple_gpu` (0 of 2 side effects ran). `_OpExtractor.visit_Expr` now records such a call as dropped, so the existing guard runs the original function with `FallbackReason.FRONTEND_UNLOWERED_CALL` (and `native_required=True` raises). Unchanged: a registered Graph op used as a statement, a docstring, and a constraint declaration (`tessera.require`, `tessera.constraint.*`, resolved by object identity in the function's scope, as the effect scan does). Tests: `tests/unit/test_jit_dropped_body_call_eager.py` (statement-call section). Evidence: Mac full `tests/unit/` sweep, 32,983 passed / 8,255 skipped / 3 failed; the 3 are the energy/Clifford/visual-complex round-trips, which need the EBM and Clifford dialects that sweep's build left off, and pass on a build with them on.
+
+ROCm: as NVIDIA -- native routes ahead of the guard are unchanged, and whether a cached native program skips a statement's effect on warm calls was **not checked** (no gfx1151 or gfx1201 box was run). Open follow-up.
+
 ## GFX1201-W8A8-SMALLGRID-64X32-20261025 — under-filled small-grid tiles split to 64x32
 
 Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.

@@ -406,6 +406,21 @@ _KEYWORD_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
 }
 
 
+def _constraint_declaration_names(fn: Callable) -> Callable[[str], bool]:
+    """A predicate: does this dotted spelling, in ``fn``'s scope, name a
+    constraint declaration? Resolved by object identity, as the effect scan
+    does; a spelling that does not resolve is not a declaration."""
+    from .effect_scan import _function_scope, _is_constraint_declaration, _resolve_dotted
+
+    scope = _function_scope(fn)
+
+    def is_declaration(dotted: str) -> bool:
+        obj = _resolve_dotted(scope, dotted)
+        return obj is not None and _is_constraint_declaration(obj)
+
+    return is_declaration
+
+
 def _scalar_const_env(fn: Any) -> Dict[str, Any]:
     """Scalar constants visible to ``fn`` — closure free vars + module globals —
     so a positional scalar param passed by *name* (``top_k(x, k)`` with ``k`` a
@@ -1912,8 +1927,13 @@ class _OpExtractor(ast.NodeVisitor):
     _OP_MAP = GRAPH_OP_MAP
 
     def __init__(self, arg_names: List[str], arg_types: Optional[Dict[str, IRType]] = None,
-                 const_env: Optional[Dict[str, Any]] = None) -> None:
+                 const_env: Optional[Dict[str, Any]] = None,
+                 is_declaration: Optional[Callable[[str], bool]] = None) -> None:
         self.ops: List[IROp] = []
+        # Names a bare call statement may spell without being a dropped call:
+        # constraint declarations (``ts.require``, ``ts.constraint.*``) record
+        # facts for the ConstraintSolver and touch no program value.
+        self._is_declaration = is_declaration or (lambda _name: False)
         self.diagnostics: List[GraphIRDiagnostic] = []
         # Dotted spellings of calls dropped as "not a registered Graph
         # operation" in the traced function's own scope. A drop inside a
@@ -2011,6 +2031,27 @@ class _OpExtractor(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         self._visit_nested_def(node, node.name)
+
+    def visit_Expr(self, node: ast.Expr) -> None:
+        """A call statement whose result is unused (``log.append(x)``,
+        ``print(y)``, a user helper run for its effect).
+
+        No Graph op can carry it, and without this handler it vanished
+        unrecorded: every AST lane then ran the body with the call silently
+        skipped, on every call. Recording it as a dropped call routes the body
+        to the existing guard, which runs the original function instead of a
+        truncated graph (JIT-DROPPED-CALL-EAGER). A registered Graph op used
+        as a statement keeps its old handling.
+        """
+        call = node.value
+        if not isinstance(call, ast.Call):
+            self.generic_visit(node)
+            return
+        callee = self._resolve_name(call.func)
+        if callee is not None and (graph_name_for(callee) or self._is_declaration(callee)):
+            self.generic_visit(node)
+            return
+        self._record_unlowered(callee or "<dynamic>")
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         self._visit_nested_def(node, node.name)
@@ -5278,7 +5319,8 @@ class GraphIRBuilder:
         except (OSError, TypeError, SyntaxError):
             return []
 
-        extractor = _OpExtractor(arg_names, arg_types, _scalar_const_env(fn))
+        extractor = _OpExtractor(arg_names, arg_types, _scalar_const_env(fn),
+                                 is_declaration=_constraint_declaration_names(fn))
         # Only visit the function body (skip decorator lines)
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

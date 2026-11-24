@@ -2306,6 +2306,18 @@ LogicalResult ActivationKernelOp::verify() {
   // call. The delegated MSL route owns its threadgroup, so the launch carries
   // workgroup 1 exactly as the Apple softmax/reduce launches do.
   if (arch && arch.getValue() == "apple7") {
+    // APPLE-NTBI-2 ReLU (2026-11-24): the apple7 f16 ReLU consumed as
+    // compiler-synthesized MSL, with the SM120 numerical contract (f16 zeros
+    // to +0, NaN payloads propagated). It names no approximation.
+    if (str("kind") == "relu") {
+      if (str("storage") != "f16" || str("accum") != "f32" ||
+          op->hasAttr("approximation") || str("schedule") != "serial" ||
+          str("nan_mode") != "propagate" || str("zero_mode") != "positive" ||
+          !axis || axis.getInt() != -1 || !threads || threads.getInt() != 1)
+        return emitOpError("requires apple7 f16 serial ReLU, workgroup 1, "
+                           "propagated NaNs and positive zeros");
+      return success();
+    }
     if (!narrowOrF32 || str("accum") != "f32" || str("kind") != "gelu" ||
         str("approximation") != "tanh" || str("schedule") != "serial" ||
         str("nan_mode") != "propagate" || str("zero_mode") != "preserve" ||

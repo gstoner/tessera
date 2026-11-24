@@ -446,6 +446,19 @@ LogicalResult ActivationOp::verify() {
       (getStorage() == "f16" ? type.getElementType().isF16() :
        getStorage() == "bf16" ? type.getElementType().isBF16() :
        getStorage() == "f32" && type.getElementType().isF32());
+  if (getArch() == "apple7" && getKind() == "relu") {
+    // APPLE-NTBI-2 slice 6: the apple7 f16 ReLU (compiler-synthesized MSL),
+    // static, unbounded, workgroup 1, with the SM120 numerical contract.
+    if (!type || type.getRank() != 2 || bounded || !type.hasStaticShape() ||
+        type.getEncoding() || !elementMatches || getStorage() != "f16" ||
+        !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0; }) ||
+        getWorkgroupSize() != 1 || getAccum() != "f32" || getAxis() != -1 ||
+        getSchedule() != "serial" || getNanMode() != "propagate" ||
+        getZeroMode() != "positive" || getApproximationAttr())
+      return emitOpError("requires static rank-two apple7 f16 serial ReLU with "
+                         "workgroup 1, propagated NaNs and positive zeros");
+    return success();
+  }
   if (getArch() == "apple7") {
     // E2E-REAL-6 Apple GPU GELU: static, unbounded, tanh, workgroup 1.
     if (!type || type.getRank() != 2 || bounded || !type.hasStaticShape() ||

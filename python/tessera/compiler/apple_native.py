@@ -1237,6 +1237,8 @@ def package_scheduled_kernel(
     _verify_kernel_schedule_ancestry(artifact)
     if artifact.family == "reduce":
         return _package_scheduled_reduce(artifact, pipeline_name=pipeline_name)
+    if artifact.family == "activation" and artifact.kind == "relu":
+        return _package_scheduled_relu(artifact, pipeline_name=pipeline_name)
     if artifact.family == "activation":
         return _package_scheduled_gelu(artifact, pipeline_name=pipeline_name)
     if artifact.family != "softmax":
@@ -1300,6 +1302,120 @@ def package_scheduled_kernel(
             "columns": columns,
             "storage": artifact.storage,
             "accum": "f32",
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return AppleNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
+
+
+APPLE_SYNTH_ACTIVATION_F16_ABI = "tessera.apple.synth.activation.x_o_elements.f16.v1"
+#: The source-carrying pointwise ABI; one input, so buffers are (in0, O, N).
+APPLE_SYNTH_ACTIVATION_F16_SYMBOL = "tessera_apple_gpu_synth_pointwise_f16"
+
+
+def _tile_activation_contract(tile_ir: str) -> dict:
+    """The numerical contract the one ``tile.activation_kernel`` carries."""
+    import re
+
+    lines = re.findall(r"(?m)^\s*tile\.activation_kernel [^\n]+$", tile_ir)
+    if len(lines) != 1:
+        raise ValueError("Apple synthesized activation requires one Tile activation launch")
+    attrs = dict(re.findall(r'\b(kind|storage|nan_mode|zero_mode|schedule) = "([^"]+)"', lines[0]))
+    if set(attrs) != {"kind", "storage", "nan_mode", "zero_mode", "schedule"}:
+        raise ValueError("Apple synthesized activation Tile launch lacks its numerical contract")
+    return attrs
+
+
+def synthesized_activation_source(kind: str, storage: str, nan_mode: str,
+                                  zero_mode: str) -> tuple[str, str]:
+    """``(msl, entry)`` for one Tile activation contract, deterministically."""
+    from .emit.apple_msl import activation_entry, synthesize_activation_msl
+
+    source = synthesize_activation_msl(kind, storage, nan_mode=nan_mode, zero_mode=zero_mode)
+    return source, activation_entry(kind, storage)
+
+
+def _package_scheduled_relu(
+    artifact: ScheduledKernelArtifact,
+    *,
+    pipeline_name: str,
+) -> AppleNativePackage:
+    """Package the apple7 f16 ReLU as compiler-synthesized MSL.
+
+    APPLE-NTBI-2 slice 6 (2026-11-24). The kernel is emitted from the
+    numerical contract the replayed Tile launch carries (``nan_mode``,
+    ``zero_mode``), not from Python defaults, and its source digest is
+    recorded here and re-verified at submission. The Target IR carries the
+    synthesized source, as the synthesized reduction does.
+    """
+    contract = _tile_activation_contract(artifact.tile_ir)
+    if (artifact.kind != "relu" or artifact.dtype != "fp16" or len(artifact.input_shape) != 2
+            or artifact.input_shape != artifact.output_shape
+            or contract["kind"] != "relu" or contract["storage"] != "f16"
+            or contract["schedule"] != "serial"):
+        raise ValueError("Apple GPU scheduled ReLU supports only the rank-two f16 contract")
+    rows, columns = artifact.input_shape
+    if rows * columns > 2**31 - 1:
+        raise ValueError("Apple GPU scheduled ReLU takes an int32 element count")
+    source, entry = synthesized_activation_source(
+        "relu", "f16", contract["nan_mode"], contract["zero_mode"])
+    source_digest = hashlib.sha256(source.encode()).hexdigest()
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError(
+            "APPLE-NTBI-2 Apple GPU scheduled ReLU requires a fresh Tessera "
+            "Apple GPU runtime dylib"
+        )
+    symbol, abi = APPLE_SYNTH_ACTIVATION_F16_SYMBOL, APPLE_SYNTH_ACTIVATION_F16_ABI
+    target_ir = (
+        f'tessera_apple.gpu.msl_kernel @{symbol} '
+        f'{{abi = "{abi}", kind = "relu", storage = "f16", '
+        f'nan_mode = "{contract["nan_mode"]}", zero_mode = "{contract["zero_mode"]}", '
+        f'entry = "{entry}", source_sha256 = "{source_digest}", '
+        f'schedule_hash = "{artifact.schedule_digest}", status = "executable"}}'
+        f'\n// ---- synthesized MSL ----\n{source}'
+    )
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    image = NativeImageArtifact(
+        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="shared_object", payload=payload,
+        entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
+    )
+    x, out = artifact.input_name, artifact.output_name
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        buffers=(
+            BufferBinding(0, x, "input", "fp16", 2, "row_major", 2),
+            BufferBinding(1, out, "output", "fp16", 2, "row_major", 2),
+        ),
+        shape_guards=tuple(
+            ShapeGuard(name, axis, "eq", extent)
+            for name, shape in ((x, artifact.input_shape), (out, artifact.output_shape))
+            for axis, extent in enumerate(shape)
+        ),
+        geometry=LaunchGeometry(policy="apple_msl_synth_activation"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("return",),
+        ),
+        provenance={
+            "work_item": "APPLE-NTBI-2",
+            "route": "apple_gpu_synth_activation_f16",
+            "op_kind": "relu",
+            "family": "activation",
+            "kind": "relu",
+            "synthesized": True,
+            "entry": entry,
+            "source_sha256": source_digest,
+            "nan_mode": contract["nan_mode"],
+            "zero_mode": contract["zero_mode"],
+            "shape": list(artifact.input_shape),
+            "storage": "fp16",
+            "dynamic_shape": False,
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
         },

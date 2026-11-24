@@ -62,3 +62,26 @@ module @gelu_requested attributes {tessera.target = "apple_gpu", tessera.arch = 
     return %o : tensor<64x48xf32>
   }
 }
+
+// -----
+
+// APPLE-NTBI-2 slice 6: the f16 ReLU is an Apple producer member; it ends at
+// the shared activation launch carrier with the ReLU numerical contract the
+// synthesized MSL consumer computes.
+// CHECK-LABEL: module @relu_requested
+// CHECK-SAME: tessera.native.tensor_program = 1
+// CHECK: %[[R:.*]] = memref.alloc() : memref<64x32xf16>
+// CHECK: tile.program_invoke %arg0, %[[R]] {callee = @tensor_stage_0::@source, carrier = "tile.activation_kernel"
+// CHECK: tile.program_invoke %[[R]], %arg1, %{{.*}} {callee = @tensor_stage_1::@source, carrier = "tile.matmul_kernel"
+// CHECK: module @tensor_stage_0
+// CHECK: tile.activation_kernel
+// CHECK-SAME: kind = "relu"
+// CHECK-SAME: zero_mode = "positive"
+module @relu_requested attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
+                                   tessera.native.apple_tensor_program_request} {
+  func.func @relu_product(%x: tensor<64x32xf16>, %w: tensor<32x48xf16>) -> tensor<64x48xf32> {
+    %r = tessera.relu %x : (tensor<64x32xf16>) -> tensor<64x32xf16>
+    %o = tessera.matmul %r, %w {output_dtype = "fp32"} : (tensor<64x32xf16>, tensor<32x48xf16>) -> tensor<64x48xf32>
+    return %o : tensor<64x48xf32>
+  }
+}

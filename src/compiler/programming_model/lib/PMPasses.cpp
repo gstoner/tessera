@@ -2280,15 +2280,24 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     return schedule;
   }
   if (opName == "tessera.relu") {
-    if (!nvidia || input != output || input.getRank() != 2 || input.getEncoding() ||
-        (schedule.storage != "f16" && schedule.storage != "bf16" &&
-         schedule.storage != "f32") ||
+    // APPLE-NTBI-2 ReLU (2026-11-24): the apple7 consumer is compiler-
+    // synthesized MSL (`emit/apple_msl.py::synthesize_activation_msl`), f16
+    // only -- the storage the Apple tensor program carries. It computes the
+    // same contract as SM120 (propagated NaN payloads, f16 zeros to +0) and
+    // takes no schedule keyword: the synthesized kernel is one element per
+    // thread, so a `schedule` request fails closed.
+    bool appleRelu = apple_gpu && schedule.arch == "apple7";
+    if ((!nvidia && !appleRelu) || input != output || input.getRank() != 2 ||
+        input.getEncoding() ||
+        (appleRelu ? schedule.storage != "f16"
+                   : (schedule.storage != "f16" && schedule.storage != "bf16" &&
+                      schedule.storage != "f32")) ||
         !llvm::all_of(inputCapacity, [](int64_t d) { return d > 0; }))
       return failure();
     for (NamedAttribute attr : op->getAttrs()) {
       if (attr.getName().getValue() == "schedule.artifact_hash" ||
           (nvidia && isLayoutKey(attr.getName().getValue()))) continue;
-      if (attr.getName().getValue() == "schedule") {
+      if (attr.getName().getValue() == "schedule" && nvidia) {
         auto mode = dyn_cast<StringAttr>(attr.getValue());
         if (!mode || (mode.getValue() != "serial" && mode.getValue() != "flat_128"))
           return failure();
@@ -2308,7 +2317,9 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     schedule.kind = "relu";
     schedule.rows = rows;
     schedule.columns = inputCapacity[1];
-    schedule.workgroupSize = 128;
+    // The Apple launch carries workgroup 1, as the Apple GELU/softmax
+    // launches do: the MSL dispatcher owns its threadgroup.
+    schedule.workgroupSize = appleRelu ? 1 : 128;
     return schedule;
   }
   if (opName == "tessera.gelu") {
@@ -4442,8 +4453,13 @@ struct GraphToSchedulePass
       // Apple GELU is claimed only as the isolated unary request the Apple
       // native package lowers; a GELU inside any other Apple program keeps
       // its existing route instead of being claimed by name alone.
-      bool appleGelu = name == "tessera.gelu" && target == "apple_gpu" &&
-          isIsolatedUnaryResult(op);
+      // APPLE-NTBI-2 slice 6: likewise the f16 ReLU, the only storage its
+      // synthesized consumer computes; other ReLUs keep their existing route.
+      bool appleGelu = target == "apple_gpu" && isIsolatedUnaryResult(op) &&
+          (name == "tessera.gelu" ||
+           (name == "tessera.relu" && op->getNumResults() == 1 &&
+            isa<RankedTensorType>(op->getResult(0).getType()) &&
+            cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isF16()));
       if (binary || appleGelu || (name == "tessera.relu" && target == "nvidia_sm120") ||
           name == "tessera.softmax" || name == "tessera.reduce" ||
           (norm && (target == "nvidia_sm120" ||

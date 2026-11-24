@@ -124,15 +124,16 @@ def test_frame_stages_must_bind_the_traced_operands(program):
 
 
 @pytest.mark.parametrize("fn, arrays, why", [
-    (lambda a, b: ts.ops.matmul(ts.ops.relu(a), b, output_dtype="fp32"),
-     (_half(64, 32), _half(32, 48)), "must be tessera.matmul, tessera.softmax or tessera.gelu"),
+    (lambda a, c, b: ts.ops.matmul(ts.ops.add(a, c), b, output_dtype="fp32"),
+     (_half(64, 32), _half(64, 32), _half(32, 48)),
+     "must be tessera.matmul, tessera.softmax, tessera.gelu or tessera.relu"),
     (lambda a, b: ts.ops.softmax(ts.ops.matmul(a, b, output_dtype="fp32"), axis=-1),
      (_half(64, 32), _half(32, 48)), "must end in its matrix product"),
     (lambda a: ts.ops.matmul(a, a, output_dtype="fp32"),
      (_half(32, 32),), "needs a producer and a matrix product"),
 ])
 def test_requested_programs_outside_the_profile_are_refused(fn, arrays, why):
-    names = ("a", "b")[:len(arrays)]
+    names = ("a", "b", "c")[:len(arrays)]
     with pytest.raises(RuntimeError, match=f"APPLE_TENSOR_PROGRAM_UNSUPPORTED: .*{why}"):
         atp.compile_apple_tensor_program(_graph(fn, arrays, names))
 
@@ -333,7 +334,7 @@ def _attention_and_probabilities(s, v):
     (lambda s, v: ts.ops.matmul(ts.ops.softmax(s, axis=-1), v),
      (_half(64, 32).astype(np.float32), _half(32, 48).astype(np.float32))),
     # A producer the owner has no member for: declined after tracing.
-    (lambda s, v: ts.ops.matmul(ts.ops.relu(s), v, output_dtype="fp32"),
+    (lambda s, v: ts.ops.matmul(ts.ops.add(s, s), v, output_dtype="fp32"),
      (_half(64, 32), _half(32, 48))),
 ])
 def test_public_jit_leaves_programs_outside_the_profile_to_other_routes(fn, arrays):
@@ -464,6 +465,183 @@ def test_public_jit_runs_a_gelu_program_in_one_command_buffer():
     receipt = program._apple_tensor_last_receipt
     assert receipt["compiler_path"] == "canonical_apple_tensor_program"
     assert (receipt["command_buffers"], receipt["dispatches"]) == (1, 3)
+    roots = [arg.name for arg in program._apple_tensor_last_program.graph.functions[0].args]
+    framed, _ = atp.execute_frame(program._apple_tensor_last_program, dict(zip(roots, (x, w))))
+    assert output.dtype == np.float32 and output.tobytes() == framed.tobytes()
+    artifact = program.runtime_artifact()
+    launched = rt.launch(artifact, {"x": x, "w": w})
+    assert launched["ok"] and np.asarray(launched["output"]).tobytes() == output.tobytes()
+
+
+# --- Slice 6: the f16 ReLU as compiler-synthesized MSL ----------------------
+
+
+def _relu_product(x, w):
+    return ts.ops.matmul(ts.ops.relu(x), w, output_dtype="fp32")
+
+
+def _relu_gelu_softmax_product(x, w):
+    return ts.ops.matmul(ts.ops.softmax(ts.ops.gelu(ts.ops.relu(x)), axis=-1), w,
+                         output_dtype="fp32")
+
+
+def _both_operands_relu(x, w):
+    return ts.ops.matmul(ts.ops.relu(x), ts.ops.relu(w), output_dtype="fp32")
+
+
+def _relu_bits(x):
+    """The Tile contract on storage bits: NaN payloads kept, zeros and negatives to +0."""
+    u = np.ascontiguousarray(x, np.float16).view(np.uint16)
+    nan = (u & 0x7FFF) > 0x7C00
+    clamp = ~nan & (((u & 0x8000) != 0) | ((u & 0x7FFF) == 0))
+    return np.where(clamp, np.uint16(0), u).astype(np.uint16).view(np.float16)
+
+
+def _special_f16(shape, seed):
+    """Normal values plus every class the contract names: +/-0, +/-inf, NaN payloads."""
+    x = _half(*shape, seed=seed).reshape(-1)
+    specials = np.array([0x0000, 0x8000, 0x7C00, 0xFC00, 0x7E00, 0xFE01, 0x7C01, 0x0001, 0x8001],
+                        np.uint16).view(np.float16)
+    x[:specials.size] = specials
+    return x.reshape(shape)
+
+
+def test_relu_contract_reference_on_storage_bits():
+    x = _special_f16((4, 8), seed=3)
+    bits = _relu_bits(x).view(np.uint16).reshape(-1)
+    assert list(bits[:9]) == [0, 0, 0x7C00, 0, 0x7E00, 0xFE01, 0x7C01, 0x0001, 0]
+
+
+def test_the_synthesized_kernel_comes_from_the_tile_contract():
+    from tessera.compiler.emit.apple_msl import synthesize_activation_msl
+
+    source = synthesize_activation_msl("relu", "f16", nan_mode="propagate", zero_mode="positive")
+    assert "kernel void synth_activation_relu_f16(" in source
+    # Integer bit tests, never a float compare a fast-math compiler could fold.
+    assert "max(" not in source and "half" not in source
+    for contract in (("relu", "f16", "propagate", "preserve"), ("relu", "f32", "propagate", "positive"),
+                     ("gelu", "f16", "propagate", "positive")):
+        with pytest.raises(ValueError, match="no synthesized Apple activation"):
+            synthesize_activation_msl(contract[0], contract[1], nan_mode=contract[2],
+                                      zero_mode=contract[3])
+
+
+def test_a_relu_member_packages_synthesized_msl():
+    relu = atp.compile_apple_tensor_program(
+        _graph(_relu_product, (_half(64, 32), _half(32, 48)), ("x", "w")))
+    activation, product = relu.stages
+    assert (activation.op_name, activation.carrier) == ("tessera.relu", "tile.activation_kernel")
+    package = activation.package
+    provenance = package.descriptor.provenance
+    assert package.descriptor.abi_id == apple_native.APPLE_SYNTH_ACTIVATION_F16_ABI
+    assert provenance["route"] == "apple_gpu_synth_activation_f16" and provenance["synthesized"]
+    assert (provenance["nan_mode"], provenance["zero_mode"]) == ("propagate", "positive")
+    # The Target IR carries the synthesized source its digest names.
+    import hashlib
+
+    source = package.target_ir.split("// ---- synthesized MSL ----\n", 1)[1]
+    assert hashlib.sha256(source.encode()).hexdigest() == provenance["source_sha256"]
+    assert 'zero_mode = "positive"' in activation.member_ir
+    assert product.inputs == (activation.output, "w")
+    relu.validate()
+
+
+@pytest.mark.parametrize("fn, arrays", [
+    # f32 storage has no apple7 ReLU (bf16 is refused in the lit fixture).
+    (lambda x: ts.ops.relu(x), (np.zeros((8, 16), np.float32),)),
+    # Rank one is outside the rank-two launch contract.
+    (lambda x: ts.ops.relu(x), (np.zeros((16,), np.float16),)),
+])
+def test_scheduled_relu_outside_the_apple_contract_is_refused(fn, arrays):
+    from tessera.compiler.scheduled_kernel import lower_scheduled_kernel
+
+    module = to_graph_ir_module(trace(fn, *arrays, arg_names=("x",)), name="r", target="apple_gpu")
+    with pytest.raises((ValueError, RuntimeError)):
+        lower_scheduled_kernel(module, target="apple_gpu")
+
+
+@pytest.mark.hardware_apple_gpu
+def test_standalone_relu_package_runs_the_synthesized_kernel_bit_exactly():
+    from tests._support.apple import require_apple_chip_identity
+    from tessera.compiler.scheduled_kernel import lower_scheduled_kernel
+    from tessera.runtime import RuntimeArtifact, launch
+
+    require_apple_chip_identity()
+    x = _special_f16((37, 53), seed=41)
+    module = to_graph_ir_module(trace(lambda x: ts.ops.relu(x), x, arg_names=("x",)),
+                                name="r", target="apple_gpu")
+    kernel = lower_scheduled_kernel(module, target="apple_gpu")
+    package = apple_native.package_scheduled_kernel(kernel, pipeline_name=atp.PIPELINE)
+    out_name = package.descriptor.buffers[1].name
+    artifact = RuntimeArtifact(
+        metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
+        target_ir=package.target_ir, native_image=package.image,
+        launch_descriptor=package.descriptor)
+    launched = launch(artifact, {"x": x, out_name: np.full(x.shape, np.nan, np.float16)})
+    assert launched["ok"] and launched["execution_kind"] == "native_gpu"
+    assert np.asarray(launched["output"]).view(np.uint16).tobytes() == _relu_bits(x).view(np.uint16).tobytes()
+
+
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.parametrize("fn, shapes, members, private", [
+    (_relu_product, ((64, 32), (32, 48)), 2, 1),
+    (_relu_product, ((100, 37), (37, 53)), 2, 1),
+    # A chain through all three producer kinds: ReLU -> GELU -> softmax -> product.
+    (_relu_gelu_softmax_product, ((100, 37), (37, 53)), 4, 3),
+    (_both_operands_relu, ((64, 32), (32, 48)), 3, 2),
+])
+def test_frame_owner_runs_relu_programs_in_one_command_buffer(fn, shapes, members, private):
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    x, w = (_half(*shape, seed=i + 51) for i, shape in enumerate(shapes))
+    program = atp.compile_apple_tensor_program(_graph(fn, (x, w), ("x", "w")))
+    assert len(program.stages) == members
+    output, receipt = atp.execute_frame(program, {"x": x, "w": w})
+    assert (receipt["command_buffers"], receipt["dispatches"]) == (1, members)
+    assert receipt["private_device_buffers"] == private
+    sequential, _ = atp.run_members_sequentially(program, {"x": x, "w": w})
+    assert output.dtype == np.float32 and output.tobytes() == sequential.tobytes()
+    lhs = _relu_bits(x)
+    if fn is _relu_gelu_softmax_product:
+        lhs = _softmax_f16(_gelu_f16(lhs))
+    rhs = _relu_bits(w) if fn is _both_operands_relu else w
+    reference = lhs.astype(np.float32) @ rhs.astype(np.float32)
+    np.testing.assert_allclose(output, reference, rtol=0, atol=2e-3)
+
+
+@pytest.mark.hardware_apple_gpu
+def test_frame_owner_refuses_a_synthesized_stage_without_its_source():
+    import ctypes
+
+    from tessera._apple_gpu_dispatch import bind_registered
+
+    owner = bind_registered("tessera_apple_gpu_tensor_frame_execute")
+    assert owner is not None
+    x, out = np.zeros((4, 8), np.float16), np.full((4, 8), -1, np.float16)
+    buffers = (ctypes.c_int64 * 4)(0, x.nbytes, 2, out.nbytes)
+    hosts = (ctypes.c_void_p * 2)(x.ctypes.data, out.ctypes.data)
+    stage = (ctypes.c_int64 * 10)(4, 0, -1, 1, 4, 1, 8, 0, 0, 0)
+    none = (ctypes.c_char_p * 1)(None)
+    receipt = (ctypes.c_int64 * 4)()
+    assert owner(buffers, hosts, 2, stage, none, none, 1, receipt) == -1
+    assert list(receipt) == [0, 0, 0, 0] and (out == -1).all()
+
+
+@pytest.mark.hardware_apple_gpu
+def test_public_jit_runs_a_relu_program_in_one_command_buffer():
+    from tests._support.apple import require_apple_chip_identity
+    from tessera import runtime as rt
+
+    require_apple_chip_identity()
+    x, w = _special_f16((100, 37), seed=61), _half(37, 53, seed=62)
+    # Keep the product finite: the NaN/inf rows exercise the kernel, not the GEMM.
+    x[0, :9] = np.float16(0)
+    program = ts.jit(target="apple_gpu")(_relu_product)
+    output = program(x, w)
+    receipt = program._apple_tensor_last_receipt
+    assert receipt["compiler_path"] == "canonical_apple_tensor_program"
+    assert (receipt["command_buffers"], receipt["dispatches"]) == (1, 2)
     roots = [arg.name for arg in program._apple_tensor_last_program.graph.functions[0].args]
     framed, _ = atp.execute_frame(program._apple_tensor_last_program, dict(zip(roots, (x, w))))
     assert output.dtype == np.float32 and output.tobytes() == framed.tobytes()

@@ -6728,6 +6728,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         APPLE_SIMDGROUP_GEMM_F16_ABI,
         APPLE_FLASH_ATTN_VARIANT_F32_ABI,
         APPLE_FLASH_ATTN_BWD_ALL_ABIS,
+        APPLE_SYNTH_ACTIVATION_F16_ABI,
         APPLE_SYNTH_REDUCE_F32_ABI,
         APPLE_TRANSPOSE_BF16_ABI,
         APPLE_TRANSPOSE_F16_ABI,
@@ -6766,6 +6767,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 APPLE_SOFTMAX_BF16_ABI,
                 APPLE_SIMDGROUP_GEMM_F16_ABI,
                 APPLE_FLASH_ATTN_VARIANT_F32_ABI,
+                APPLE_SYNTH_ACTIVATION_F16_ABI,
                 APPLE_SYNTH_REDUCE_F32_ABI,
                 APPLE_TOPK_DYNAMIC_F32_I32_ABI,
                 APPLE_TRANSPOSE_F32_ABI,
@@ -7262,10 +7264,60 @@ def _submit_apple_gpu_native(
         APPLE_FLASH_ATTN_VARIANT_F32_SYMBOL,
         APPLE_FLASH_ATTN_BWD_SPLIT_ROUTE,
         APPLE_FLASH_ATTN_BWD_ALL_ABIS,
+        APPLE_SYNTH_ACTIVATION_F16_ABI,
+        APPLE_SYNTH_ACTIVATION_F16_SYMBOL,
         APPLE_SYNTH_REDUCE_F32_ABI,
         APPLE_SYNTH_REDUCE_F32_SYMBOL,
         APPLE_SYNTH_REDUCE_KINDS,
     )
+
+    if descriptor.abi_id == APPLE_SYNTH_ACTIVATION_F16_ABI:
+        # APPLE-NTBI-2 slice 6: the f16 ReLU as COMPILER-SYNTHESIZED MSL. The
+        # kernel is re-derived from the contract the package recorded and
+        # checked against its source digest; the status-returning call is the
+        # only route, so a refusal raises instead of computing a reference.
+        import hashlib as _hashlib
+
+        from tessera._apple_gpu_dispatch import bind_registered
+        from tessera.compiler.apple_native import synthesized_activation_source
+
+        provenance = descriptor.provenance
+        ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+        if (descriptor.entry_symbol != APPLE_SYNTH_ACTIVATION_F16_SYMBOL or len(ordered) != 2
+                or [item.direction for item in ordered] != ["input", "output"]):
+            raise RuntimeError(
+                "Apple synthesized-activation descriptor ABI or buffer contract is invalid"
+            )
+        source_in, out = (buffers[item.name] for item in ordered)
+        if (not isinstance(source_in, np.ndarray) or not isinstance(out, np.ndarray)
+                or source_in.dtype != np.float16 or out.dtype != np.float16
+                or not source_in.flags.c_contiguous or not out.flags.c_contiguous
+                or source_in.shape != out.shape or source_in.ndim != 2):
+            raise RuntimeError(
+                "Apple synthesized activation requires contiguous rank-two f16 buffers"
+            )
+        source, entry = synthesized_activation_source(
+            str(provenance["kind"]), "f16", str(provenance["nan_mode"]),
+            str(provenance["zero_mode"]))
+        if (_hashlib.sha256(source.encode()).hexdigest() != provenance["source_sha256"]
+                or entry != provenance["entry"]):
+            raise RuntimeError(
+                "Apple synthesized activation kernel does not match the packaged "
+                "source digest"
+            )
+        synth_call = bind_registered(APPLE_SYNTH_ACTIVATION_F16_SYMBOL)
+        if synth_call is None:
+            raise RuntimeError(
+                f"the Apple GPU runtime lacks {APPLE_SYNTH_ACTIVATION_F16_SYMBOL}")
+        count = int(source_in.size)
+        synth_inputs = (ctypes.c_void_p * 1)(source_in.ctypes.data)
+        synth_counts = (ctypes.c_int32 * 1)(count)
+        status = synth_call(source.encode(), entry.encode(), synth_inputs, synth_counts, 1,
+                            out.ctypes.data, count, int(source_in.shape[1]))
+        if status != 1:
+            raise RuntimeError(
+                f"Apple synthesized activation did not execute on Metal (status {status})")
+        return out
 
     if descriptor.abi_id == APPLE_SYNTH_REDUCE_F32_ABI:
         # E2E-REAL-5 last-axis reduction as COMPILER-SYNTHESIZED MSL.  The

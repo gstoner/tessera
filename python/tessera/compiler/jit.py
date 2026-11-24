@@ -3918,7 +3918,7 @@ class JitFn:
         Declines (other Apple routes stay eligible) only before admission: a
         missing compiler or runtime, inputs outside the profile's f16 storage, a
         body that cannot be traced, a traced body that is not a
-        softmax/GELU -> matmul chain ending in its product, or the compiler's own
+        softmax/GELU/ReLU -> matmul chain ending in its product, or the compiler's own
         ``APPLE_TENSOR_PROGRAM_UNSUPPORTED`` refusal. Any failure after the
         compiler formed the program raises.
         """

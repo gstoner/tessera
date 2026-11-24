@@ -61,9 +61,15 @@ def verify_unary_projection(artifact, parent: str) -> None:
     required = ['accum = "f32"', f'storage = "{storage}"', f'workgroup_size = {workgroup} : i64']
     if family == 'softmax':
         required += ['exp_mode = "accurate"', 'ftz = false']
+    elif family == 'activation' and re.search(r'(?:^|, )kind = "relu"(?:,|$)', attrs):
+        # APPLE-NTBI-2 slice 6 (2026-11-24): the apple7 f16 ReLU, consumed as
+        # compiler-synthesized MSL, with the SM120 numerical contract.
+        if 'approximation = ' in attrs or storage != 'f16':
+            raise ValueError('Native unary native arithmetic policy is unsupported')
+        required += ['arch = "apple7"', 'schedule = "serial"', 'nan_mode = "propagate"',
+                     'zero_mode = "positive"']
     elif family == 'activation':
-        # E2E-REAL-6 Apple GPU GELU (2026-11-03): the only activation a
-        # non-SM120 consumer projects is the apple7 tanh GELU.
+        # E2E-REAL-6 Apple GPU GELU (2026-11-03): the apple7 tanh GELU.
         required += ['arch = "apple7"', 'kind = "gelu"', 'approximation = "tanh"',
                      'schedule = "serial"', 'nan_mode = "propagate"', 'zero_mode = "preserve"']
     if any(re.search(r'(?:^|, )' + re.escape(value) + r'(?:,|$)', attrs) is None
@@ -96,8 +102,11 @@ def verify_unary_projection(artifact, parent: str) -> None:
     elif family == 'activation':
         if ((artifact.target, artifact.architecture) != ('apple_gpu', 'apple7')
                 or axis != -1 or output_shape != input_shape or len(input_shape) != 2):
-            raise ValueError('Native activation projection requires the apple7 rank-two GELU')
-        expected.update(kind='gelu', axis=-1, rows=input_shape[0], columns=input_shape[1],
+            raise ValueError('Native activation projection requires the apple7 rank-two GELU or ReLU')
+        activation = re.search(r'(?:^|, )kind = "(gelu|relu)"(?:,|$)', attrs)
+        if activation is None:
+            raise ValueError('Native activation projection requires the apple7 rank-two GELU or ReLU')
+        expected.update(kind=activation[1], axis=-1, rows=input_shape[0], columns=input_shape[1],
                         outer=1, axis_extent=1, inner=1)
     elif family == 'softmax':
         if axis != -1 or output_shape != input_shape:

@@ -99,7 +99,8 @@ class ScheduledKernelArtifact:
         if self.tile_ir.count(tile_op) != 1:
             raise ValueError(f"scheduled {self.family} artifact requires exactly one Tile launch op")
         if ("tessera.softmax" in self.tile_ir or "tessera.reduce" in self.tile_ir
-                or "tessera.gelu" in self.tile_ir or "schedule." in self.tile_ir):
+                or "tessera.gelu" in self.tile_ir or "tessera.relu" in self.tile_ir
+                or "schedule." in self.tile_ir):
             raise ValueError("scheduled semantic-kernel Tile artifact retains Graph or Schedule ops")
         if _HASH_RE.findall(self.tile_ir) != [self.schedule_digest]:
             raise ValueError("scheduled semantic-kernel Tile artifact has a stale schedule digest")
@@ -430,7 +431,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             raise ValueError("gfx1151 scheduled softmax requires f16/f32 storage preserved to the output")
         if not softmax_like and (dtype not in {"fp16", "bf16", "fp32"} or output_dtype != "fp32"):
             raise ValueError("gfx1151 scheduled reduction requires f16/bf16/f32 storage and f32 output")
-    elif target == "nvidia_sm120" or (target == "apple_gpu" and op.op_name in {"tessera.softmax", "tessera.gelu"}) or (
+    elif target == "nvidia_sm120" or (target == "apple_gpu" and op.op_name in {"tessera.softmax", "tessera.gelu", "tessera.relu"}) or (
         target == "rocm_gfx1201" and op.op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe"}
     ):
         expected_dtype = dtype if op.op_name in {"tessera.softmax", "tessera.softmax_safe", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm", "tessera.relu", "tessera.gelu"} else "fp32"
@@ -466,11 +467,18 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
 
     epsilon = 0.0
     if op.op_name == "tessera.relu":
-        if (target != "nvidia_sm120" or len(function.args) != 1 or len(input_shape) != 2
+        # APPLE-NTBI-2 slice 6 (2026-11-24): apple7 takes the f16 ReLU as
+        # compiler-synthesized MSL; no keyword (a schedule request included)
+        # selects anything the synthesized kernel computes.
+        apple_relu = (target == "apple_gpu" and dtype == "fp16" and not op.kwargs
+                      and math.prod(input_shape) <= 2**31 - 1)
+        if ((target != "nvidia_sm120" and not apple_relu) or len(function.args) != 1
+                or len(input_shape) != 2
                 or input_shape != output_shape or output_dtype != dtype
                 or not op.result or len(function.return_values) != 1
                 or function.return_values[0].removeprefix("%") != op.result.removeprefix("%")):
-            raise ValueError("scheduled ReLU requires its returned SM120 rank-two storage-preserving result")
+            raise ValueError("scheduled ReLU requires its returned SM120 or apple7 f16 "
+                             "rank-two storage-preserving result")
         family, kind, axis, keepdims = "activation", "relu", -1, False
         rows, columns = input_shape
         outer = axis_extent = inner = 1

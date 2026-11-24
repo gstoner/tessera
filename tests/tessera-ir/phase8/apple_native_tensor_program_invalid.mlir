@@ -5,12 +5,12 @@
 // REQUIRES: tessera-apple-backend
 // RUN: not tessera-opt %s --split-input-file --tessera-graph-to-schedule 2>&1 | FileCheck %s
 
-// relu has no Apple scheduled kernel.
-// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: an Apple member must be tessera.matmul, tessera.softmax or tessera.gelu
+// add has no Apple scheduled kernel (relu became a member in slice 6).
+// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: an Apple member must be tessera.matmul, tessera.softmax, tessera.gelu or tessera.relu
 module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
                    tessera.native.apple_tensor_program_request} {
-  func.func @relu_product(%a: tensor<64x32xf16>, %b: tensor<32x48xf16>) -> tensor<64x48xf32> {
-    %r = tessera.relu %a : (tensor<64x32xf16>) -> tensor<64x32xf16>
+  func.func @add_product(%a: tensor<64x32xf16>, %c: tensor<64x32xf16>, %b: tensor<32x48xf16>) -> tensor<64x48xf32> {
+    %r = tessera.add %a, %c : (tensor<64x32xf16>, tensor<64x32xf16>) -> tensor<64x32xf16>
     %o = tessera.matmul %r, %b {output_dtype = "fp32"} : (tensor<64x32xf16>, tensor<32x48xf16>) -> tensor<64x48xf32>
     return %o : tensor<64x48xf32>
   }

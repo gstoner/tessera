@@ -91,6 +91,7 @@ namespace tessera {
 #include "NativeAttentionJvp.h"
 #include "NativePagedKV.h"
 #include "NativeArgReduce.h"
+#include "NativeEmbeddingGather.h"
 #include "NativeScaleTranspose.h"
 #include "NativeNVFP4Ingest.h"
 #include "NativeMXFP4Storage.h"
@@ -4145,6 +4146,7 @@ struct GraphToSchedulePass
     if (failed(scheduleNativePagedKV(mod))) return signalPassFailure();
     if (failed(scheduleNativePagedKVWrite(mod))) return signalPassFailure();
     if (failed(scheduleNativeArgReduce(mod))) return signalPassFailure();
+    if (failed(scheduleNativeEmbeddingGather(mod))) return signalPassFailure();
     if (failed(scheduleNativeMoeDispatch(mod))) return signalPassFailure();
 
     SmallVector<Operation *> tridiagonalSolves;
@@ -5360,6 +5362,7 @@ struct ScheduleToTilePass
     if (failed(lowerNativePagedKV(mod))) return signalPassFailure();
     if (failed(lowerNativePagedKVWrite(mod))) return signalPassFailure();
     if (failed(lowerNativeArgReduce(mod))) return signalPassFailure();
+    if (failed(lowerNativeEmbeddingGather(mod))) return signalPassFailure();
     if (failed(lowerNativeMoeDispatch(mod))) return signalPassFailure();
     if (failed(lowerNativeSSD(mod))) return signalPassFailure();
 

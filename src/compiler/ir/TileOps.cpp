@@ -2249,6 +2249,20 @@ LogicalResult ArgReduceKernelOp::verify() {
   return success();
 }
 
+LogicalResult EmbeddingGatherKernelOp::verify() {
+  // table, tokens, out, status; then V, H, B.
+  if (failed(verifyPointerAndI64Tail(getOperation(), getInputs(), 4, 3)))
+    return failure();
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto index = getOperation()->getAttrOfType<StringAttr>("index_storage");
+  auto bounds = getOperation()->getAttrOfType<StringAttr>("index_bounds");
+  if (!storage || storage.getValue() != "f32" || !index || index.getValue() != "i32")
+    return emitOpError("requires f32 table storage and i32 index_storage");
+  if (!bounds || bounds.getValue() != "kernel_checked_status_word")
+    return emitOpError("requires index_bounds=\"kernel_checked_status_word\"");
+  return success();
+}
+
 LogicalResult ScanKernelOp::verify() {
   if (failed(verifyPointerAndI64Tail(getOperation(), getInputs(), 2, 2)))
     return failure();

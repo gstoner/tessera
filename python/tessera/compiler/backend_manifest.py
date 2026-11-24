@@ -6779,6 +6779,25 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                   "NumPy and the AR-decode oracle's greedy tokens.",
         ))
 
+    # AR-DECODE-PROGRAM-1 S1c: the Graph op ``tessera.gather`` of table rows
+    # by i32 tokens executes natively on sm_120 (NativeEmbeddingGather.h ->
+    # tile.embedding_gather_kernel -> NVVM) when a module is packaged for that
+    # lane. The public frontend does not route ``tessera.ops.gather`` there
+    # yet, so the row stays ``planned`` and names the lane's device test.
+    if op_name == "gather":
+        entries.append(BackendKernelEntry(
+            target="nvidia_sm120", status=_PLANNED_STATUS, dtypes=("fp32",),
+            feature_flags=("indexing", "cuda"),
+            shape_envelope="static f32[V,H] table, i32[B] tokens, axis 0 -> f32[B,H]; "
+                "V, B < 2^31; a token outside [0, V) refuses the call through a status word",
+            cuda_arch_min="sm_120",
+            notes="Public gather routing is planned. The Graph->Schedule->Tile->NVVM "
+                  "embedding-row lane (one 128-thread CTA per token row, device-checked token "
+                  "bounds) is device-tested on the RTX 5070 by "
+                  "tests/device/nvidia/test_embedding_gather.py, bitwise against NumPy take "
+                  "and the AR-decode oracle's embedding table.",
+        ))
+
     # x86 AMX / AVX-512
     x86 = _X86_KERNELS.get(op_name)
     if x86 is not None:

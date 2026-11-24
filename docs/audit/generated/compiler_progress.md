@@ -59,7 +59,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `NVIDIA SM80` | open | 0 | 82 | 82 | manifest: exact_verified=0, implementation_present=0, reference=0, artifact_or_planned=82, other=0, missing_target_row=450; runtime_paths: executable=0/0 (no runtime rows) | Retain as declared/open until architecture-owned execution evidence exists. |
 | `NVIDIA SM90` | open | 0 | 115 | 115 | manifest: exact_verified=0, implementation_present=0, reference=2, artifact_or_planned=113, other=0, missing_target_row=417; runtime_paths: executable=0/0 (no runtime rows) | Keep compile/artifact evidence separate from SM120 exact-device execution. |
 | `NVIDIA SM100` | open | 0 | 82 | 82 | manifest: exact_verified=0, implementation_present=0, reference=0, artifact_or_planned=82, other=0, missing_target_row=450; runtime_paths: executable=0/0 (no runtime rows) | Retain as declared/open until architecture-owned execution evidence exists. |
-| `NVIDIA SM120` | mixed | 74 | 147 | 73 | manifest: exact_verified=74, implementation_present=0, reference=0, artifact_or_planned=73, other=0, missing_target_row=385; runtime_paths: executable=65/65 (nvidia_sm120=65) | Promote artifact rows with SM120 execute-and-compare evidence. |
+| `NVIDIA SM120` | mixed | 74 | 148 | 74 | manifest: exact_verified=74, implementation_present=0, reference=0, artifact_or_planned=74, other=0, missing_target_row=384; runtime_paths: executable=65/65 (nvidia_sm120=65) | Promote artifact rows with SM120 execute-and-compare evidence. |
 
 ## Open Work Summary
 

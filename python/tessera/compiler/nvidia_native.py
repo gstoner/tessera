@@ -198,6 +198,7 @@ SM120_PAGED_KV_F32_ABI = "tessera.nvidia.paged_kv.pages_table_o_dims.f32_i32.v1"
 SM120_PAGED_KV_WRITE_F32_ABI = "tessera.nvidia.paged_kv_write.pages_table_values_position_status_dims.f32_i32.v1"
 # AR-DECODE-PROGRAM-1 S1b: row argmax/argmin, one i32 index per row.
 SM120_ARGREDUCE_F32_ABI = "tessera.nvidia.argreduce.x_indices_rows_cols.f32_i32.v1"
+SM120_EMBEDDING_GATHER_F32_ABI = "tessera.nvidia.embedding_gather.table_tokens_out_status_dims.f32_i32.v1"
 SM120_PAGED_ATTN_F32_ABI = "tessera.nvidia.paged_attention.q_kp_vp_table_indices_o_dims.f32_i32_i64.v1"
 SM120_REPLAY_DECODE_F32_ABI = "tessera.nvidia.replay_ssm.delta_x_b_s0_c_a_y_dims.f32.v1"
 SM120_REPLAY_FLUSH_F32_ABI = "tessera.nvidia.replay_ssm.delta_x_b_s0_a_dims.f32.v1"
@@ -5059,6 +5060,72 @@ def package_argreduce(
         pipeline_name=pipeline_name)
 
 
+def package_scheduled_embedding_gather(artifact: Any, *, pipeline_name: str) -> NVIDIANativePackage:
+    """Package one replayed sm_120 embedding row gather (AR-DECODE-PROGRAM-1 S1c).
+
+    Every launch field comes from the replayed artifact. The kernel checks each
+    token against the vocabulary on the device; a launch-owned status word
+    reports a refusal and the launcher then copies no rows back.
+    """
+    artifact.validate()
+    table_name, tokens_name, out_name = artifact.names
+    entry, tile_ir = artifact.entry, artifact.tile_ir
+    (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = _compile_tile_ir(
+        tile_ir, entry
+    )
+    image = NativeImageArtifact(
+        target="nvidia_sm120", architecture="sm_120a", pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp, toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(),
+        binary_format="ptx", payload=ptx.encode("ascii"),
+        entry_points=(NativeEntryPoint(entry, SM120_EMBEDDING_GATHER_F32_ABI),),
+        compile_state=compile_state, device_libraries=device_libraries,
+        resource_record=ResourceRecord(provenance="ptxas --arch=sm_120a -v", metrics=metrics),
+    )
+    vocab, hidden, batch = artifact.vocab, artifact.hidden, artifact.batch
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=entry, abi_id=SM120_EMBEDDING_GATHER_F32_ABI,
+        buffers=(
+            BufferBinding(0, table_name, "input", "fp32", 2, "row_major", 4),
+            BufferBinding(1, tokens_name, "input", "int32", 1, "row_major", 4),
+            BufferBinding(2, out_name, "output", "fp32", 2, "row_major", 4),
+            BufferBinding(3, "status", "output", "int32", 1, "row_major", 4),
+        ),
+        scalars=(ScalarArgument(4, "V", "int64"), ScalarArgument(5, "H", "int64"),
+                 ScalarArgument(6, "B", "int64")),
+        shape_guards=(
+            ShapeGuard(table_name, 0, "eq", vocab), ShapeGuard(table_name, 1, "eq", hidden),
+            ShapeGuard(tokens_name, 0, "eq", batch),
+            ShapeGuard(out_name, 0, "eq", batch), ShapeGuard(out_name, 1, "eq", hidden),
+            ShapeGuard("status", 0, "eq", 1),
+        ),
+        geometry=LaunchGeometry(policy="sm120_embedding_gather_cta_128_per_token_row"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("completion",)
+        ),
+        provenance={
+            "work_item": "AR-DECODE-PROGRAM-1", "slice": "S1c",
+            "route": "canonical_scheduled_tile_consumer",
+            "vocab": vocab, "hidden": hidden, "batch": batch,
+            "storage": "f32", "index_storage": "i32",
+            "index_bounds": "kernel_checked_status_word", "refusal": "i32_status_word",
+            "schedule": "cta_128_per_token_row",
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
+        },
+    )
+    return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+
+
+def package_embedding_gather(
+    names: tuple[str, str, str], *, vocab: int, hidden: int, batch: int, pipeline_name: str,
+) -> NVIDIANativePackage:
+    from .scheduled_embedding_gather import lower_scheduled_embedding_gather
+    return package_scheduled_embedding_gather(
+        lower_scheduled_embedding_gather(names, vocab=vocab, hidden=hidden, batch=batch),
+        pipeline_name=pipeline_name)
+
+
 def package_paged_attention(
     *, physical_pages: int, logical_pages: int, page_size: int, heads: int,
     query_length: int, tokens: int, dim: int, scale: float,
@@ -5451,6 +5518,8 @@ __all__ = [
     "package_scheduled_paged_kv_write",
     "package_argreduce",
     "package_scheduled_argreduce",
+    "package_embedding_gather",
+    "package_scheduled_embedding_gather",
     "package_paged_attention",
     "package_replay_ssm_kernels",
     "package_moe_kernels",

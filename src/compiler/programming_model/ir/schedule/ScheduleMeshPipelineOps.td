@@ -715,6 +715,13 @@ def Schedule_ArgReduceOp : Op<ScheduleDialect, "argreduce"> {
   let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
 }
 
+def Schedule_EmbeddingGatherOp : Op<ScheduleDialect, "embedding_gather"> {
+  let summary = "Content-addressed sm_120 embedding row gather schedule (AR-DECODE S1c)";
+  let arguments = (ins AnyRankedTensor:$subject, StrAttr:$artifact_hash, DictionaryAttr:$contract);
+  let results = (outs AnyRankedTensor:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+}
+
 def Schedule_MoeDispatchOp : Op<ScheduleDialect, "moe_dispatch"> {
   let summary = "Content-addressed gfx1151 MoE token-gather schedule";
   let arguments = (ins AnyRankedTensor:$subject, StrAttr:$artifact_hash,

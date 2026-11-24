@@ -4643,6 +4643,65 @@ static LogicalResult materializeSm120ReplaySSMFlushKernel(
   builder.setInsertionPointAfter(guarded); op->erase(); return success();
 }
 
+// AR-DECODE-PROGRAM-1 S1c. One 128-thread CTA per token row (row = block x):
+// the token is loaded once per CTA and bounds-checked against [0, V) after
+// sign extension, so a negative token fails the unsigned compare. In range,
+// the threads copy the row with a 128-stride loop and no per-element division;
+// out of range, thread 0 sets status[0] = 1 and the row stays unwritten.
+static LogicalResult materializeSm120EmbeddingGatherKernel(
+    tessera::tile::EmbeddingGatherKernelOp kernel, OpBuilder &builder) {
+  if (failed(kernel.verify())) return failure();
+  Operation *op = kernel.getOperation();
+  ValueRange in = kernel.getInputs();
+  auto schedule = op->getAttrOfType<StringAttr>("schedule");
+  if (in.size() != 7 || !schedule || schedule.getValue() != "cta_128_per_token_row") {
+    op->emitError("sm_120 embedding_gather_kernel requires schedule=cta_128_per_token_row "
+                  "over (table, tokens, out, status, V, H, B)");
+    return failure();
+  }
+  Location loc = op->getLoc();
+  Type i32 = builder.getI32Type(), i64 = builder.getI64Type();
+  Value vocab = in[4], hidden = in[5], batch = in[6];
+  Value row = arith::ExtUIOp::create(builder, loc, i64,
+      NVVM::BlockIdXOp::create(builder, loc, i32));
+  Value thread = arith::ExtUIOp::create(builder, loc, i64,
+      NVVM::ThreadIdXOp::create(builder, loc, i32));
+  Value one32 = arith::ConstantIntOp::create(builder, loc, 1, 32);
+  auto guarded = scf::IfOp::create(builder, loc,
+      arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ult, row, batch), false);
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(guarded.thenBlock());
+    Value token = arith::ExtSIOp::create(builder, loc, i64,
+        sm120LoadI32(builder, loc, in[1], row));
+    Value inRange = arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ult, token, vocab);
+    auto bounded = scf::IfOp::create(builder, loc, inRange, true);
+    {
+      OpBuilder::InsertionGuard inner(builder);
+      builder.setInsertionPointToStart(bounded.thenBlock());
+      Value source = mulI64(builder, loc, token, hidden);
+      Value dest = mulI64(builder, loc, row, hidden);
+      auto loop = scf::ForOp::create(builder, loc, thread, hidden, i64Constant(builder, loc, 128));
+      {
+        OpBuilder::InsertionGuard body(builder);
+        builder.setInsertionPointToStart(loop.getBody());
+        Value h = loop.getInductionVar();
+        sm120StoreF32(builder, loc, in[2], addI64(builder, loc, dest, h),
+            sm120LoadF32(builder, loc, in[0], addI64(builder, loc, source, h)));
+      }
+      builder.setInsertionPointToStart(bounded.elseBlock());
+      auto first = scf::IfOp::create(builder, loc,
+          arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq, thread,
+                                i64Constant(builder, loc, 0)), false);
+      builder.setInsertionPointToStart(first.thenBlock());
+      LLVM::StoreOp::create(builder, loc, one32, in[3], 4);
+    }
+  }
+  builder.setInsertionPointAfter(guarded);
+  op->erase();
+  return success();
+}
+
 static LogicalResult materializeSm120MoEDispatchKernel(
     tessera::tile::MoEDispatchKernelOp kernel, OpBuilder &builder) {
   Operation *op=kernel.getOperation(); ValueRange in=kernel.getInputs(); Location loc=op->getLoc();
@@ -6491,6 +6550,7 @@ struct LowerTileToNVIDIAPass
           name == "tile.paged_kv_read_kernel" ||
           name == "tile.paged_kv_write_kernel" ||
           name == "tile.argreduce_kernel" ||
+          name == "tile.embedding_gather_kernel" ||
           name == "tile.nvfp4_expand_kernel" ||
           name == "tile.paged_attention_kernel" ||
           name == "tile.replay_ssm_decode_kernel" ||
@@ -6777,6 +6837,17 @@ struct LowerTileToNVIDIAPass
                 cast<tessera::tile::ArgReduceKernelOp>(op), builder))) {
           if (smVersion < kConsumerBlackwellSM)
             op->emitError("tile.argreduce_kernel currently requires sm_120");
+          signalPassFailure();
+          return;
+        }
+        continue;
+      }
+      if (isTileOp(op, "tile.embedding_gather_kernel")) {
+        if (smVersion < kConsumerBlackwellSM ||
+            failed(materializeSm120EmbeddingGatherKernel(
+                cast<tessera::tile::EmbeddingGatherKernelOp>(op), builder))) {
+          if (smVersion < kConsumerBlackwellSM)
+            op->emitError("tile.embedding_gather_kernel currently requires sm_120");
           signalPassFailure();
           return;
         }

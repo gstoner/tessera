@@ -51,7 +51,7 @@ targets.
 | Paged KV **read** | `nvidia_kv_cache_compiled`; `paged_kv` family `release_ready` | gfx1151 `release_ready` | i32 logical page table, `[start,end)` rows. |
 | KV **append** | none | composed from scatter/gather with host glue | `kv_cache_append`: Tile/Target `not_applicable` (`e2e_op_coverage.md:401`). **Gap.** |
 | Attention / MLA decode | `nvidia_flash_attn_compiled`, `nvidia_mla_decode_fused_compiled` | composed; gfx1201 attention scheduled packages | Single-query decode shape must be admitted inside the layer program. |
-| Embedding gather | none named | none named | `tessera.gather` is cataloged (`op_catalog.py:124`). **Gap.** |
+| Embedding gather | none named (per-op native lane since S1c, §4d) | none named | `tessera.gather` is cataloged (`op_catalog.py:124`). **Gap.** |
 | argmax / top-k | **none** (argmax/argmin: per-op native lane since S1b, §4c) | `rocm_argreduce_compiled`, `rocm_sort_compiled` | x86 has both. **Gap on sm_120.** |
 | Bounded loop with device-resident state | `nvidia_control_flow_compiled` — static rank-1 f32 state only | gfx1151/gfx1201 control flow; EBM Langevin row program | State must widen from one f32 vector to a program state (token, position, cache view). |
 | Prefill→decode handoff | `CacheHandoff` / `verify_phase_split` exist as Python types and oracle | same | Must become a typed IR boundary. |
@@ -160,7 +160,7 @@ every other target needs its own proof.
 | Slice | Deliverable | Start | Acceptance (all fail closed outside the envelope) |
 |---|---|---|---|
 | **S0** (landed, §4a) | Oracle and fixture. Freeze a tiny dense config (2 layers, d=64, GQA 4/2 heads, vocab 256, page 16) and a seeded weight set; declare `moe_transformer_runtime` greedy decode the #31(a) oracle; write the Graph-level `decode_step` contract and envelope. | host-free | Oracle reproduces cached ≡ recompute on the fixture; contract doc names every semantic attribute; negative fixtures for missing dtype/policy/EOS. |
-| **S1** (S1a §4b, S1b §4c landed) | Three missing ops on sm_120 through Graph→Schedule→Tile→Target: row **argmax** (first-occurrence tie-break, i32 index), **embedding gather**, **kv_cache.append** into paged storage (in-place, DPS). | device (sm_120) | Bitwise equality with the oracle per op; append+read round-trip across a page boundary; lit fixtures for each lowering; execution-matrix rows. |
+| **S1** (S1a §4b, S1b §4c, S1c §4d landed) | Three missing ops on sm_120 through Graph→Schedule→Tile→Target: row **argmax** (first-occurrence tie-break, i32 index), **embedding gather**, **kv_cache.append** into paged storage (in-place, DPS). | device (sm_120) | Bitwise equality with the oracle per op; append+read round-trip across a page boundary; lit fixtures for each lowering; execution-matrix rows. |
 | **S2** | **One decoder layer** at M=1 as a native tensor program: RMSNorm, QKV matmul, RoPE, append, paged attention read, O-proj, residual, MLP — one Graph function, one retained frame. | device (sm_120) | Per-layer output and updated KV pages match the oracle (f32 bitwise or declared f16/bf16 tolerance with fp32 accumulation); zero host contact inside the layer; replay byte-identity of the package. |
 | **S3** | **Whole decode step**: L layers + final norm + LM head + argmax; `DecodeState` resident across calls; host loop calls the step program. | device (sm_120) | Token sequence identical to the oracle for 64 steps; per-step logits parity (not only argmax, so ties cannot hide errors); host contact per step = one submit + completion (+ optional token readback), counted by the frame. |
 | **S4** | **Device-resident loop**: `generate` as a compiled bounded `while` over `decode_step` with EOS early exit. Widen the control-flow lane from rank-1 f32 state to structured state; an explicit, IR-visible graph-capture ABI is an acceptable physical route if it is declared, not hidden. | device (sm_120) | One program invocation produces N tokens identical to S3; no host round-trip between steps; EOS stops the loop on device. |
@@ -292,6 +292,52 @@ follow.
   argmax/argmin are `planned` and name the device test instead of claiming it.
 - **Host-copy ABI, like S1a.** The logits are copied to the device per call.
   Composing argmax with the LM head inside one program is S3.
+
+### 4d. S1c — embedding row gather on sm_120 (2026-11-23)
+
+- **Op design.** No new Graph op. The existing `tessera.gather %table, %tokens
+  {axis = 0}` over an f32[V, H] table and i32[B] tokens gets an sm_120
+  producer, `schedule.embedding_gather` (`NativeEmbeddingGather.h`), and a new
+  Tile op, `tile.embedding_gather_kernel` (table, tokens, out, status, V, H, B).
+- **Why not reuse the MoE dispatch kernel.** sm_120's `tile.moe_dispatch_kernel`
+  already gathers rows by i32 index, but it trusts its indices: the runtime
+  checks them on the host before the launch. A resident decode program (S3)
+  has no host step between argmax and the next gather, so the bounds check has
+  to be in the kernel.
+- **Out-of-range tokens are a contract field** (Decision #21a):
+  `index_bounds = "kernel_checked_status_word"`. Each CTA loads its token once,
+  sign-extends it and compares it unsigned against V, so a negative token
+  fails too. An out-of-range row is not written, thread 0 sets `status[0] = 1`,
+  and the launcher refuses the call and copies no rows back. NumPy's `take`
+  raises for the same input; a negative token is never wrapped.
+- **Ownership is by target**, as in S1b: only `nvidia_sm120` modules are
+  claimed, and inside one any other gather fails closed at Schedule (lit
+  `embedding_gather_invalid.mlir`, nine refusals). The envelope is a rank-2 f32
+  table, rank-1 i32 tokens, axis 0, and V, B < 2^31.
+- **Kernel.** One 128-thread CTA per token row (`schedule =
+  "cta_128_per_token_row"`), copying the row with a CTA-width stride. There is
+  no per-element division.
+- **Python** (`scheduled_embedding_gather.py`,
+  `nvidia_native.package_embedding_gather`) only builds the Graph text, replays
+  both passes and re-reads every launch field from the replayed contract.
+- **Evidence:**
+  - Mac (NDEBUG LLVM 23.1.1): lit `embedding_gather_schedule_tile.mlir` and
+    `embedding_gather_invalid.mlir`; `tests/unit/test_embedding_gather_contract.py`.
+  - Tajasarus (assertions-ON LLVM 23.1.1): both Graph fixtures and the NVIDIA
+    kernel fixture `sm120_embedding_gather_kernel.mlir`.
+  - The-Super-Bear (RTX 5070): `tests/device/nvidia/test_embedding_gather.py`,
+    14 passed. Every comparison is on the uint32 bit pattern, so NaN payloads
+    and −0.0 are checked too. The tests cover the S0 oracle's prompt plus its
+    32 greedy tokens against its own table, seven shapes up to V = 32000 and
+    H = 4096, and repeated tokens. They also check that tokens −1, V, 2^31−1
+    and −2^31 are refused with the output left untouched. The S1a write and S1b
+    argmax suites still pass on the same build (55 passed together).
+  - Device A/B: Device A/B: full `tests/device/nvidia` on The-Super-Bear RTX 5070, head `aa0cffc01` against main `29a6614b0`: head 303 failed / 6223 passed / 22 errors, main 302 failed / 6168 passed / 64 errors. Every error is a host `nvidia-smi` probe timing out (5 s), and these errors land on different tests in each run. Of the 26 IDs failing only on head, 19 are those setup errors. The other 7 errored at setup on main, so the full run has no main result for them; rerun on their own, `test_launch_nvidia_mma_matmul_f16_matches_numpy[shape0]` and `test_the_declared_budget_holds_across_K[1024-float16]` pass on both, and the five `test_single_sided_public_resident_chain_and_raw_rhs` cases fail on both with the same pre-existing `'NoneType' object has no attribute 'rhs_chain'`. No new failure is attributable to S1c. Mac `tests/unit` (Apple dylib rebuilt): 33120 passed, 8099 skipped, 0 failed.
+- **Public routing is not in this slice.** `tessera.ops.gather` under `@jit`
+  does not reach this lane, so the `nvidia_sm120` gather manifest row is
+  `planned` and names the device test.
+- **Host-copy ABI, like S1a/S1b.** The table is copied to the device per call;
+  a resident table is S3 work.
 
 Performance is out of scope until S4 passes. Timing rows follow the
 device-clock admission rules and must carry their route (Decision #12); no

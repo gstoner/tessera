@@ -3213,6 +3213,7 @@ def _submit_nvidia_sm120_native(
         SM120_PAGED_KV_F32_ABI,
         SM120_PAGED_KV_WRITE_F32_ABI,
         SM120_ARGREDUCE_F32_ABI,
+        SM120_EMBEDDING_GATHER_F32_ABI,
         SM120_NVFP4_ABI,
         SM120_NVFP4_BATCH_ABI,
         SM120_REDUCE_F16_ABI,
@@ -3307,6 +3308,7 @@ def _submit_nvidia_sm120_native(
         SM120_PAGED_KV_F32_ABI,
         SM120_PAGED_KV_WRITE_F32_ABI,
         SM120_ARGREDUCE_F32_ABI,
+        SM120_EMBEDDING_GATHER_F32_ABI,
         SM120_PAGED_ATTN_F32_ABI,
         SM120_REDUCE_F16_ABI,
         SM120_REDUCE_BF16_ABI,
@@ -3854,6 +3856,24 @@ def _submit_nvidia_sm120_native(
                 or not indices.flags.writeable):
             raise RuntimeError("SM120 argreduce buffers disagree with descriptor scalars")
         output = indices
+    elif descriptor.abi_id == SM120_EMBEDDING_GATHER_F32_ABI:
+        # AR-DECODE-PROGRAM-1 S1c: table [V, H], tokens [B], out [B, H] and the
+        # launch-owned status word. Token bounds are data-dependent: the kernel
+        # checks them on the device and refuses through ``status``.
+        dimensions = tuple(int(cast(int, scalars[name])) for name in ("V", "H", "B"))
+        vocab, hidden, batch = dimensions
+        table, tokens, rows, status = raw
+        if (min(dimensions) <= 0 or vocab > 2**31 - 1 or batch > 2**31 - 1
+                or tuple(table.shape) != (vocab, hidden) or tuple(tokens.shape) != (batch,)
+                or tuple(rows.shape) != (batch, hidden) or tuple(status.shape) != (1,)
+                or str(table.dtype) != "float32" or str(tokens.dtype) != "int32"
+                or str(rows.dtype) != "float32" or str(status.dtype) != "int32"
+                or not table.flags.c_contiguous or not tokens.flags.c_contiguous
+                or not rows.flags.c_contiguous or not rows.flags.writeable
+                # The launcher writes the refusal word through a raw pointer.
+                or not status.flags.c_contiguous or not status.flags.writeable):
+            raise RuntimeError("SM120 embedding gather buffers disagree with descriptor scalars")
+        output = rows
     elif descriptor.abi_id in SM120_ATTN_LSE_SCALED_KV_ABIS:
         # SM120-SAVED-LSE-SCALED-FP8-KV-20261025: Q, K/V codes, [bias], K/V
         # scales, O, LSE; scalars B..Dv, [bias extents], eight scale extents.
@@ -4219,6 +4239,7 @@ def _submit_nvidia_sm120_native(
             SM120_PAGED_KV_F32_ABI,
             SM120_PAGED_KV_WRITE_F32_ABI,
             SM120_ARGREDUCE_F32_ABI,
+            SM120_EMBEDDING_GATHER_F32_ABI,
             SM120_PAGED_ATTN_F32_ABI,
             SM120_DYNAMIC_SMEM_ABI,
             SM120_DYNAMIC_EXPR_SMEM_ABI,
@@ -7021,6 +7042,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_PAGED_KV_F32_ABI,
         SM120_PAGED_KV_WRITE_F32_ABI,
         SM120_ARGREDUCE_F32_ABI,
+        SM120_EMBEDDING_GATHER_F32_ABI,
         SM120_NVFP4_ABI,
         SM120_NVFP4_BATCH_ABI,
         SM120_REDUCE_F16_ABI,
@@ -7104,6 +7126,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 SM120_PAGED_KV_F32_ABI,
                 SM120_PAGED_KV_WRITE_F32_ABI,
                 SM120_ARGREDUCE_F32_ABI,
+                SM120_EMBEDDING_GATHER_F32_ABI,
                 SM120_PAGED_ATTN_F32_ABI,
                 SM120_REDUCE_F16_ABI,
                 SM120_REDUCE_BF16_ABI,

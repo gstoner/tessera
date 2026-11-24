@@ -16618,3 +16618,5 @@ Measured on the Mac (M1 Max, macOS 27.2, unsandboxed, a fresh `TesseraAppleRunti
 Steps 2 and 3 of APPLE-NTBI-1 stay open (above).
 
 ## `AR-DECODE-PROGRAM-1-S1b-2026-11-22`: sibling outcome — not applicable — no Apple lowering changed; `schedule.argreduce` claims only `nvidia_sm120` modules. Apple belongs to slice S7. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4c-s1b--row-argmaxargmin-on-sm_120-2026-11-22))
+
+## `AR-DECODE-PROGRAM-1-S1c-2026-11-23`: sibling outcome — not applicable — no Apple lowering changed; Apple GPU keeps its own fused `tessera.gather` lane, and `schedule.embedding_gather` claims only `nvidia_sm120` modules. Apple belongs to slice S7. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4d-s1c--embedding-row-gather-on-sm_120-2026-11-23))

@@ -38,6 +38,16 @@ APPLE_SIMDGROUP_GEMM_F16_SYMBOL = "tessera_apple_gpu_tile_simdgroup_gemm_f16"
 #: The accumulator this ABI fixes (the `f16_f32` in its id): the packager emits it
 #: only for a scheduled matmul whose numeric policy is storage f16 / accum f32.
 APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR = "fp32"
+# APPLE-NTBI-2 slice 8: the same compiler-emitted simdgroup GEMM with bfloat
+# fragments (bf16 storage, f32 accumulation).
+APPLE_SIMDGROUP_GEMM_BF16_ABI = "tessera.apple.tile.simdgroup_gemm.a_b_o_m_n_k.bf16_f32.v1"
+APPLE_SIMDGROUP_GEMM_BF16_SYMBOL = "tessera_apple_gpu_tile_simdgroup_gemm_bf16"
+#: storage -> (symbol, ABI, materializer dtype, package dtype name)
+APPLE_SIMDGROUP_GEMM_VARIANTS = {
+    "f16": ("tessera_apple_gpu_tile_simdgroup_gemm_f16",
+            "tessera.apple.tile.simdgroup_gemm.a_b_o_m_n_k.f16_f32.v1", "fp16", "fp16"),
+    "bf16": (APPLE_SIMDGROUP_GEMM_BF16_SYMBOL, APPLE_SIMDGROUP_GEMM_BF16_ABI, "bf16", "bf16"),
+}
 APPLE_FLASH_ATTN_VARIANT_F32_ABI = (
     "tessera.apple.flash_attn.q_k_v_bias_o_b_hq_hkv_sq_sk_d.f32.v1"
 )
@@ -774,8 +784,9 @@ def package_scheduled_matmul(
     _verify_matmul_schedule_ancestry(artifact)
     if (
         (artifact.a_dtype, artifact.b_dtype, artifact.output_dtype)
-        == ("fp16", "fp16", "fp32")
-        and (artifact.storage, artifact.accum) == ("f16", "f32")
+        in (("fp16", "fp16", "fp32"), ("bf16", "bf16", "fp32"))
+        and artifact.a_dtype == {"f16": "fp16", "bf16": "bf16"}.get(artifact.storage)
+        and artifact.accum == "f32"
     ):
         return _package_scheduled_simdgroup_f16(artifact, pipeline_name=pipeline_name)
     if (
@@ -964,13 +975,16 @@ def _package_scheduled_simdgroup_f16(
             "E2E-REAL-3 Apple GPU scheduled simdgroup matmul requires a fresh "
             "Tessera Apple GPU runtime dylib"
         )
-    symbol, abi = APPLE_SIMDGROUP_GEMM_F16_SYMBOL, APPLE_SIMDGROUP_GEMM_F16_ABI
+    # f16 or bf16 storage (APPLE-NTBI-2 slice 8): one materializer, one ABI
+    # per storage, f32 accumulation for both.
+    storage = artifact.storage
+    symbol, abi, _, dtype = APPLE_SIMDGROUP_GEMM_VARIANTS[storage]
     # Block sizes: the macro tile is the simdgroup block (a multiple of the
     # 8x8x8 fragment); 16 is the K step.  The MSL materializer owns byte layout.
     bm, bn, bk = artifact.macro_tile_m, artifact.macro_tile_n, 16
     target_ir = (
         f'tessera_apple.gpu.kernel_call @{symbol} '
-        f'{{abi = "{abi}", storage = "f16", accumulation = "f32", '
+        f'{{abi = "{abi}", storage = "{storage}", accumulation = "f32", '
         f'block = "{bm}x{bn}x{bk}", status = "executable"}}'
     )
     payload = library.read_bytes()
@@ -986,8 +1000,8 @@ def _package_scheduled_simdgroup_f16(
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
         buffers=(
-            BufferBinding(0, artifact.a_name, "input", "fp16", 2, "row_major", 2),
-            BufferBinding(1, artifact.b_name, "input", "fp16", 2, "row_major", 2),
+            BufferBinding(0, artifact.a_name, "input", dtype, 2, "row_major", 2),
+            BufferBinding(1, artifact.b_name, "input", dtype, 2, "row_major", 2),
             BufferBinding(2, artifact.output_name, "output", "fp32", 2, "row_major", 4),
         ),
         # No scalar args: the simdgroup dispatch infers M/N/K from the buffer
@@ -1006,10 +1020,10 @@ def _package_scheduled_simdgroup_f16(
         ),
         provenance={
             "work_item": "E2E-REAL-3",
-            "route": "apple_gpu_simdgroup_gemm_f16",
+            "route": f"apple_gpu_simdgroup_gemm_{storage}",
             "op_kind": "matmul",
             "shape": [artifact.m, artifact.n, artifact.k],
-            "storage": "f16",
+            "storage": storage,
             "accum": "f32",
             "block": [bm, bn, bk],
             "staging_layout_owner": "canonical_tile_ir",
@@ -1167,7 +1181,7 @@ def _verify_attention_schedule_ancestry(artifact) -> None:
 def _verify_matmul_schedule_ancestry(artifact: ScheduledMatmulArtifact) -> None:
     import re
     parent = _verify_schedule_ancestry(artifact)
-    tensor = r'tensor<([1-9][0-9]*)x([1-9][0-9]*)x(f16|f32)>'
+    tensor = r'tensor<([1-9][0-9]*)x([1-9][0-9]*)x(f16|bf16|f32)>'
     functions = re.findall(r'func.func @(\w+)\(%\w+: ' + tensor
                            + r', %\w+: ' + tensor + r'\) -> ' + tensor + r' \{', parent)
     ops = re.findall(r' = schedule.matmul %\w+ \{([^{}]*)\}', parent)
@@ -1183,8 +1197,8 @@ def _verify_matmul_schedule_ancestry(artifact: ScheduledMatmulArtifact) -> None:
         if re.search(r'(?:^|, )' + re.escape(value) + r'(?:,|$)', attrs) is None:
             raise ValueError('Apple native matmul layout/arithmetic policy is unsupported')
     expected = dict(function_name=name, m=int(m), n=int(n), k=int(k),
-                    a_dtype={'f16':'fp16', 'f32':'fp32'}[a],
-                    b_dtype={'f16':'fp16', 'f32':'fp32'}[b], output_dtype='fp32',
+                    a_dtype={'f16':'fp16', 'bf16':'bf16', 'f32':'fp32'}[a],
+                    b_dtype={'f16':'fp16', 'bf16':'bf16', 'f32':'fp32'}[b], output_dtype='fp32',
                     storage=a, accum='f32', activation='none', bias_name=None,
                     residual_name=None, dynamic_m=False, dynamic_n=False, dynamic_k=False)
     for key in ('macro_tile_m', 'macro_tile_n'):
@@ -1312,6 +1326,9 @@ def package_scheduled_kernel(
 
 
 APPLE_SYNTH_ACTIVATION_F16_ABI = "tessera.apple.synth.activation.x_o_elements.f16.v1"
+APPLE_SYNTH_ACTIVATION_BF16_ABI = "tessera.apple.synth.activation.x_o_elements.bf16.v1"
+APPLE_SYNTH_ACTIVATION_ABIS = {"f16": APPLE_SYNTH_ACTIVATION_F16_ABI,
+                               "bf16": APPLE_SYNTH_ACTIVATION_BF16_ABI}
 #: The source-carrying pointwise ABI; one input, so buffers are (in0, O, N).
 APPLE_SYNTH_ACTIVATION_F16_SYMBOL = "tessera_apple_gpu_synth_pointwise_f16"
 
@@ -1339,6 +1356,13 @@ def synthesized_activation_source(kind: str, storage: str, nan_mode: str,
 
 
 APPLE_SYNTH_BINARY_F16_ABI = "tessera.apple.synth.binary.a_b_o_elements.f16.v1"
+APPLE_SYNTH_BINARY_BF16_ABI = "tessera.apple.synth.binary.a_b_o_elements.bf16.v1"
+#: storage -> synthesized binary ABI. Both run through the 16-bit
+#: source-carrying pointwise symbol: it moves element bytes and the source
+#: names the element type (APPLE-NTBI-2 slice 8).
+APPLE_SYNTH_BINARY_ABIS = {"f16": APPLE_SYNTH_BINARY_F16_ABI, "bf16": APPLE_SYNTH_BINARY_BF16_ABI}
+#: storage -> the package/descriptor dtype name.
+_SYNTH_DTYPES = {"f16": "fp16", "bf16": "bf16"}
 
 
 def synthesized_binary_source(kind: str, storage: str, nan_mode: str) -> tuple[str, str]:
@@ -1359,25 +1383,26 @@ def _verify_apple_binary_projection(artifact: ScheduledKernelArtifact) -> dict:
     import re
 
     parent = _verify_schedule_ancestry(artifact)
-    tensor = r"tensor<(\d+)x(\d+)xf16>"
+    tensor = r"tensor<(\d+)x(\d+)x(f16|bf16)>"
     signature = re.findall(
         rf"func\.func @([\w]+)\(%[\w]+: {tensor}, %[\w]+: {tensor}\) -> {tensor}", parent)
     if len(signature) != 1 or parent.count("func.func ") != 1:
-        raise ValueError("Apple binary package requires one static (a, b) -> o f16 function")
+        raise ValueError("Apple binary package requires one static (a, b) -> o f16/bf16 function")
     name, *dims = signature[0]
     shape = (int(dims[0]), int(dims[1]))
-    if (dims[2:4] != dims[0:2] or dims[4:6] != dims[0:2] or name != artifact.function_name
+    storage = dims[2]
+    if (dims[3:6] != dims[0:3] or dims[6:9] != dims[0:3] or name != artifact.function_name
             or shape != artifact.input_shape or shape != artifact.output_shape):
         raise ValueError("Apple binary package shape or name disagrees with native IR")
     rows = re.findall(r" = schedule\.binary_kernel %\w+ \{([^{}]*)\}", parent)
     if len(rows) != 1:
         raise ValueError("Apple binary package requires one native binary schedule")
     attrs = dict(re.findall(r'\b(\w+) = "([^"]+)"', rows[0]))
-    expected = {"arch": "apple7", "kind": "add", "storage": "f16", "output_storage": "f16",
+    expected = {"arch": "apple7", "kind": "add", "storage": storage, "output_storage": storage,
                 "accum": "f32", "schedule": "serial", "nan_mode": "propagate"}
     if (any(attrs.get(key) != value for key, value in expected.items())
             or "workgroup_size = 1 : i64" not in rows[0]
-            or (artifact.kind, artifact.storage, artifact.dtype) != ("add", "f16", "fp16")
+            or (artifact.kind, artifact.storage, artifact.dtype) != ("add", storage, _SYNTH_DTYPES[storage])
             or len(artifact.input_names) != 2 or artifact.input_names[0] != artifact.input_name
             or len({*artifact.input_names, artifact.output_name}) != 3
             or not all(n.isidentifier() for n in (*artifact.input_names, artifact.output_name))):
@@ -1399,7 +1424,9 @@ def _package_scheduled_add(
     inputs. A failed dispatch raises; there is no reference path.
     """
     contract = _verify_apple_binary_projection(artifact)
-    source, entry = synthesized_binary_source("add", "f16", contract["nan_mode"])
+    storage = contract["storage"]
+    dtype = _SYNTH_DTYPES[storage]
+    source, entry = synthesized_binary_source("add", storage, contract["nan_mode"])
     source_digest = hashlib.sha256(source.encode()).hexdigest()
     library = _runtime_library_path()
     if library is None:
@@ -1407,10 +1434,10 @@ def _package_scheduled_add(
             "APPLE-NTBI-2 Apple GPU scheduled add requires a fresh Tessera "
             "Apple GPU runtime dylib"
         )
-    symbol, abi = APPLE_SYNTH_ACTIVATION_F16_SYMBOL, APPLE_SYNTH_BINARY_F16_ABI
+    symbol, abi = APPLE_SYNTH_ACTIVATION_F16_SYMBOL, APPLE_SYNTH_BINARY_ABIS[storage]
     target_ir = (
         f'tessera_apple.gpu.msl_kernel @{symbol} '
-        f'{{abi = "{abi}", kind = "add", storage = "f16", accumulation = "f32", '
+        f'{{abi = "{abi}", kind = "add", storage = "{storage}", accumulation = "f32", '
         f'nan_mode = "{contract["nan_mode"]}", entry = "{entry}", '
         f'source_sha256 = "{source_digest}", schedule_hash = "{artifact.schedule_digest}", '
         f'status = "executable"}}\n// ---- synthesized MSL ----\n{source}'
@@ -1430,9 +1457,9 @@ def _package_scheduled_add(
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
         buffers=(
-            BufferBinding(0, a, "input", "fp16", 2, "row_major", 2),
-            BufferBinding(1, b, "input", "fp16", 2, "row_major", 2),
-            BufferBinding(2, out, "output", "fp16", 2, "row_major", 2),
+            BufferBinding(0, a, "input", dtype, 2, "row_major", 2),
+            BufferBinding(1, b, "input", dtype, 2, "row_major", 2),
+            BufferBinding(2, out, "output", dtype, 2, "row_major", 2),
         ),
         shape_guards=tuple(
             ShapeGuard(name, axis, "eq", extent)
@@ -1445,7 +1472,7 @@ def _package_scheduled_add(
         ),
         provenance={
             "work_item": "APPLE-NTBI-2",
-            "route": "apple_gpu_synth_binary_f16",
+            "route": f"apple_gpu_synth_binary_{storage}",
             "op_kind": "add",
             "family": "binary",
             "kind": "add",
@@ -1455,7 +1482,7 @@ def _package_scheduled_add(
             "nan_mode": contract["nan_mode"],
             "accumulation": "f32",
             "shape": list(artifact.input_shape),
-            "storage": "fp16",
+            "storage": dtype,
             "dynamic_shape": False,
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
@@ -1478,16 +1505,18 @@ def _package_scheduled_relu(
     synthesized source, as the synthesized reduction does.
     """
     contract = _tile_activation_contract(artifact.tile_ir)
-    if (artifact.kind != "relu" or artifact.dtype != "fp16" or len(artifact.input_shape) != 2
+    storage = contract["storage"]
+    if (artifact.kind != "relu" or storage not in APPLE_SYNTH_ACTIVATION_ABIS
+            or artifact.dtype != _SYNTH_DTYPES[storage] or len(artifact.input_shape) != 2
             or artifact.input_shape != artifact.output_shape
-            or contract["kind"] != "relu" or contract["storage"] != "f16"
-            or contract["schedule"] != "serial"):
-        raise ValueError("Apple GPU scheduled ReLU supports only the rank-two f16 contract")
+            or contract["kind"] != "relu" or contract["schedule"] != "serial"):
+        raise ValueError("Apple GPU scheduled ReLU supports only the rank-two f16/bf16 contract")
+    dtype = _SYNTH_DTYPES[storage]
     rows, columns = artifact.input_shape
     if rows * columns > 2**31 - 1:
         raise ValueError("Apple GPU scheduled ReLU takes an int32 element count")
     source, entry = synthesized_activation_source(
-        "relu", "f16", contract["nan_mode"], contract["zero_mode"])
+        "relu", storage, contract["nan_mode"], contract["zero_mode"])
     source_digest = hashlib.sha256(source.encode()).hexdigest()
     library = _runtime_library_path()
     if library is None:
@@ -1495,10 +1524,10 @@ def _package_scheduled_relu(
             "APPLE-NTBI-2 Apple GPU scheduled ReLU requires a fresh Tessera "
             "Apple GPU runtime dylib"
         )
-    symbol, abi = APPLE_SYNTH_ACTIVATION_F16_SYMBOL, APPLE_SYNTH_ACTIVATION_F16_ABI
+    symbol, abi = APPLE_SYNTH_ACTIVATION_F16_SYMBOL, APPLE_SYNTH_ACTIVATION_ABIS[storage]
     target_ir = (
         f'tessera_apple.gpu.msl_kernel @{symbol} '
-        f'{{abi = "{abi}", kind = "relu", storage = "f16", '
+        f'{{abi = "{abi}", kind = "relu", storage = "{storage}", '
         f'nan_mode = "{contract["nan_mode"]}", zero_mode = "{contract["zero_mode"]}", '
         f'entry = "{entry}", source_sha256 = "{source_digest}", '
         f'schedule_hash = "{artifact.schedule_digest}", status = "executable"}}'
@@ -1518,8 +1547,8 @@ def _package_scheduled_relu(
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
         buffers=(
-            BufferBinding(0, x, "input", "fp16", 2, "row_major", 2),
-            BufferBinding(1, out, "output", "fp16", 2, "row_major", 2),
+            BufferBinding(0, x, "input", dtype, 2, "row_major", 2),
+            BufferBinding(1, out, "output", dtype, 2, "row_major", 2),
         ),
         shape_guards=tuple(
             ShapeGuard(name, axis, "eq", extent)
@@ -1532,7 +1561,7 @@ def _package_scheduled_relu(
         ),
         provenance={
             "work_item": "APPLE-NTBI-2",
-            "route": "apple_gpu_synth_activation_f16",
+            "route": f"apple_gpu_synth_activation_{storage}",
             "op_kind": "relu",
             "family": "activation",
             "kind": "relu",
@@ -1542,7 +1571,7 @@ def _package_scheduled_relu(
             "nan_mode": contract["nan_mode"],
             "zero_mode": contract["zero_mode"],
             "shape": list(artifact.input_shape),
-            "storage": "fp16",
+            "storage": dtype,
             "dynamic_shape": False,
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,

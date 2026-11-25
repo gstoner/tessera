@@ -42,8 +42,19 @@ _SOURCE = r'tessera.native.tensor_program_source_sha256 = "([0-9a-f]{64})"'
 _CARRIERS = {"tessera.matmul": "tile.matmul_kernel", "tessera.softmax": "tile.softmax_kernel",
              "tessera.gelu": "tile.activation_kernel", "tessera.relu": "tile.activation_kernel",
              "tessera.add": "tile.elementwise_kernel"}
-_STORAGE = {"fp16": "f16", "fp32": "f32"}
-_NUMPY = {"f16": "float16", "f32": "float32"}
+_STORAGE = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}
+_NUMPY = {"f16": "float16", "bf16": "bfloat16", "f32": "float32"}
+
+
+def _np_dtype(storage: str):
+    """The numpy dtype of a frame buffer; bf16 is ml_dtypes' bfloat16."""
+    import numpy as np
+
+    if storage == "bf16":
+        import ml_dtypes
+
+        return np.dtype(ml_dtypes.bfloat16)
+    return np.dtype(_NUMPY[storage])
 
 
 class AppleTensorProgramError(ValueError):
@@ -65,7 +76,7 @@ def _frame(tile_ir: str) -> dict:
                 or spec["id"] != index or spec["role"] not in {"input", "private", "output"}
                 or spec["storage"] not in _NUMPY):
             raise AppleTensorProgramError("Apple tensor frame buffer identity/role differs")
-        itemsize = 2 if spec["storage"] == "f16" else 4
+        itemsize = 4 if spec["storage"] == "f32" else 2
         elements = 1
         for extent in spec["shape"]:
             if type(extent) is not int or extent <= 0:
@@ -304,7 +315,7 @@ def run_members_sequentially(program: AppleTensorProgram, inputs: Mapping[str, A
     for index, name in zip(frame["roots"], roots, strict=True):
         spec = frame["buffers"][index]
         array = np.asarray(inputs[name])
-        if array.dtype != np.dtype(_NUMPY[spec["storage"]]) or array.shape != tuple(spec["shape"]):
+        if array.dtype != _np_dtype(spec["storage"]) or array.shape != tuple(spec["shape"]):
             raise ValueError(f"Apple tensor input {name} differs from its frame buffer")
         values[name] = np.ascontiguousarray(array)
     launches = []
@@ -312,7 +323,7 @@ def run_members_sequentially(program: AppleTensorProgram, inputs: Mapping[str, A
         package = stage.package
         spec = frame["buffers"][record["output"]]
         buffers = {binding: values[name] for binding, name in zip(stage.bindings, stage.inputs)}
-        buffers[stage.output] = np.full(tuple(spec["shape"]), np.nan, _NUMPY[spec["storage"]])
+        buffers[stage.output] = np.full(tuple(spec["shape"]), np.nan, _np_dtype(spec["storage"]))
         artifact = RuntimeArtifact(
             metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
             target_ir=package.target_ir, native_image=package.image,
@@ -343,9 +354,9 @@ _FRAME_ERRORS = {
 def _frame_stage(stage: AppleTensorStage, record: dict, frame: dict):
     """One stage as the owner's flat record, re-checked against its package."""
     from .apple_native import (
-        APPLE_GELU_F16_ABI, APPLE_SIMDGROUP_GEMM_F16_ABI,
+        APPLE_GELU_F16_ABI, APPLE_SIMDGROUP_GEMM_VARIANTS,
         APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR, APPLE_SOFTMAX_F16_ABI,
-        APPLE_SYNTH_ACTIVATION_F16_ABI, APPLE_SYNTH_BINARY_F16_ABI,
+        APPLE_SYNTH_ACTIVATION_ABIS, APPLE_SYNTH_BINARY_ABIS,
         synthesized_activation_source, synthesized_binary_source)
 
     descriptor = stage.package.descriptor
@@ -360,10 +371,12 @@ def _frame_stage(stage: AppleTensorStage, record: dict, frame: dict):
         # The compiler-synthesized add (APPLE-NTBI-2 slice 7): two inputs,
         # the source re-derived from the package's contract and digest-checked.
         provenance = descriptor.provenance
-        if descriptor.abi_id != APPLE_SYNTH_BINARY_F16_ABI:
+        storages = {abi: storage for storage, abi in APPLE_SYNTH_BINARY_ABIS.items()}
+        if descriptor.abi_id not in storages:
             raise AppleTensorProgramError(
                 f"Apple member {stage.index} has no frame encoder for {descriptor.abi_id}")
-        source, entry = synthesized_binary_source(provenance["kind"], "f16", provenance["nan_mode"])
+        source, entry = synthesized_binary_source(
+            provenance["kind"], storages[descriptor.abi_id], provenance["nan_mode"])
         if (hashlib.sha256(source.encode()).hexdigest() != provenance["source_sha256"]
                 or entry != provenance["entry"]):
             raise AppleTensorProgramError(
@@ -371,13 +384,15 @@ def _frame_stage(stage: AppleTensorStage, record: dict, frame: dict):
         a, b = record["inputs"]
         rows, columns = buffers[a]["shape"]
         return [4, a, b, record["output"], rows, 1, columns, 0, 0, 0], source, entry
-    if stage.carrier == "tile.activation_kernel" and descriptor.abi_id == APPLE_SYNTH_ACTIVATION_F16_ABI:
+    activation_storages = {abi: storage for storage, abi in APPLE_SYNTH_ACTIVATION_ABIS.items()}
+    if stage.carrier == "tile.activation_kernel" and descriptor.abi_id in activation_storages:
         # The compiler-synthesized activation (APPLE-NTBI-2 slice 6): the frame
         # carries the same source the standalone package recorded, re-derived
         # from its contract and checked against the package's digest.
         provenance = descriptor.provenance
         source, entry = synthesized_activation_source(
-            provenance["kind"], "f16", provenance["nan_mode"], provenance["zero_mode"])
+            provenance["kind"], activation_storages[descriptor.abi_id], provenance["nan_mode"],
+            provenance["zero_mode"])
         if (hashlib.sha256(source.encode()).hexdigest() != provenance["source_sha256"]
                 or entry != provenance["entry"]):
             raise AppleTensorProgramError(
@@ -393,7 +408,8 @@ def _frame_stage(stage: AppleTensorStage, record: dict, frame: dict):
                 f"Apple member {stage.index} has no frame encoder for {descriptor.abi_id}")
         rows, columns = buffers[record["inputs"][0]]["shape"]
         return [3, record["inputs"][0], -1, record["output"], rows, 1, columns, 0, 0, 0], None, None
-    if descriptor.abi_id != APPLE_SIMDGROUP_GEMM_F16_ABI:
+    gemm = {abi: dtype for _, abi, dtype, _ in APPLE_SIMDGROUP_GEMM_VARIANTS.values()}
+    if descriptor.abi_id not in gemm:
         raise AppleTensorProgramError(
             f"Apple member {stage.index} has no frame encoder for {descriptor.abi_id}")
     from .apple_target import AppleGPUArch, AppleGPUTargetProfile
@@ -406,7 +422,7 @@ def _frame_stage(stage: AppleTensorStage, record: dict, frame: dict):
     bm, bn, bk = (int(value) for value in descriptor.provenance["block"])
     # The same materialization the standalone launch of this package uses.
     msl = materialize_apple_simdgroup_tile_msl(
-        AppleGPUTargetProfile(AppleGPUArch.APPLE7), "fp16", bm, bn, bk,
+        AppleGPUTargetProfile(AppleGPUArch.APPLE7), gemm[descriptor.abi_id], bm, bn, bk,
         accumulator_dtype=APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR, double_buffer=True)
     threads = int(msl.resources.threadgroup[0])
     a, b = record["inputs"]
@@ -454,7 +470,7 @@ def execute_frame(program: AppleTensorProgram, inputs: Mapping[str, Any]):
     output = None
     for spec in frame["buffers"]:
         flat += [{"input": 0, "private": 1, "output": 2}[spec["role"]], spec["bytes"]]
-        dtype = np.dtype(_NUMPY[spec["storage"]])
+        dtype = _np_dtype(spec["storage"])
         if spec["role"] == "input":
             name = roots[frame["roots"].index(spec["id"])]
             array = np.asarray(inputs[name])

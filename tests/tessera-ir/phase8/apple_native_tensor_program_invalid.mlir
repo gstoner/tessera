@@ -18,8 +18,8 @@ module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
 
 // -----
 
-// The apple7 matrix member is the f16 storage / f32 accumulate product only.
-// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: an Apple matrix member requires the apple7 f16 storage / f32 accumulate product
+// The apple7 matrix member is the f16 or bf16 storage / f32 accumulate product only.
+// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: an Apple matrix member requires the apple7 f16/bf16 storage / f32 accumulate product
 module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
                    tessera.native.apple_tensor_program_request} {
   func.func @f32_product(%s: tensor<64x32xf32>, %v: tensor<32x48xf32>) -> tensor<64x48xf32> {
@@ -106,5 +106,19 @@ module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
     %r = tessera.relu %a : (tensor<65536x32768xf16>) -> tensor<65536x32768xf16>
     %o = tessera.matmul %r, %b {output_dtype = "fp32"} : (tensor<65536x32768xf16>, tensor<32768x16xf16>) -> tensor<65536x16xf32>
     return %o : tensor<65536x16xf32>
+  }
+}
+
+// -----
+
+// bf16 softmax has no on-device apple7 kernel (its runtime route round-trips
+// through host f32 buffers), so a bf16 program refuses it.
+// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: bf16 softmax and GELU have no on-device apple7 kernel
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
+                   tessera.native.apple_tensor_program_request} {
+  func.func @bf16_softmax(%s: tensor<64x32xbf16>, %v: tensor<32x48xbf16>) -> tensor<64x48xf32> {
+    %p = tessera.softmax %s {axis = -1 : i64} : (tensor<64x32xbf16>) -> tensor<64x32xbf16>
+    %o = tessera.matmul %p, %v {output_dtype = "fp32"} : (tensor<64x32xbf16>, tensor<32x48xbf16>) -> tensor<64x48xf32>
+    return %o : tensor<64x48xf32>
   }
 }

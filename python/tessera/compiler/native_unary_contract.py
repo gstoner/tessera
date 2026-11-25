@@ -64,10 +64,11 @@ def verify_unary_projection(artifact, parent: str) -> None:
     elif family == 'activation' and re.search(r'(?:^|, )kind = "relu"(?:,|$)', attrs):
         # APPLE-NTBI-2 slice 6 (2026-11-24): the apple7 f16 ReLU, consumed as
         # compiler-synthesized MSL, with the SM120 numerical contract.
-        if 'approximation = ' in attrs or storage != 'f16':
+        # f16 stores +0 for zeros; bf16 keeps the sign (the SM120 contract).
+        if 'approximation = ' in attrs or storage not in {'f16', 'bf16'}:
             raise ValueError('Native unary native arithmetic policy is unsupported')
         required += ['arch = "apple7"', 'schedule = "serial"', 'nan_mode = "propagate"',
-                     'zero_mode = "positive"']
+                     'zero_mode = "positive"' if storage == 'f16' else 'zero_mode = "preserve"']
     elif family == 'activation':
         # E2E-REAL-6 Apple GPU GELU (2026-11-03): the apple7 tanh GELU.
         required += ['arch = "apple7"', 'kind = "gelu"', 'approximation = "tanh"',

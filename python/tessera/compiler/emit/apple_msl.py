@@ -1503,6 +1503,50 @@ kernel void {activation_entry(kind, storage)}(
 """
 
 
+#: (kind, storage, nan_mode) -> the body of a synthesized binary kernel
+#: (APPLE-NTBI-2 slice 7). f16 storage, f32 arithmetic rounded once to f16:
+#: the f32 sum of two f16 values rounds to the correctly rounded f16 sum
+#: (f32 carries at least 2*11+2 significand bits), and a NaN operand or
+#: inf + -inf yields a NaN (no payload is promised).
+_BINARY_BODIES = {
+    ("add", "f16", "propagate"):
+        "    O[gid] = half(float(in0[gid]) + float(in1[gid]));\n",
+}
+
+
+def binary_entry(kind: str, storage: str) -> str:
+    """The synthesized binary kernel's entry symbol."""
+    return f"synth_binary_{kind}_{storage}"
+
+
+def synthesize_binary_msl(kind: str, storage: str, *, nan_mode: str) -> str:
+    """Emit the MSL for one Tile ``elementwise_kernel`` binary contract.
+
+    The buffer layout is the source-carrying pointwise ABI's for two inputs
+    (in0, in1, O, N). Deterministic in its arguments; a contract with no
+    emitted form raises rather than falling back to another semantic.
+    """
+    try:
+        body = _BINARY_BODIES[(kind, storage, nan_mode)]
+    except KeyError as exc:
+        raise ValueError(
+            f"no synthesized Apple binary kernel for kind={kind!r} storage={storage!r} "
+            f"nan_mode={nan_mode!r}") from exc
+    return f"""#include <metal_stdlib>
+using namespace metal;
+// Tile elementwise_kernel: family=binary kind={kind} storage={storage} nan_mode={nan_mode}
+kernel void {binary_entry(kind, storage)}(
+    device const half* in0 [[buffer(0)]],
+    device const half* in1 [[buffer(1)]],
+    device half*       O   [[buffer(2)]],
+    constant int&      N   [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{{
+    if (gid >= (uint)N) return;
+{body}}}
+"""
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # M5 — pointwise -> plain row-reduction fusion (sum/mean/amax/amin).
 #

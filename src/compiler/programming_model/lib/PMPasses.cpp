@@ -2126,6 +2126,22 @@ static bool isIsolatedUnaryResult(Operation *op) {
          function.getBody().front().getOperations().size() == 2;
 }
 
+/// Whether `op` is the whole body of its function: one binary op over the two
+/// arguments, in order, whose single result is returned and has no other use.
+static bool isIsolatedBinaryResult(Operation *op) {
+  auto function = op->getParentOfType<func::FuncOp>();
+  if (!function || !llvm::hasSingleElement(function.getBody()) ||
+      function.getNumArguments() != 2 || function.getNumResults() != 1 ||
+      op->getNumOperands() != 2 || op->getNumResults() != 1 ||
+      op->getOperand(0) != function.getArgument(0) ||
+      op->getOperand(1) != function.getArgument(1) ||
+      !op->getResult(0).hasOneUse())
+    return false;
+  auto ret = dyn_cast<func::ReturnOp>(*op->getResult(0).getUsers().begin());
+  return ret && ret.getNumOperands() == 1 &&
+         function.getBody().front().getOperations().size() == 2;
+}
+
 /// The tessera.quantize_scaled consuming a norm result, seen directly at
 /// Graph->Schedule or through its schedule.norm annotation at Schedule->Tile.
 static Operation *normQuantizeUser(Operation *norm) {
@@ -2248,16 +2264,20 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
 
   StringRef opName = op->getName().getStringRef();
   if (opName == "tessera.add") {
-    if (!nvidia || input != output || input.getRank() != 2 ||
+    // APPLE-NTBI-2 slice 7 (2026-11-24): apple7 takes the static f16 add as
+    // compiler-synthesized MSL (one element per thread, workgroup 1, no
+    // `schedule` keyword); sm_120 keeps its flat_128 contract unchanged.
+    bool appleAdd = apple_gpu && schedule.arch == "apple7";
+    if ((!nvidia && !appleAdd) || input != output || input.getRank() != 2 ||
         input.getEncoding() || op->getOperand(1).getType() != input ||
-        schedule.storage.empty() ||
+        schedule.storage.empty() || (appleAdd && schedule.storage != "f16") ||
         !llvm::all_of(inputCapacity, [](int64_t d) { return d > 0 && d <= INT32_MAX; }) ||
         inputCapacity[0] * inputCapacity[1] > static_cast<int64_t>(INT32_MAX) * 128)
       return failure();
     for (NamedAttribute attr : op->getAttrs()) {
       StringRef name = attr.getName().getValue();
       if (name == "schedule.artifact_hash" || (nvidia && isLayoutKey(name))) continue;
-      if (name == "schedule") {
+      if (name == "schedule" && nvidia) {
         auto mode = dyn_cast<StringAttr>(attr.getValue());
         if (!mode || mode.getValue() != "flat_128") return failure();
       } else if (name == "numeric_policy") {
@@ -2275,8 +2295,10 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     schedule.kind = "add";
     schedule.rows = inputCapacity[0];
     schedule.columns = inputCapacity[1];
-    schedule.reductionSchedule = "flat_128";
-    schedule.workgroupSize = 128;
+    // The Apple launch carries workgroup 1 and one serial element walk, as
+    // the Apple activation launches do: the MSL dispatcher owns its grid.
+    schedule.reductionSchedule = appleAdd ? "serial" : "flat_128";
+    schedule.workgroupSize = appleAdd ? 1 : 128;
     return schedule;
   }
   if (opName == "tessera.relu") {
@@ -4450,6 +4472,12 @@ struct GraphToSchedulePass
       // preserve their existing route instead of claiming it by name alone.
       bool binary = name == "tessera.add" && target == "nvidia_sm120" &&
           mod->hasAttr("tessera.native.tensor_program_member");
+      // APPLE-NTBI-2 slice 7: the isolated f16 add the Apple package lowers
+      // (an Apple program member is lowered as that isolated request).
+      bool appleAdd = name == "tessera.add" && target == "apple_gpu" &&
+          isIsolatedBinaryResult(op) &&
+          isa<RankedTensorType>(op->getResult(0).getType()) &&
+          cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isF16();
       // Apple GELU is claimed only as the isolated unary request the Apple
       // native package lowers; a GELU inside any other Apple program keeps
       // its existing route instead of being claimed by name alone.
@@ -4460,7 +4488,7 @@ struct GraphToSchedulePass
            (name == "tessera.relu" && op->getNumResults() == 1 &&
             isa<RankedTensorType>(op->getResult(0).getType()) &&
             cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isF16()));
-      if (binary || appleGelu || (name == "tessera.relu" && target == "nvidia_sm120") ||
+      if (binary || appleAdd || appleGelu || (name == "tessera.relu" && target == "nvidia_sm120") ||
           name == "tessera.softmax" || name == "tessera.reduce" ||
           (norm && (target == "nvidia_sm120" ||
                     (target == "rocm" && architecture == "gfx1201" &&
@@ -5232,7 +5260,7 @@ struct ScheduleToTilePass
           if (child) child.walk([&](Operation *op) {
             auto name = op->getName().getStringRef();
             if (name == "tile.matmul_kernel" || name == "tile.softmax_kernel" ||
-                name == "tile.activation_kernel")
+                name == "tile.activation_kernel" || name == "tile.elementwise_kernel")
               carriers.push_back(op);
           });
           auto source = child ? child.lookupSymbol<func::FuncOp>("source") : func::FuncOp{};
@@ -6702,7 +6730,7 @@ struct ScheduleToTilePass
       if (isBinary) {
         altered = altered || attrString("kind") != "add" ||
                   attrString("output_storage") != selected->storage ||
-                  attrString("schedule") != "flat_128" ||
+                  attrString("schedule") != selected->reductionSchedule ||
                   attrString("nan_mode") != "propagate";
       } else if (isActivation) {
         altered = altered || attrString("kind") != selected->kind ||
@@ -6922,10 +6950,32 @@ struct ScheduleToTilePass
           builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger);
 
       OperationState kernelState(
-          loc, isNorm ? "tile.norm_kernel"
+          loc, isBinary ? "tile.elementwise_kernel"
+                      : isNorm ? "tile.norm_kernel"
                       : isActivation ? "tile.activation_kernel"
                       : isSoftmax ? "tile.softmax_kernel" : "tile.reduce_kernel");
-      if (isActivation) {
+      if (isBinary) {
+        // APPLE-NTBI-2 slice 7: the apple7 add, (a, b, o, N) with the same
+        // flat element count and attribute set the sm_120 add carries.
+        auto rhsMemref = MemRefType::get(
+            cast<RankedTensorType>(graph->getOperand(1).getType()).getShape(),
+            inputType.getElementType());
+        Value rhsBuffer = builder.create<bufferization::ToBufferOp>(
+            loc, rhsMemref, graph->getOperand(1));
+        Value rhsIndex =
+            builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, rhsBuffer);
+        Value rhsInteger =
+            builder.create<arith::IndexCastOp>(loc, builder.getI64Type(), rhsIndex);
+        Value rhsPointer =
+            builder.create<LLVM::IntToPtrOp>(loc, pointerType, rhsInteger);
+        Value elements = builder.create<arith::ConstantIntOp>(
+            loc, selected->rows * selected->columns, 64);
+        kernelState.addOperands({inputPointer, rhsPointer, outputPointer, elements});
+        kernelState.addAttribute("family", builder.getStringAttr("binary"));
+        for (StringRef key : {"kind", "storage", "output_storage", "accum", "axis",
+                              "schedule", "nan_mode"})
+          kernelState.addAttribute(key, scheduled->getAttr(key));
+      } else if (isActivation) {
         // E2E-REAL-6 Apple GPU GELU: (x, o, rows, columns) with the kind,
         // approximation and signed-zero contract the Schedule hashed.
         Value rows = builder.create<arith::ConstantIntOp>(loc, selected->rows, 64);

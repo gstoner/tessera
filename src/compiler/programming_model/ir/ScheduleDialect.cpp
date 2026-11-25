@@ -495,6 +495,20 @@ LogicalResult BinaryKernelOp::verify() {
   auto rowBound = nativeRowBound(getOperation(), getSubject());
   auto shape = nativeShapeBounds(getOperation(), getSubject());
   if (failed(rowBound) || failed(shape)) return failure();
+  if (getArch() == "apple7") {
+    // APPLE-NTBI-2 slice 7: the static apple7 f16 add (synthesized MSL),
+    // workgroup 1, one serial element walk, f32 arithmetic.
+    if (!type || type.getRank() != 2 || *rowBound || !shape->empty() ||
+        !type.hasStaticShape() || type.getEncoding() || !type.getElementType().isF16() ||
+        !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0 && d <= INT32_MAX; }) ||
+        type.getNumElements() > INT32_MAX || getWorkgroupSize() != 1 ||
+        getStorage() != "f16" || getOutputStorage() != "f16" || getAccum() != "f32" ||
+        getKind() != "add" || getAxis() != -1 || getSchedule() != "serial" ||
+        getNanMode() != "propagate")
+      return emitOpError("requires a static rank-two apple7 f16 serial add with f32 "
+                         "arithmetic and workgroup 1");
+    return success();
+  }
   SmallVector<int64_t> capacity;
   if (type && type.getRank() == 2) {
     capacity.assign(type.getShape().begin(), type.getShape().end());

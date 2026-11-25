@@ -19642,3 +19642,5 @@ The attention VJP plugin's ROCm branch was refactored alongside the new Apple co
 ## `AR-DECODE-PROGRAM-1-S1c-2026-11-23`: sibling outcome — not applicable — no ROCm lowering changed. `schedule.embedding_gather` claims only `nvidia_sm120` modules; a ROCm module's `tessera.gather` passes through Schedule untouched (`test_non_sm120_module_is_left_to_its_own_owner`). A decode-program embedding gather on gfx1151/gfx1201 belongs to slice S7 with its own proof. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4d-s1c--embedding-row-gather-on-sm_120-2026-11-23))
 
 ## `APPLE-NTBI-2-relu-2026-11-24`: sibling outcome — not applicable — the apple7 f16 ReLU admission is target-gated; ROCm has no ReLU scheduled activation and no tensor-program owner. No ROCm lowering, ABI or result changes.
+
+## `APPLE-NTBI-2-add-2026-11-24`: sibling outcome — not applicable — the apple7 f16 add admission is target-gated; no ROCm add lowering, ABI or result changes.

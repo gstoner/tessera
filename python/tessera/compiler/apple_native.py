@@ -1229,11 +1229,13 @@ def package_scheduled_kernel(
         or artifact.architecture != "apple7"
         or artifact.accum != "f32"
         or (artifact.dtype, artifact.storage) not in (("fp32", "f32"), ("fp16", "f16"), ("bf16", "bf16"))
-        or (artifact.family not in {"softmax", "activation"} and artifact.storage != "f32")
+        or (artifact.family not in {"softmax", "activation", "binary"} and artifact.storage != "f32")
     ):
         raise ValueError(
             "Apple GPU scheduled kernel requires the f32 apple7 contract"
         )
+    if artifact.family == "binary":
+        return _package_scheduled_add(artifact, pipeline_name=pipeline_name)
     _verify_kernel_schedule_ancestry(artifact)
     if artifact.family == "reduce":
         return _package_scheduled_reduce(artifact, pipeline_name=pipeline_name)
@@ -1334,6 +1336,132 @@ def synthesized_activation_source(kind: str, storage: str, nan_mode: str,
 
     source = synthesize_activation_msl(kind, storage, nan_mode=nan_mode, zero_mode=zero_mode)
     return source, activation_entry(kind, storage)
+
+
+APPLE_SYNTH_BINARY_F16_ABI = "tessera.apple.synth.binary.a_b_o_elements.f16.v1"
+
+
+def synthesized_binary_source(kind: str, storage: str, nan_mode: str) -> tuple[str, str]:
+    """``(msl, entry)`` for one Tile binary contract, deterministically."""
+    from .emit.apple_msl import binary_entry, synthesize_binary_msl
+
+    return synthesize_binary_msl(kind, storage, nan_mode=nan_mode), binary_entry(kind, storage)
+
+
+def _verify_apple_binary_projection(artifact: ScheduledKernelArtifact) -> dict:
+    """Replay the Schedule and read the add contract back from native IR.
+
+    The packager binds nothing a Python object says: the replayed Tile must
+    equal the artifact's, the parent function must be ``(a, b) -> o`` over
+    one static f16 type, and the ``schedule.binary_kernel`` decision must be
+    the apple7 serial f16 add with f32 arithmetic and propagated NaNs.
+    """
+    import re
+
+    parent = _verify_schedule_ancestry(artifact)
+    tensor = r"tensor<(\d+)x(\d+)xf16>"
+    signature = re.findall(
+        rf"func\.func @([\w]+)\(%[\w]+: {tensor}, %[\w]+: {tensor}\) -> {tensor}", parent)
+    if len(signature) != 1 or parent.count("func.func ") != 1:
+        raise ValueError("Apple binary package requires one static (a, b) -> o f16 function")
+    name, *dims = signature[0]
+    shape = (int(dims[0]), int(dims[1]))
+    if (dims[2:4] != dims[0:2] or dims[4:6] != dims[0:2] or name != artifact.function_name
+            or shape != artifact.input_shape or shape != artifact.output_shape):
+        raise ValueError("Apple binary package shape or name disagrees with native IR")
+    rows = re.findall(r" = schedule\.binary_kernel %\w+ \{([^{}]*)\}", parent)
+    if len(rows) != 1:
+        raise ValueError("Apple binary package requires one native binary schedule")
+    attrs = dict(re.findall(r'\b(\w+) = "([^"]+)"', rows[0]))
+    expected = {"arch": "apple7", "kind": "add", "storage": "f16", "output_storage": "f16",
+                "accum": "f32", "schedule": "serial", "nan_mode": "propagate"}
+    if (any(attrs.get(key) != value for key, value in expected.items())
+            or "workgroup_size = 1 : i64" not in rows[0]
+            or (artifact.kind, artifact.storage, artifact.dtype) != ("add", "f16", "fp16")
+            or len(artifact.input_names) != 2 or artifact.input_names[0] != artifact.input_name
+            or len({*artifact.input_names, artifact.output_name}) != 3
+            or not all(n.isidentifier() for n in (*artifact.input_names, artifact.output_name))):
+        raise ValueError("Apple binary package contract disagrees with native IR")
+    return attrs
+
+
+def _package_scheduled_add(
+    artifact: ScheduledKernelArtifact,
+    *,
+    pipeline_name: str,
+) -> AppleNativePackage:
+    """Package the apple7 f16 add as compiler-synthesized MSL (slice 7).
+
+    The kernel is emitted from the contract read back from the replayed
+    native Schedule, its source digest recorded in the Target IR and
+    re-verified at submission, and it runs through the existing
+    source-carrying ``tessera_apple_gpu_synth_pointwise_f16`` ABI with two
+    inputs. A failed dispatch raises; there is no reference path.
+    """
+    contract = _verify_apple_binary_projection(artifact)
+    source, entry = synthesized_binary_source("add", "f16", contract["nan_mode"])
+    source_digest = hashlib.sha256(source.encode()).hexdigest()
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError(
+            "APPLE-NTBI-2 Apple GPU scheduled add requires a fresh Tessera "
+            "Apple GPU runtime dylib"
+        )
+    symbol, abi = APPLE_SYNTH_ACTIVATION_F16_SYMBOL, APPLE_SYNTH_BINARY_F16_ABI
+    target_ir = (
+        f'tessera_apple.gpu.msl_kernel @{symbol} '
+        f'{{abi = "{abi}", kind = "add", storage = "f16", accumulation = "f32", '
+        f'nan_mode = "{contract["nan_mode"]}", entry = "{entry}", '
+        f'source_sha256 = "{source_digest}", schedule_hash = "{artifact.schedule_digest}", '
+        f'status = "executable"}}\n// ---- synthesized MSL ----\n{source}'
+    )
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    image = NativeImageArtifact(
+        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="shared_object", payload=payload,
+        entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
+    )
+    a, b = artifact.input_names
+    out = artifact.output_name
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        buffers=(
+            BufferBinding(0, a, "input", "fp16", 2, "row_major", 2),
+            BufferBinding(1, b, "input", "fp16", 2, "row_major", 2),
+            BufferBinding(2, out, "output", "fp16", 2, "row_major", 2),
+        ),
+        shape_guards=tuple(
+            ShapeGuard(name, axis, "eq", extent)
+            for name in (a, b, out)
+            for axis, extent in enumerate(artifact.input_shape)
+        ),
+        geometry=LaunchGeometry(policy="apple_msl_synth_binary"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("return",),
+        ),
+        provenance={
+            "work_item": "APPLE-NTBI-2",
+            "route": "apple_gpu_synth_binary_f16",
+            "op_kind": "add",
+            "family": "binary",
+            "kind": "add",
+            "synthesized": True,
+            "entry": entry,
+            "source_sha256": source_digest,
+            "nan_mode": contract["nan_mode"],
+            "accumulation": "f32",
+            "shape": list(artifact.input_shape),
+            "storage": "fp16",
+            "dynamic_shape": False,
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return AppleNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
 
 
 def _package_scheduled_relu(

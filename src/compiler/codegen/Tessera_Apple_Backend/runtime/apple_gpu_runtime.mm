@@ -10867,7 +10867,8 @@ extern "C" int32_t tessera_apple_gpu_tile_simdgroup_gemm_bf16(
 //   buffers[2*i+1] = bytes
 //   hosts[i]       = input source / output destination (NULL for private)
 //   stages[10*j]   = kind (1 softmax f16, 2 TILE-1 simdgroup GEMM f16->f32,
-//                    3 tanh GELU f16, 4 synthesized f16 activation),
+//                    3 tanh GELU f16, 4 synthesized f16 elementwise:
+//                    in1 = -1 for an activation, a written buffer for add),
 //                    in0, in1 (-1 when unused), out, M, N, K, bm, bn, threads
 //   sources/entries[j] = MSL source + entry for kinds 2 and 4 (NULL otherwise)
 //   receipt[0..3]  = command buffers, dispatches, private buffers, GPU ns
@@ -10917,9 +10918,12 @@ extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
           (kind == kGelu && M * K > INT32_MAX))
         return -1;
     } else if (kind == kSynthActivation) {
-      // X[M,K] -> Out[M,K], f16, elementwise over M*K elements with the
-      // compiler-synthesized kernel the stage carries (pointwise layout).
-      if (in1 != -1 || N != 1 || !sources[j] || !entries[j] ||
+      // X[M,K] (+ Y[M,K]) -> Out[M,K], f16, elementwise over M*K elements
+      // with the compiler-synthesized kernel the stage carries (pointwise
+      // layout: one input for an activation, two for a binary add).
+      if ((in1 != -1 && (!in_range(in1) || !written[in1] ||
+                         buffers[2 * in1 + 1] != 2 * M * K)) ||
+          N != 1 || !sources[j] || !entries[j] ||
           buffers[2 * in0 + 1] != 2 * M * K || buffers[2 * out + 1] != 2 * M * K ||
           M * K > INT32_MAX)
         return -1;
@@ -10993,8 +10997,11 @@ extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
       else if (st[0] == kGelu)
         encode_gelu_f16(enc, psos[j], metal[st[1]], metal[st[3]],
                         static_cast<int32_t>(st[4] * st[6]));
-      else if (st[0] == kSynthActivation)
+      else if (st[0] == kSynthActivation && st[2] == -1)
         encode_synth_pointwise(enc, psos[j], {metal[st[1]]}, metal[st[3]],
+                               static_cast<int32_t>(st[4] * st[6]), K);
+      else if (st[0] == kSynthActivation)
+        encode_synth_pointwise(enc, psos[j], {metal[st[1]], metal[st[2]]}, metal[st[3]],
                                static_cast<int32_t>(st[4] * st[6]), K);
       else
         encode_tile_simdgroup_gemm(enc, psos[j], metal[st[1]], metal[st[2]],

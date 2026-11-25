@@ -88,8 +88,10 @@ class ScheduledKernelArtifact:
         if self.record:
             self._validate_record()
             return
-        schedule_op = f"schedule.{self.family}"
-        tile_op = f"tile.{self.family}_kernel"
+        # The binary family (APPLE-NTBI-2 slice 7) is spelled
+        # schedule.binary_kernel -> tile.elementwise_kernel.
+        schedule_op = "schedule.binary_kernel" if self.family == "binary" else f"schedule.{self.family}"
+        tile_op = "tile.elementwise_kernel" if self.family == "binary" else f"tile.{self.family}_kernel"
         if len(re.findall(rf"(?m)^\s*%[^=]+ = {re.escape(schedule_op)}\b", self.schedule_ir)) != 1:
             raise ValueError(f"scheduled {self.family} artifact requires one scheduled SSA operation")
         if len(re.findall(r"(?m)^\s*schedule\.artifact\b", self.schedule_ir)) != 1:
@@ -100,7 +102,7 @@ class ScheduledKernelArtifact:
             raise ValueError(f"scheduled {self.family} artifact requires exactly one Tile launch op")
         if ("tessera.softmax" in self.tile_ir or "tessera.reduce" in self.tile_ir
                 or "tessera.gelu" in self.tile_ir or "tessera.relu" in self.tile_ir
-                or "schedule." in self.tile_ir):
+                or "tessera.add" in self.tile_ir or "schedule." in self.tile_ir):
             raise ValueError("scheduled semantic-kernel Tile artifact retains Graph or Schedule ops")
         if _HASH_RE.findall(self.tile_ir) != [self.schedule_digest]:
             raise ValueError("scheduled semantic-kernel Tile artifact has a stale schedule digest")
@@ -191,6 +193,12 @@ def lower_scheduled_kernel(
         if schedule is not None:
             raise ValueError("x86 native kernels take no reduction schedule")
         return _lower_x86_kernel(module, architecture)
+    if (target == "apple_gpu" and len(module.functions) == 1
+            and len(module.functions[0].body) == 1
+            and module.functions[0].body[0].op_name == "tessera.add"):
+        if schedule is not None or architecture is not None:
+            raise ValueError("the apple7 add takes no schedule or architecture override")
+        return _lower_apple_add(module)
     if schedule is not None:
         module = copy.deepcopy(module)
         if (module.functions and module.functions[0].body
@@ -313,6 +321,58 @@ def lower_scheduled_kernel(
             _X86_GRAPH_CACHE.move_to_end(cache_key)
             if len(_X86_GRAPH_CACHE) > _X86_GRAPH_CACHE_LIMIT:
                 _X86_GRAPH_CACHE.popitem(last=False)
+    return artifact
+
+
+def _lower_apple_add(module: GraphIRModule) -> ScheduledKernelArtifact:
+    """Lower the isolated apple7 f16 add (APPLE-NTBI-2 slice 7).
+
+    One ``tessera.add`` over the function's two arguments, in order, whose
+    result is returned: static rank two, f16 storage, no keyword. The
+    compiler claims nothing else; every field below is read back from the
+    native Schedule decision by the Apple packager before it binds a kernel.
+    """
+    function = module.functions[0]
+    op = function.body[0]
+    operands = [value.removeprefix("%") for value in op.operands]
+    args = [arg.name for arg in function.args]
+    if (len(args) != 2 or operands != args or len(function.result_types) != 1
+            or op.kwargs or not op.result or len(function.return_values) != 1
+            or function.return_values[0].removeprefix("%") != op.result.removeprefix("%")):
+        raise ValueError("scheduled apple7 add requires add(a, b) over its arguments, returned")
+    try:
+        shapes = [tuple(int(d) for d in arg.ir_type.shape) for arg in function.args]
+        output_shape = tuple(int(d) for d in function.result_types[0].shape)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("scheduled apple7 add requires static shapes") from exc
+    dtypes = {arg.ir_type.dtype for arg in function.args} | {function.result_types[0].dtype}
+    if (dtypes != {"fp16"} or len(output_shape) != 2 or shapes != [output_shape] * 2
+            or any(d <= 0 for d in output_shape) or math.prod(output_shape) > 2**31 - 1):
+        raise ValueError("scheduled apple7 add requires static rank-two f16 operands and result")
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("scheduled apple7 add lowering requires production tessera-opt")
+    targeted = copy.deepcopy(module)
+    targeted.module_attrs["tessera.target"] = '"apple_gpu"'
+    targeted.module_attrs["tessera.arch"] = '"apple7"'
+    graph_ir = targeted.to_mlir(target="apple_gpu", canonical=True)
+    schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
+    tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
+    hashes = _HASH_RE.findall(tile_ir)
+    if len(hashes) != 1:
+        raise RuntimeError("scheduled apple7 add lowering did not preserve one schedule digest")
+    rows, columns = output_shape
+    artifact = ScheduledKernelArtifact(
+        graph_ir=graph_ir, schedule_ir=schedule_ir, tile_ir=tile_ir,
+        target="apple_gpu", architecture="apple7", function_name=function.name,
+        family="binary", kind="add", input_name=args[0],
+        output_name=op.result.removeprefix("%"), input_shape=output_shape,
+        output_shape=output_shape, dtype="fp16", storage="f16", accum="f32",
+        axis=-1, keepdims=False, rows=rows, columns=columns, outer=1,
+        axis_extent=1, inner=1, workgroup_size=1, schedule_digest=hashes[0],
+        schedule="serial", input_names=tuple(args),
+    )
+    artifact.validate()
     return artifact
 
 

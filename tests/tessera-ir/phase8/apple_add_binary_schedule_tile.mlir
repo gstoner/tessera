@@ -64,3 +64,23 @@ module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
 // SCHEDULE-LABEL: func.func @apple_add_chain
 // SCHEDULE-NOT: schedule.binary_kernel
 // SCHEDULE: return
+
+// -----
+
+// APPLE-NTBI-2 slice 8: a bf16 add takes the same synthesized route.
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
+  func.func @apple_add_bf16(%a: tensor<5x11xbf16>, %b: tensor<5x11xbf16>) -> tensor<5x11xbf16> {
+    %0 = tessera.add %a, %b : (tensor<5x11xbf16>, tensor<5x11xbf16>) -> tensor<5x11xbf16>
+    return %0 : tensor<5x11xbf16>
+  }
+}
+
+// SCHEDULE-LABEL: func.func @apple_add_bf16
+// SCHEDULE: schedule.binary_kernel
+// SCHEDULE-SAME: output_storage = "bf16"
+// SCHEDULE-SAME: storage = "bf16"
+
+// TILE-LABEL: func.func @apple_add_bf16
+// TILE: tile.elementwise_kernel
+// TILE-SAME: kind = "add"
+// TILE-SAME: storage = "bf16"

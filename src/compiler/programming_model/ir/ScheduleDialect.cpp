@@ -450,13 +450,16 @@ LogicalResult ActivationOp::verify() {
     // APPLE-NTBI-2 slice 6: the apple7 f16 ReLU (compiler-synthesized MSL),
     // static, unbounded, workgroup 1, with the SM120 numerical contract.
     if (!type || type.getRank() != 2 || bounded || !type.hasStaticShape() ||
-        type.getEncoding() || !elementMatches || getStorage() != "f16" ||
+        type.getEncoding() || !elementMatches ||
+        (getStorage() != "f16" && getStorage() != "bf16") ||
         !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0; }) ||
         getWorkgroupSize() != 1 || getAccum() != "f32" || getAxis() != -1 ||
         getSchedule() != "serial" || getNanMode() != "propagate" ||
-        getZeroMode() != "positive" || getApproximationAttr())
-      return emitOpError("requires static rank-two apple7 f16 serial ReLU with "
-                         "workgroup 1, propagated NaNs and positive zeros");
+        // The SM120 zero contract: f16 stores +0, bf16 keeps the sign.
+        getZeroMode() != (getStorage() == "f16" ? "positive" : "preserve") ||
+        getApproximationAttr())
+      return emitOpError("requires static rank-two apple7 f16/bf16 serial ReLU with "
+                         "workgroup 1, propagated NaNs and its storage's zero mode");
     return success();
   }
   if (getArch() == "apple7") {
@@ -499,13 +502,15 @@ LogicalResult BinaryKernelOp::verify() {
     // APPLE-NTBI-2 slice 7: the static apple7 f16 add (synthesized MSL),
     // workgroup 1, one serial element walk, f32 arithmetic.
     if (!type || type.getRank() != 2 || *rowBound || !shape->empty() ||
-        !type.hasStaticShape() || type.getEncoding() || !type.getElementType().isF16() ||
+        !type.hasStaticShape() || type.getEncoding() ||
+        !(getStorage() == "f16" ? type.getElementType().isF16()
+                                : getStorage() == "bf16" && type.getElementType().isBF16()) ||
         !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0 && d <= INT32_MAX; }) ||
         type.getNumElements() > INT32_MAX || getWorkgroupSize() != 1 ||
-        getStorage() != "f16" || getOutputStorage() != "f16" || getAccum() != "f32" ||
+        getOutputStorage() != getStorage() || getAccum() != "f32" ||
         getKind() != "add" || getAxis() != -1 || getSchedule() != "serial" ||
         getNanMode() != "propagate")
-      return emitOpError("requires a static rank-two apple7 f16 serial add with f32 "
+      return emitOpError("requires a static rank-two apple7 f16/bf16 serial add with f32 "
                          "arithmetic and workgroup 1");
     return success();
   }

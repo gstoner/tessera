@@ -3939,7 +3939,7 @@ class JitFn:
         """Trace and compile an apple7 tensor program, or ``None`` to decline.
 
         Declines (other Apple routes stay eligible) only before admission: a
-        missing compiler or runtime, inputs outside the profile's f16 storage, a
+        missing compiler or runtime, inputs outside the profile's f16/bf16 storage, a
         body that cannot be traced, a traced body that is not a
         softmax/GELU/ReLU/add -> matmul DAG ending in its product, or the compiler's own
         ``APPLE_TENSOR_PROGRAM_UNSUPPORTED`` refusal. Any failure after the
@@ -3949,7 +3949,9 @@ class JitFn:
         from . import scheduled_apple_gpu_descriptor as descriptor
         from .scheduled_matmul import find_tessera_opt
 
-        if any(value.dtype.name != "float16" or value.ndim != 2 for value in ordered):
+        # One f16 or bf16 storage across the program (APPLE-NTBI-2 slice 8).
+        if (any(value.ndim != 2 for value in ordered)
+                or {value.dtype.name for value in ordered} not in ({"float16"}, {"bfloat16"})):
             return None
         # A cached program replays only the traced Graph. A host side effect
         # (``log.append``, I/O) executes while tracing and is absent from the

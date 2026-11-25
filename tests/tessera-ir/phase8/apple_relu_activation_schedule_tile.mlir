@@ -65,3 +65,25 @@ module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
 // SCHEDULE-LABEL: func.func @apple_relu_chain
 // SCHEDULE-NOT: schedule.activation
 // SCHEDULE: return
+
+// -----
+
+// APPLE-NTBI-2 slice 8: bf16 takes the same synthesized route with the SM120
+// bf16 zero contract (signed zeros preserved).
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
+  func.func @apple_relu_bf16(%x: tensor<5x11xbf16>) -> tensor<5x11xbf16> {
+    %0 = tessera.relu %x : (tensor<5x11xbf16>) -> tensor<5x11xbf16>
+    return %0 : tensor<5x11xbf16>
+  }
+}
+
+// SCHEDULE-LABEL: func.func @apple_relu_bf16
+// SCHEDULE: schedule.activation
+// SCHEDULE-SAME: kind = "relu"
+// SCHEDULE-SAME: storage = "bf16"
+// SCHEDULE-SAME: zero_mode = "preserve"
+
+// TILE-LABEL: func.func @apple_relu_bf16
+// TILE: tile.activation_kernel
+// TILE-SAME: storage = "bf16"
+// TILE-SAME: zero_mode = "preserve"

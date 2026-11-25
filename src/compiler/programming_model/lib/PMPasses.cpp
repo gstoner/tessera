@@ -1513,14 +1513,18 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     schedule.accum = "f32";
     return schedule;
   }
-  if (apple_gpu && lhsElement.isF16() && rhsElement.isF16() &&
+  if (apple_gpu && ((lhsElement.isF16() && rhsElement.isF16()) ||
+                    (lhsElement.isBF16() && rhsElement.isBF16())) &&
       outElement.isF32()) {
     // Apple7+ simdgroup_matrix GEMM: f16 storage, f32 accumulation.  Unlike the
     // f32 batch-1 BMM above, this is compiler-emitted MSL with a device timer,
     // so its promotion is not gated by APPLE-DEVICE-EVENT-1.  The 32x32
     // macro-tile mirrors the proven APPLE-TILE-1 emitter default (a multiple of
     // the 8x8x8 simdgroup fragment); the MSL materializer owns the byte layout.
-    schedule.storage = "f16";
+    // APPLE-NTBI-2 slice 8 (2026-11-25): bf16 storage takes the same kernel
+    // with `bfloat` fragments, still accumulating in f32 (a bf16 accumulator
+    // stays refused as measured-unfaithful, APPLE-ACCUM-1).
+    schedule.storage = lhsElement.isBF16() ? "bf16" : "f16";
     schedule.accum = "f32";
     schedule.macroTileM = 32;
     schedule.macroTileN = 32;
@@ -2270,7 +2274,8 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     bool appleAdd = apple_gpu && schedule.arch == "apple7";
     if ((!nvidia && !appleAdd) || input != output || input.getRank() != 2 ||
         input.getEncoding() || op->getOperand(1).getType() != input ||
-        schedule.storage.empty() || (appleAdd && schedule.storage != "f16") ||
+        schedule.storage.empty() ||
+        (appleAdd && schedule.storage != "f16" && schedule.storage != "bf16") ||
         !llvm::all_of(inputCapacity, [](int64_t d) { return d > 0 && d <= INT32_MAX; }) ||
         inputCapacity[0] * inputCapacity[1] > static_cast<int64_t>(INT32_MAX) * 128 ||
         // The Apple kernel and frame stage take one int32 element count, so
@@ -2314,7 +2319,7 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     bool appleRelu = apple_gpu && schedule.arch == "apple7";
     if ((!nvidia && !appleRelu) || input != output || input.getRank() != 2 ||
         input.getEncoding() ||
-        (appleRelu ? schedule.storage != "f16"
+        (appleRelu ? (schedule.storage != "f16" && schedule.storage != "bf16")
                    : (schedule.storage != "f16" && schedule.storage != "bf16" &&
                       schedule.storage != "f32")) ||
         !llvm::all_of(inputCapacity, [](int64_t d) { return d > 0; }))
@@ -4482,7 +4487,8 @@ struct GraphToSchedulePass
       bool appleAdd = name == "tessera.add" && target == "apple_gpu" &&
           isIsolatedBinaryResult(op) &&
           isa<RankedTensorType>(op->getResult(0).getType()) &&
-          cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isF16();
+          (cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isF16() ||
+           cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isBF16());
       // Apple GELU is claimed only as the isolated unary request the Apple
       // native package lowers; a GELU inside any other Apple program keeps
       // its existing route instead of being claimed by name alone.
@@ -4492,7 +4498,8 @@ struct GraphToSchedulePass
           (name == "tessera.gelu" ||
            (name == "tessera.relu" && op->getNumResults() == 1 &&
             isa<RankedTensorType>(op->getResult(0).getType()) &&
-            cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isF16()));
+            (cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isF16() ||
+             cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isBF16())));
       if (binary || appleAdd || appleGelu || (name == "tessera.relu" && target == "nvidia_sm120") ||
           name == "tessera.softmax" || name == "tessera.reduce" ||
           (norm && (target == "nvidia_sm120" ||

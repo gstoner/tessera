@@ -141,6 +141,12 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
       for (Type type : llvm::concat<Type>(op->getOperandTypes(), op->getResultTypes()))
         if (!cast<RankedTensorType>(type).hasStaticShape())
           return reject("the Apple native tensor program supports static shapes only");
+      // APPLE-NTBI-2 slice 8: the bf16 softmax and GELU runtime routes round
+      // trip through host f32 buffers; they have no on-device bf16 kernel a
+      // frame with device-only intermediates could encode.
+      if ((name == "tessera.softmax" || name == "tessera.gelu") &&
+          cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isBF16())
+        return reject("bf16 softmax and GELU have no on-device apple7 kernel");
     }
   }
   // Claim only the semantic families this native owner can lower. Other
@@ -463,10 +469,10 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
       // proves only that the Apple schedule for the member exists.
       if (matrix) {
         auto schedule = getMatmulSchedule(cloned);
-        if (failed(schedule) || schedule->storage != "f16" || schedule->accum != "f32" ||
-            schedule->output != "f32")
+        if (failed(schedule) || (schedule->storage != "f16" && schedule->storage != "bf16") ||
+            schedule->accum != "f32" || schedule->output != "f32")
           return root.emitError("APPLE_TENSOR_PROGRAM_UNSUPPORTED: an Apple matrix member "
-                                "requires the apple7 f16 storage / f32 accumulate product");
+                                "requires the apple7 f16/bf16 storage / f32 accumulate product");
       } else if (failed(getSemanticKernelSchedule(cloned))) {
         return root.emitError("APPLE_TENSOR_PROGRAM_UNSUPPORTED: no apple7 scheduled kernel "
                               "for this producer");

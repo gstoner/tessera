@@ -1952,8 +1952,9 @@ LogicalResult ElementwiseKernelOp::verify() {
       };
       auto axis = getOperation()->getAttrOfType<IntegerAttr>("axis");
       auto threads = getOperation()->getAttrOfType<IntegerAttr>("tessera.workgroup_size");
-      if (kind.getValue() != "add" || storage.getValue() != "f16" ||
-          outputStorage.getValue() != "f16" || str("accum") != "f32" ||
+      if (kind.getValue() != "add" ||
+          (storage.getValue() != "f16" && storage.getValue() != "bf16") ||
+          outputStorage.getValue() != storage.getValue() || str("accum") != "f32" ||
           str("schedule") != "serial" || str("nan_mode") != "propagate" ||
           !axis || axis.getInt() != -1 || !threads || threads.getInt() != 1 ||
           getInputs().size() != 4 ||
@@ -1961,7 +1962,7 @@ LogicalResult ElementwiseKernelOp::verify() {
             return isa<LLVM::LLVMPointerType>(pointer.getType());
           }) ||
           !getInputs().back().getType().isInteger(64))
-        return emitOpError("requires the apple7 f16 serial add (a, b, o, N), workgroup 1, "
+        return emitOpError("requires the apple7 f16/bf16 serial add (a, b, o, N), workgroup 1, "
                            "f32 arithmetic and propagated NaNs");
       return success();
     }
@@ -2336,12 +2337,13 @@ LogicalResult ActivationKernelOp::verify() {
     // compiler-synthesized MSL, with the SM120 numerical contract (f16 zeros
     // to +0, NaN payloads propagated). It names no approximation.
     if (str("kind") == "relu") {
-      if (str("storage") != "f16" || str("accum") != "f32" ||
+      if ((str("storage") != "f16" && str("storage") != "bf16") || str("accum") != "f32" ||
           op->hasAttr("approximation") || str("schedule") != "serial" ||
-          str("nan_mode") != "propagate" || str("zero_mode") != "positive" ||
+          str("nan_mode") != "propagate" ||
+          str("zero_mode") != (str("storage") == "f16" ? "positive" : "preserve") ||
           !axis || axis.getInt() != -1 || !threads || threads.getInt() != 1)
-        return emitOpError("requires apple7 f16 serial ReLU, workgroup 1, "
-                           "propagated NaNs and positive zeros");
+        return emitOpError("requires apple7 f16/bf16 serial ReLU, workgroup 1, "
+                           "propagated NaNs and its storage's zero mode");
       return success();
     }
     if (!narrowOrF32 || str("accum") != "f32" || str("kind") != "gelu" ||

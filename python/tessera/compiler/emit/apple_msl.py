@@ -1467,6 +1467,15 @@ _ACTIVATION_BODIES = {
         "    // Negative values and both zeros store +0; everything else as loaded.\n"
         "    const bool clamp = !nan && ((u & 0x8000u) != 0u || (u & 0x7fffu) == 0u);\n"
         "    O[gid] = clamp ? ushort(0) : u;\n"),
+    # bf16 (APPLE-NTBI-2 slice 8), the SM120 bf16 contract: zeros keep their
+    # sign (`preserve`); negative nonzero values store +0; NaNs as loaded.
+    ("relu", "bf16", "propagate", "preserve"): (
+        "    const ushort u = in0[gid];\n"
+        "    // NaN: all-ones exponent with a nonzero mantissa. Stored unchanged.\n"
+        "    const bool nan = (u & 0x7fffu) > 0x7f80u;\n"
+        "    // Negative nonzero values store +0; both zeros keep their sign.\n"
+        "    const bool clamp = !nan && (u & 0x8000u) != 0u && (u & 0x7fffu) != 0u;\n"
+        "    O[gid] = clamp ? ushort(0) : u;\n"),
 }
 
 
@@ -1511,7 +1520,13 @@ kernel void {activation_entry(kind, storage)}(
 _BINARY_BODIES = {
     ("add", "f16", "propagate"):
         "    O[gid] = half(float(in0[gid]) + float(in1[gid]));\n",
+    # bf16 (slice 8): f32 carries 24 >= 2*8+2 bits, so rounding the f32 sum
+    # once to bfloat is the correctly rounded bf16 sum.
+    ("add", "bf16", "propagate"):
+        "    O[gid] = bfloat(float(in0[gid]) + float(in1[gid]));\n",
 }
+#: storage -> MSL element type of a synthesized binary kernel's buffers.
+_BINARY_TYPES = {"f16": "half", "bf16": "bfloat"}
 
 
 def binary_entry(kind: str, storage: str) -> str:
@@ -1536,9 +1551,9 @@ def synthesize_binary_msl(kind: str, storage: str, *, nan_mode: str) -> str:
 using namespace metal;
 // Tile elementwise_kernel: family=binary kind={kind} storage={storage} nan_mode={nan_mode}
 kernel void {binary_entry(kind, storage)}(
-    device const half* in0 [[buffer(0)]],
-    device const half* in1 [[buffer(1)]],
-    device half*       O   [[buffer(2)]],
+    device const {_BINARY_TYPES[storage]}* in0 [[buffer(0)]],
+    device const {_BINARY_TYPES[storage]}* in1 [[buffer(1)]],
+    device {_BINARY_TYPES[storage]}*       O   [[buffer(2)]],
     constant int&      N   [[buffer(3)]],
     uint gid [[thread_position_in_grid]])
 {{

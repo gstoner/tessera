@@ -25,7 +25,7 @@ module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
   func.func @relu_on_apple(%x: tensor<5x11xf32>) -> tensor<5x11xf32> {
     // An apple7 ReLU is checked against its own contract (APPLE-NTBI-2 slice 6):
     // f32 storage and a GELU approximation are both outside it.
-    // expected-error @+1 {{requires static rank-two apple7 f16 serial ReLU}}
+    // expected-error @+1 {{requires static rank-two apple7 f16/bf16 serial ReLU}}
     %0 = schedule.activation %x {accum = "f32", approximation = "tanh", arch = "apple7", artifact_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", axis = -1 : i64, kind = "relu", nan_mode = "propagate", schedule = "serial", storage = "f32", workgroup_size = 1 : i64, zero_mode = "preserve"} : tensor<5x11xf32> -> tensor<5x11xf32>
     return %0 : tensor<5x11xf32>
   }

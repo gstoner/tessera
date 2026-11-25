@@ -6726,10 +6726,11 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         APPLE_SOFTMAX_F16_ABI,
         APPLE_SOFTMAX_F32_ABI,
         APPLE_SIMDGROUP_GEMM_F16_ABI,
+        APPLE_SIMDGROUP_GEMM_BF16_ABI,
         APPLE_FLASH_ATTN_VARIANT_F32_ABI,
         APPLE_FLASH_ATTN_BWD_ALL_ABIS,
-        APPLE_SYNTH_ACTIVATION_F16_ABI,
-        APPLE_SYNTH_BINARY_F16_ABI,
+        APPLE_SYNTH_ACTIVATION_ABIS,
+        APPLE_SYNTH_BINARY_ABIS,
         APPLE_SYNTH_REDUCE_F32_ABI,
         APPLE_TRANSPOSE_BF16_ABI,
         APPLE_TRANSPOSE_F16_ABI,
@@ -6767,9 +6768,10 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 APPLE_SOFTMAX_F16_ABI,
                 APPLE_SOFTMAX_BF16_ABI,
                 APPLE_SIMDGROUP_GEMM_F16_ABI,
+                APPLE_SIMDGROUP_GEMM_BF16_ABI,
                 APPLE_FLASH_ATTN_VARIANT_F32_ABI,
-                APPLE_SYNTH_ACTIVATION_F16_ABI,
-                APPLE_SYNTH_BINARY_F16_ABI,
+                *APPLE_SYNTH_ACTIVATION_ABIS.values(),
+                *APPLE_SYNTH_BINARY_ABIS.values(),
                 APPLE_SYNTH_REDUCE_F32_ABI,
                 APPLE_TOPK_DYNAMIC_F32_I32_ABI,
                 APPLE_TRANSPOSE_F32_ABI,
@@ -7259,22 +7261,23 @@ def _submit_apple_gpu_native(
         APPLE_TRANSPOSE_F32_SYMBOL,
         APPLE_TOPK_DYNAMIC_F32_I32_ABI,
         APPLE_TOPK_F32_SYMBOL,
-        APPLE_SIMDGROUP_GEMM_F16_ABI,
         APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR,
-        APPLE_SIMDGROUP_GEMM_F16_SYMBOL,
+        APPLE_SIMDGROUP_GEMM_VARIANTS,
         APPLE_FLASH_ATTN_VARIANT_F32_ABI,
         APPLE_FLASH_ATTN_VARIANT_F32_SYMBOL,
         APPLE_FLASH_ATTN_BWD_SPLIT_ROUTE,
         APPLE_FLASH_ATTN_BWD_ALL_ABIS,
-        APPLE_SYNTH_ACTIVATION_F16_ABI,
+        APPLE_SYNTH_ACTIVATION_ABIS,
         APPLE_SYNTH_ACTIVATION_F16_SYMBOL,
-        APPLE_SYNTH_BINARY_F16_ABI,
+        APPLE_SYNTH_BINARY_ABIS,
         APPLE_SYNTH_REDUCE_F32_ABI,
         APPLE_SYNTH_REDUCE_F32_SYMBOL,
         APPLE_SYNTH_REDUCE_KINDS,
     )
 
-    if descriptor.abi_id == APPLE_SYNTH_BINARY_F16_ABI:
+    _synth_storage = {abi: storage for storage, abi in
+                      (*APPLE_SYNTH_ACTIVATION_ABIS.items(), *APPLE_SYNTH_BINARY_ABIS.items())}
+    if descriptor.abi_id in APPLE_SYNTH_BINARY_ABIS.values():
         # APPLE-NTBI-2 slice 7: the f16 add as COMPILER-SYNTHESIZED MSL, run
         # through the same source-carrying ABI with two inputs. The kernel is
         # re-derived from the packaged contract and digest-checked; a
@@ -7293,14 +7296,17 @@ def _submit_apple_gpu_native(
             )
         lhs, rhs, out = (buffers[item.name] for item in ordered)
         arrays = (lhs, rhs, out)
+        synth_storage = _synth_storage[descriptor.abi_id]
+        element = "float16" if synth_storage == "f16" else "bfloat16"
         if (not all(isinstance(a, np.ndarray) for a in arrays)
-                or any(a.dtype != np.float16 or not a.flags.c_contiguous or a.ndim != 2
+                or any(a.dtype.name != element or not a.flags.c_contiguous or a.ndim != 2
                        or a.shape != out.shape for a in arrays)):
             raise RuntimeError(
-                "Apple synthesized binary requires contiguous rank-two f16 buffers of one shape"
+                f"Apple synthesized binary requires contiguous rank-two {synth_storage} "
+                "buffers of one shape"
             )
         source, entry = synthesized_binary_source(
-            str(provenance["kind"]), "f16", str(provenance["nan_mode"]))
+            str(provenance["kind"]), synth_storage, str(provenance["nan_mode"]))
         if (_hashlib.sha256(source.encode()).hexdigest() != provenance["source_sha256"]
                 or entry != provenance["entry"]):
             raise RuntimeError(
@@ -7320,7 +7326,7 @@ def _submit_apple_gpu_native(
                 f"Apple synthesized binary did not execute on Metal (status {status})")
         return out
 
-    if descriptor.abi_id == APPLE_SYNTH_ACTIVATION_F16_ABI:
+    if descriptor.abi_id in APPLE_SYNTH_ACTIVATION_ABIS.values():
         # APPLE-NTBI-2 slice 6: the f16 ReLU as COMPILER-SYNTHESIZED MSL. The
         # kernel is re-derived from the contract the package recorded and
         # checked against its source digest; the status-returning call is the
@@ -7338,15 +7344,17 @@ def _submit_apple_gpu_native(
                 "Apple synthesized-activation descriptor ABI or buffer contract is invalid"
             )
         source_in, out = (buffers[item.name] for item in ordered)
+        synth_storage = _synth_storage[descriptor.abi_id]
+        element = "float16" if synth_storage == "f16" else "bfloat16"
         if (not isinstance(source_in, np.ndarray) or not isinstance(out, np.ndarray)
-                or source_in.dtype != np.float16 or out.dtype != np.float16
+                or source_in.dtype.name != element or out.dtype.name != element
                 or not source_in.flags.c_contiguous or not out.flags.c_contiguous
                 or source_in.shape != out.shape or source_in.ndim != 2):
             raise RuntimeError(
                 "Apple synthesized activation requires contiguous rank-two f16 buffers"
             )
         source, entry = synthesized_activation_source(
-            str(provenance["kind"]), "f16", str(provenance["nan_mode"]),
+            str(provenance["kind"]), synth_storage, str(provenance["nan_mode"]),
             str(provenance["zero_mode"]))
         if (_hashlib.sha256(source.encode()).hexdigest() != provenance["source_sha256"]
                 or entry != provenance["entry"]):
@@ -7579,7 +7587,9 @@ def _submit_apple_gpu_native(
             )
         return out
 
-    if descriptor.abi_id == APPLE_SIMDGROUP_GEMM_F16_ABI:
+    _simdgroup = {abi: (storage, symbol, dtype)
+                  for storage, (symbol, abi, dtype, _) in APPLE_SIMDGROUP_GEMM_VARIANTS.items()}
+    if descriptor.abi_id in _simdgroup:
         # E2E-REAL-3 f16->f32 simdgroup_matrix GEMM: reuse the proven TILE-1
         # MSL materializer + dispatch, driven by the scheduled block sizes.
         from tessera.compiler.apple_target import AppleGPUArch, AppleGPUTargetProfile
@@ -7588,8 +7598,10 @@ def _submit_apple_gpu_native(
             materialize_apple_simdgroup_tile_msl,
         )
 
+        # f16 or bf16 storage (APPLE-NTBI-2 slice 8); f32 accumulation for both.
+        gemm_storage, gemm_symbol, gemm_dtype = _simdgroup[descriptor.abi_id]
         ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
-        if descriptor.entry_symbol != APPLE_SIMDGROUP_GEMM_F16_SYMBOL or len(ordered) != 3:
+        if descriptor.entry_symbol != gemm_symbol or len(ordered) != 3:
             raise RuntimeError(
                 "Apple simdgroup GEMM descriptor ABI or buffer contract is invalid"
             )
@@ -7611,8 +7623,10 @@ def _submit_apple_gpu_native(
         # (`...simdgroup_gemm.a_b_o_m_n_k.f16_f32.v1`): the packager only emits
         # it for a scheduled matmul whose numeric policy is storage f16 /
         # accum f32, so it is read from the ABI, not defaulted (APPLE-ACCUM-1).
+        if gemm_storage == "bf16" and (a.dtype.name != "bfloat16" or b.dtype.name != "bfloat16"):
+            raise RuntimeError("Apple bf16 simdgroup GEMM requires bfloat16 operands")
         artifact = materialize_apple_simdgroup_tile_msl(
-            AppleGPUTargetProfile(AppleGPUArch.APPLE7), "fp16", bm, bn, bk,
+            AppleGPUTargetProfile(AppleGPUArch.APPLE7), gemm_dtype, bm, bn, bk,
             accumulator_dtype=APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR,
             double_buffer=True,
         )

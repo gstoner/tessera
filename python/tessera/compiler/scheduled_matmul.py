@@ -1125,19 +1125,17 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             16,
             16,
         )
-    elif target == "apple_gpu" and (a_dtype, b_dtype, output_dtype) == (
-        "fp16",
-        "fp16",
-        "fp32",
+    elif target == "apple_gpu" and (a_dtype, b_dtype, output_dtype) in (
+        ("fp16", "fp16", "fp32"), ("bf16", "bf16", "fp32"),
     ):
-        # Apple7+ simdgroup_matrix GEMM: f16 storage, f32 accumulation.  This is
-        # a compiler-emitted MSL route (not delegated MPS), so the 32x32 macro
-        # tile is honored by the emitter.  Matches the C++ getMatmulSchedule
-        # apple7 f16 branch.
+        # Apple7+ simdgroup_matrix GEMM: f16 or bf16 storage (APPLE-NTBI-2
+        # slice 8), f32 accumulation.  This is a compiler-emitted MSL route (not
+        # delegated MPS), so the 32x32 macro tile is honored by the emitter.
+        # Matches the C++ getMatmulSchedule apple7 branch.
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
             "apple_gpu",
             "apple7",
-            "f16",
+            "bf16" if a_dtype == "bf16" else "f16",
             "f32",
             32,
             32,

@@ -107,3 +107,26 @@ module @add_requested attributes {tessera.target = "apple_gpu", tessera.arch = "
     return %o : tensor<64x48xf32>
   }
 }
+
+// -----
+
+// APPLE-NTBI-2 slice 8: a bf16 program -- synthesized ReLU feeding the bf16
+// simdgroup product (bf16 storage, f32 accumulation).
+// CHECK-LABEL: module @bf16_requested
+// CHECK-SAME: tessera.native.tensor_program = 1
+// CHECK: tile.program_invoke %arg0, %{{.*}} {callee = @tensor_stage_0::@source, carrier = "tile.activation_kernel"
+// CHECK: tile.program_invoke %{{.*}}, %arg1, %{{.*}} {callee = @tensor_stage_1::@source, carrier = "tile.matmul_kernel"
+// CHECK: module @tensor_stage_0
+// CHECK: tile.activation_kernel
+// CHECK-SAME: storage = "bf16"
+// CHECK: module @tensor_stage_1
+// CHECK: tile.matmul_kernel
+// CHECK-SAME: a = "bf16", b = "bf16", acc = "f32"
+module @bf16_requested attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
+                                   tessera.native.apple_tensor_program_request} {
+  func.func @relu_product(%x: tensor<64x32xbf16>, %w: tensor<32x48xbf16>) -> tensor<64x48xf32> {
+    %r = tessera.relu %x : (tensor<64x32xbf16>) -> tensor<64x32xbf16>
+    %o = tessera.matmul %r, %w {output_dtype = "fp32"} : (tensor<64x32xbf16>, tensor<32x48xbf16>) -> tensor<64x48xf32>
+    return %o : tensor<64x48xf32>
+  }
+}

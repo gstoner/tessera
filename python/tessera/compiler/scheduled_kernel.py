@@ -346,9 +346,10 @@ def _lower_apple_add(module: GraphIRModule) -> ScheduledKernelArtifact:
     except (TypeError, ValueError) as exc:
         raise ValueError("scheduled apple7 add requires static shapes") from exc
     dtypes = {arg.ir_type.dtype for arg in function.args} | {function.result_types[0].dtype}
-    if (dtypes != {"fp16"} or len(output_shape) != 2 or shapes != [output_shape] * 2
+    if (dtypes not in ({"fp16"}, {"bf16"}) or len(output_shape) != 2 or shapes != [output_shape] * 2
             or any(d <= 0 for d in output_shape) or math.prod(output_shape) > 2**31 - 1):
-        raise ValueError("scheduled apple7 add requires static rank-two f16 operands and result")
+        raise ValueError("scheduled apple7 add requires static rank-two f16 or bf16 operands "
+                         "and result")
     tool = find_tessera_opt()
     if tool is None:
         raise RuntimeError("scheduled apple7 add lowering requires production tessera-opt")
@@ -362,12 +363,14 @@ def _lower_apple_add(module: GraphIRModule) -> ScheduledKernelArtifact:
     if len(hashes) != 1:
         raise RuntimeError("scheduled apple7 add lowering did not preserve one schedule digest")
     rows, columns = output_shape
+    dtype = "bf16" if dtypes == {"bf16"} else "fp16"
     artifact = ScheduledKernelArtifact(
         graph_ir=graph_ir, schedule_ir=schedule_ir, tile_ir=tile_ir,
         target="apple_gpu", architecture="apple7", function_name=function.name,
         family="binary", kind="add", input_name=args[0],
         output_name=op.result.removeprefix("%"), input_shape=output_shape,
-        output_shape=output_shape, dtype="fp16", storage="f16", accum="f32",
+        output_shape=output_shape, dtype=dtype, storage="bf16" if dtype == "bf16" else "f16",
+        accum="f32",
         axis=-1, keepdims=False, rows=rows, columns=columns, outer=1,
         axis_extent=1, inner=1, workgroup_size=1, schedule_digest=hashes[0],
         schedule="serial", input_names=tuple(args),
@@ -530,14 +533,14 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         # APPLE-NTBI-2 slice 6 (2026-11-24): apple7 takes the f16 ReLU as
         # compiler-synthesized MSL; no keyword (a schedule request included)
         # selects anything the synthesized kernel computes.
-        apple_relu = (target == "apple_gpu" and dtype == "fp16" and not op.kwargs
+        apple_relu = (target == "apple_gpu" and dtype in {"fp16", "bf16"} and not op.kwargs
                       and math.prod(input_shape) <= 2**31 - 1)
         if ((target != "nvidia_sm120" and not apple_relu) or len(function.args) != 1
                 or len(input_shape) != 2
                 or input_shape != output_shape or output_dtype != dtype
                 or not op.result or len(function.return_values) != 1
                 or function.return_values[0].removeprefix("%") != op.result.removeprefix("%")):
-            raise ValueError("scheduled ReLU requires its returned SM120 or apple7 f16 "
+            raise ValueError("scheduled ReLU requires its returned SM120 or apple7 f16/bf16 "
                              "rank-two storage-preserving result")
         family, kind, axis, keepdims = "activation", "relu", -1, False
         rows, columns = input_shape

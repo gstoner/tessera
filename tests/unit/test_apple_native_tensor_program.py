@@ -832,3 +832,163 @@ def test_public_jit_runs_an_add_program_in_one_command_buffer():
     artifact = program.runtime_artifact()
     launched = rt.launch(artifact, {"x": x, "w": w})
     assert launched["ok"] and np.asarray(launched["output"]).tobytes() == output.tobytes()
+
+
+# --- Slice 8: bf16 programs ---------------------------------------------------
+
+ml_dtypes = pytest.importorskip("ml_dtypes")
+_BF16 = np.dtype(ml_dtypes.bfloat16)
+
+
+def _bf(*shape, seed=0):
+    return np.random.default_rng(seed).standard_normal(shape).astype(_BF16)
+
+
+def _relu_bits_bf16(x):
+    """The bf16 contract on bits: NaNs as loaded, negative nonzero to +0, zeros keep sign."""
+    u = np.ascontiguousarray(x, _BF16).view(np.uint16)
+    nan = (u & 0x7FFF) > 0x7F80
+    clamp = ~nan & ((u & 0x8000) != 0) & ((u & 0x7FFF) != 0)
+    return np.where(clamp, np.uint16(0), u).astype(np.uint16).view(_BF16)
+
+
+def _add_bf16(a, b):
+    """f32 sum rounded once to bf16: the correctly rounded bf16 sum."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        return (np.asarray(a, np.float32) + np.asarray(b, np.float32)).astype(_BF16)
+
+
+def _special_bf16(shape, seed):
+    x = _bf(*shape, seed=seed).reshape(-1)
+    specials = np.array([0x0000, 0x8000, 0x7F80, 0xFF80, 0x7FC0, 0xFFC1, 0x7F81, 0x0001, 0x8001],
+                        np.uint16).view(_BF16)
+    x[:specials.size] = specials
+    return x.reshape(shape)
+
+
+def _bf16_relu_add_product(x, y, w):
+    return ts.ops.matmul(ts.ops.add(ts.ops.relu(x), y), w, output_dtype="fp32")
+
+
+def _bf16_relu_product(x, w):
+    return ts.ops.matmul(ts.ops.relu(x), w, output_dtype="fp32")
+
+
+def test_bf16_synthesized_kernels_name_their_contract():
+    from tessera.compiler.emit.apple_msl import synthesize_activation_msl, synthesize_binary_msl
+
+    relu = synthesize_activation_msl("relu", "bf16", nan_mode="propagate", zero_mode="preserve")
+    assert "synth_activation_relu_bf16" in relu and "0x7f80u" in relu
+    add = synthesize_binary_msl("add", "bf16", nan_mode="propagate")
+    assert "device const bfloat* in0" in add and "bfloat(float(in0[gid]) + float(in1[gid]))" in add
+    # bf16 keeps the zero sign; "positive" is f16's contract.
+    with pytest.raises(ValueError, match="no synthesized Apple activation"):
+        synthesize_activation_msl("relu", "bf16", nan_mode="propagate", zero_mode="positive")
+
+
+def test_a_bf16_program_packages_every_member_at_bf16():
+    program = atp.compile_apple_tensor_program(_graph(
+        _bf16_relu_add_product, (_bf(64, 32), _bf(64, 32), _bf(32, 48)), ("x", "y", "w")))
+    abis = [stage.package.descriptor.abi_id for stage in program.stages]
+    assert abis == [apple_native.APPLE_SYNTH_ACTIVATION_BF16_ABI,
+                    apple_native.APPLE_SYNTH_BINARY_BF16_ABI,
+                    apple_native.APPLE_SIMDGROUP_GEMM_BF16_ABI]
+    assert program.stages[0].package.descriptor.provenance["zero_mode"] == "preserve"
+    assert [b["storage"] for b in program.frame["buffers"]][-1] == "f32"
+    program.validate()
+
+
+@pytest.mark.parametrize("fn", [
+    lambda x, w: ts.ops.matmul(ts.ops.softmax(x, axis=-1), w, output_dtype="fp32"),
+    lambda x, w: ts.ops.matmul(ts.ops.gelu(x), w, output_dtype="fp32"),
+])
+def test_bf16_softmax_and_gelu_members_are_refused(fn):
+    # Their runtime routes round-trip through host f32 buffers: no on-device
+    # bf16 kernel a frame with device-only intermediates could encode.
+    with pytest.raises(RuntimeError, match="APPLE_TENSOR_PROGRAM_UNSUPPORTED: .*bf16 softmax and GELU"):
+        atp.compile_apple_tensor_program(_graph(fn, (_bf(64, 32), _bf(32, 48)), ("x", "w")))
+
+
+@pytest.mark.hardware_apple_gpu
+def test_standalone_bf16_relu_and_add_are_bit_exact():
+    from tests._support.apple import require_apple_chip_identity
+    from tessera.compiler.scheduled_kernel import lower_scheduled_kernel
+    from tessera.runtime import RuntimeArtifact, launch
+
+    require_apple_chip_identity()
+
+    def run(fn, arrays, names):
+        module = to_graph_ir_module(trace(fn, *arrays, arg_names=names), name="s",
+                                    target="apple_gpu")
+        package = apple_native.package_scheduled_kernel(
+            lower_scheduled_kernel(module, target="apple_gpu"), pipeline_name=atp.PIPELINE)
+        out_name = package.descriptor.buffers[-1].name
+        artifact = RuntimeArtifact(
+            metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
+            target_ir=package.target_ir, native_image=package.image,
+            launch_descriptor=package.descriptor)
+        buffers = dict(zip(names, arrays))
+        buffers[out_name] = np.zeros(arrays[0].shape, _BF16)
+        launched = launch(artifact, buffers)
+        assert launched["ok"] and launched["execution_kind"] == "native_gpu"
+        return np.asarray(launched["output"])
+
+    x = _special_bf16((37, 53), seed=101)
+    relu = run(lambda x: ts.ops.relu(x), (x,), ("x",))
+    assert relu.view(np.uint16).tobytes() == _relu_bits_bf16(x).view(np.uint16).tobytes()
+    a, b = _special_bf16((37, 53), seed=102), _bf(37, 53, seed=103)
+    total = run(lambda a, b: ts.ops.add(a, b), (a, b), ("a", "b"))
+    want = _add_bf16(a, b)
+    nan = np.isnan(want.astype(np.float32))
+    assert (np.isnan(total.astype(np.float32)) == nan).all()
+    assert total[~nan].view(np.uint16).tobytes() == want[~nan].view(np.uint16).tobytes()
+
+
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.parametrize("fn, shapes, names, members", [
+    (_bf16_relu_add_product, ((64, 32), (64, 32), (32, 48)), ("x", "y", "w"), 3),
+    (_bf16_relu_add_product, ((100, 37), (100, 37), (37, 53)), ("x", "y", "w"), 3),
+    (_bf16_relu_product, ((64, 32), (32, 48)), ("x", "w"), 2),
+])
+def test_frame_owner_runs_bf16_programs_in_one_command_buffer(fn, shapes, names, members):
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    arrays = [_bf(*shape, seed=i + 111) for i, shape in enumerate(shapes)]
+    inputs = dict(zip(names, arrays))
+    program = atp.compile_apple_tensor_program(_graph(fn, arrays, names))
+    output, receipt = atp.execute_frame(program, inputs)
+    assert (receipt["command_buffers"], receipt["dispatches"]) == (1, members)
+    sequential, _ = atp.run_members_sequentially(program, inputs)
+    assert output.dtype == np.float32 and output.tobytes() == sequential.tobytes()
+    lhs = _relu_bits_bf16(inputs["x"])
+    if "y" in inputs:
+        lhs = _add_bf16(lhs, inputs["y"])
+    reference = lhs.astype(np.float32) @ inputs["w"].astype(np.float32)
+    # bf16 storage, f32 accumulation: the products are exact in f32, so only
+    # the summation order differs from numpy.
+    np.testing.assert_allclose(output, reference, rtol=0, atol=1e-3)
+
+
+@pytest.mark.hardware_apple_gpu
+def test_public_jit_runs_a_bf16_program_and_declines_bf16_softmax():
+    from tests._support.apple import require_apple_chip_identity
+    from tessera import runtime as rt
+
+    require_apple_chip_identity()
+    x, y, w = _bf(100, 37, seed=121), _bf(100, 37, seed=122), _bf(37, 53, seed=123)
+    program = ts.jit(target="apple_gpu")(_bf16_relu_add_product)
+    output = program(x, y, w)
+    receipt = program._apple_tensor_last_receipt
+    assert receipt["compiler_path"] == "canonical_apple_tensor_program"
+    assert (receipt["command_buffers"], receipt["dispatches"]) == (1, 3)
+    launched = rt.launch(program.runtime_artifact(), {"x": x, "y": y, "w": w})
+    assert launched["ok"] and np.asarray(launched["output"]).tobytes() == output.tobytes()
+
+    def bf16_softmax_product(x, w):
+        return ts.ops.matmul(ts.ops.softmax(x, axis=-1), w, output_dtype="fp32")
+
+    declined = ts.jit(target="apple_gpu")(bf16_softmax_product)
+    declined(x, w)
+    assert declined._apple_tensor_last_receipt is None
+    assert set(declined._apple_tensor_program_cache.values()) <= {None}

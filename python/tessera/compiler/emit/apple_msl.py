@@ -1444,6 +1444,66 @@ def run_pointwise_graph(region: PointwiseGraphRegion, arrays: list[np.ndarray],
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# APPLE-NTBI-2 slice 6 (2026-11-24) — the scheduled Tile activation contract as
+# synthesized MSL. Unlike the pointwise-graph emitter above (fp32 temps, `max`),
+# this kernel computes the Tile `activation_kernel` numerical contract exactly:
+# `nan_mode = "propagate"` keeps a NaN's storage payload and `zero_mode =
+# "positive"` stores +0 for every zero and every negative value -- the contract
+# the SM120 ReLU kernel computes. It works on storage bits, not floating-point
+# compares: Metal compiles with fast math by default, which may assume no NaNs
+# and fold a compare-and-select into `max`, dropping the NaN. The buffer layout
+# is the source-carrying pointwise ABI's for one input (in0, O, N), so the
+# standalone `tessera_apple_gpu_synth_pointwise_f16` call and the tensor frame
+# owner run the same kernel.
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: (kind, storage, nan_mode, zero_mode) -> the bit-level body. f16 only: the
+#: storage the Apple tensor program carries.
+_ACTIVATION_BODIES = {
+    ("relu", "f16", "propagate", "positive"): (
+        "    const ushort u = in0[gid];\n"
+        "    // NaN: all-ones exponent with a nonzero mantissa. Stored unchanged.\n"
+        "    const bool nan = (u & 0x7fffu) > 0x7c00u;\n"
+        "    // Negative values and both zeros store +0; everything else as loaded.\n"
+        "    const bool clamp = !nan && ((u & 0x8000u) != 0u || (u & 0x7fffu) == 0u);\n"
+        "    O[gid] = clamp ? ushort(0) : u;\n"),
+}
+
+
+def activation_entry(kind: str, storage: str) -> str:
+    """The synthesized activation kernel's entry symbol."""
+    return f"synth_activation_{kind}_{storage}"
+
+
+def synthesize_activation_msl(kind: str, storage: str, *, nan_mode: str,
+                              zero_mode: str) -> str:
+    """Emit the MSL for one Tile activation contract, deterministically.
+
+    Deterministic in its arguments alone, so a package can record the source
+    digest and the runtime re-derive and verify it before dispatch. A contract
+    with no emitted form raises; it never falls back to another semantic.
+    """
+    try:
+        body = _ACTIVATION_BODIES[(kind, storage, nan_mode, zero_mode)]
+    except KeyError as exc:
+        raise ValueError(
+            f"no synthesized Apple activation for kind={kind!r} storage={storage!r} "
+            f"nan_mode={nan_mode!r} zero_mode={zero_mode!r}") from exc
+    return f"""#include <metal_stdlib>
+using namespace metal;
+// Tile activation_kernel: kind={kind} storage={storage} nan_mode={nan_mode} zero_mode={zero_mode}
+kernel void {activation_entry(kind, storage)}(
+    device const ushort* in0 [[buffer(0)]],
+    device ushort*       O   [[buffer(1)]],
+    constant int&        N   [[buffer(2)]],
+    uint gid [[thread_position_in_grid]])
+{{
+    if (gid >= (uint)N) return;
+{body}}}
+"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # M5 — pointwise -> plain row-reduction fusion (sum/mean/amax/amin).
 #
 # A pointwise chain feeding a plain reduction over the last axis — sum(x*x) (L2²),

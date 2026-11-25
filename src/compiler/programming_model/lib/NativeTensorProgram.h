@@ -118,11 +118,12 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
   if (operations.size() == 2 && product->getNumOperands() == 2)
     if (Operation *rhs = product->getOperand(1).getDefiningOp())
       if (rhs->getName().getStringRef() == "tessera.dequantize_scaled")
-        return decline("an Apple member must be tessera.matmul, tessera.softmax or tessera.gelu");
-  // The Apple profile (APPLE-NTBI-2 slices 1 and 5): a matrix product whose
-  // producers are Apple-scheduled semantic kernels -- softmax and the tanh
-  // GELU activation -- static shapes only. relu and add have no Apple
-  // scheduled kernel yet; rmsnorm/layer_norm no Apple scheduled carrier.
+        return decline("an Apple member must be tessera.matmul, tessera.softmax, tessera.gelu or tessera.relu");
+  // The Apple profile (APPLE-NTBI-2 slices 1, 5 and 6): a matrix product
+  // whose producers are Apple-scheduled semantic kernels -- softmax, the tanh
+  // GELU activation and the f16 ReLU (compiler-synthesized MSL) -- static
+  // shapes only. add has no Apple scheduled kernel yet; rmsnorm/layer_norm no
+  // Apple scheduled carrier.
   if (apple) {
     auto reject = [&](const char *why) {
       return root.emitError("APPLE_TENSOR_PROGRAM_UNSUPPORTED: ") << why;
@@ -134,8 +135,9 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
       return reject("the Apple native tensor program supports static shapes only");
     for (Operation *op : operations) {
       auto name = op->getName().getStringRef();
-      if (name != "tessera.matmul" && name != "tessera.softmax" && name != "tessera.gelu")
-        return reject("an Apple member must be tessera.matmul, tessera.softmax or tessera.gelu");
+      if (name != "tessera.matmul" && name != "tessera.softmax" && name != "tessera.gelu" &&
+          name != "tessera.relu")
+        return reject("an Apple member must be tessera.matmul, tessera.softmax, tessera.gelu or tessera.relu");
       for (Type type : llvm::concat<Type>(op->getOperandTypes(), op->getResultTypes()))
         if (!cast<RankedTensorType>(type).hasStaticShape())
           return reject("the Apple native tensor program supports static shapes only");

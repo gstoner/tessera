@@ -40,7 +40,7 @@ _FRAME = r'tessera.native.tensor_program_frame_json = "([^"]+)"'
 _SOURCE = r'tessera.native.tensor_program_source_sha256 = "([0-9a-f]{64})"'
 #: Graph op -> the launch-level Tile carrier its Apple scheduled package consumes.
 _CARRIERS = {"tessera.matmul": "tile.matmul_kernel", "tessera.softmax": "tile.softmax_kernel",
-             "tessera.gelu": "tile.activation_kernel"}
+             "tessera.gelu": "tile.activation_kernel", "tessera.relu": "tile.activation_kernel"}
 _STORAGE = {"fp16": "f16", "fp32": "f32"}
 _NUMPY = {"f16": "float16", "f32": "float32"}
 
@@ -263,6 +263,11 @@ def compile_apple_tensor_program(module: GraphIRModule) -> AppleTensorProgram:
     compiler = Path(selected).resolve()
     identity = _tool_digest(compiler)
     graph = copy.deepcopy(module)
+    # The function name becomes an MLIR symbol (``@name``) at every level; a
+    # Python name that is not one (``<lambda>``) would fail the first parse.
+    for function in graph.functions:
+        if not re.fullmatch(r"[A-Za-z_][\w$.]*", function.name):
+            function.name = "_" + re.sub(r"[^\w]", "_", function.name)
     source = _source(graph)
     original = run_tessera_opt(compiler, source, "--verify-each")
     schedule = run_tessera_opt(compiler, original, "--tessera-graph-to-schedule")
@@ -322,8 +327,8 @@ def run_members_sequentially(program: AppleTensorProgram, inputs: Mapping[str, A
     return values[function.return_values[0].removeprefix("%")], receipt
 
 
-#: The member ABIs that have encode-only entry points in the frame owner.
-_FRAME_KINDS = {"tile.softmax_kernel": 1, "tile.matmul_kernel": 2, "tile.activation_kernel": 3}
+#: Frame-owner stage kinds (``_frame_stage`` selects one per member from its
+#: package ABI): 1 softmax, 2 simdgroup GEMM, 3 tanh GELU, 4 synthesized activation.
 _FRAME_ERRORS = {
     -1: "the runtime refused the frame contract",
     -2: "no Metal device",
@@ -337,7 +342,8 @@ def _frame_stage(stage: AppleTensorStage, record: dict, frame: dict):
     """One stage as the owner's flat record, re-checked against its package."""
     from .apple_native import (
         APPLE_GELU_F16_ABI, APPLE_SIMDGROUP_GEMM_F16_ABI,
-        APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR, APPLE_SOFTMAX_F16_ABI)
+        APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR, APPLE_SOFTMAX_F16_ABI,
+        APPLE_SYNTH_ACTIVATION_F16_ABI, synthesized_activation_source)
 
     descriptor = stage.package.descriptor
     buffers = frame["buffers"]
@@ -347,8 +353,21 @@ def _frame_stage(stage: AppleTensorStage, record: dict, frame: dict):
                 f"Apple member {stage.index} has no frame encoder for {descriptor.abi_id}")
         rows, columns = buffers[record["inputs"][0]]["shape"]
         return [1, record["inputs"][0], -1, record["output"], rows, 1, columns, 0, 0, 0], None, None
+    if stage.carrier == "tile.activation_kernel" and descriptor.abi_id == APPLE_SYNTH_ACTIVATION_F16_ABI:
+        # The compiler-synthesized activation (APPLE-NTBI-2 slice 6): the frame
+        # carries the same source the standalone package recorded, re-derived
+        # from its contract and checked against the package's digest.
+        provenance = descriptor.provenance
+        source, entry = synthesized_activation_source(
+            provenance["kind"], "f16", provenance["nan_mode"], provenance["zero_mode"])
+        if (hashlib.sha256(source.encode()).hexdigest() != provenance["source_sha256"]
+                or entry != provenance["entry"]):
+            raise AppleTensorProgramError(
+                f"Apple member {stage.index} synthesized kernel differs from its package")
+        rows, columns = buffers[record["inputs"][0]]["shape"]
+        return [4, record["inputs"][0], -1, record["output"], rows, 1, columns, 0, 0, 0], source, entry
     if stage.carrier == "tile.activation_kernel":
-        # Only the tanh GELU activation has an encode-only entry point; it is
+        # The tanh GELU activation's hand-written encode-only entry point; it is
         # elementwise, so the owner launches rows * columns threads.
         if (descriptor.abi_id != APPLE_GELU_F16_ABI
                 or descriptor.provenance.get("approximation") != "tanh"):

@@ -10211,6 +10211,31 @@ static id<MTLComputePipelineState> acquire_pipeline(MetalDeviceContext &ctx,
                               ep);
 }
 
+// Encode-only: the source-carrying pointwise layout (inputs 0..n-1, output n,
+// N at n+1, broadcast modulus C at n+2), one element per thread; no commit.
+// The standalone ABI below and the tensor frame owner's synthesized
+// activation stage (APPLE-NTBI-2 slice 6) share it.
+static void encode_synth_pointwise(id<MTLComputeCommandEncoder> enc,
+                                   id<MTLComputePipelineState> pso,
+                                   const std::vector<id<MTLBuffer>> &ins,
+                                   id<MTLBuffer> bufO, int32_t n_elements,
+                                   int32_t cols) {
+  const NSUInteger n_inputs = static_cast<NSUInteger>(ins.size());
+  [enc setComputePipelineState:pso];
+  for (NSUInteger i = 0; i < n_inputs; ++i)
+    [enc setBuffer:ins[i] offset:0 atIndex:i];
+  [enc setBuffer:bufO offset:0 atIndex:n_inputs];
+  [enc setBytes:&n_elements length:sizeof(int32_t) atIndex:n_inputs + 1];
+  // Broadcast modulus at n_inputs+2. Harmless when the MSL omits it (no
+  // broadcast input) — Metal ignores a binding the kernel does not declare.
+  [enc setBytes:&cols length:sizeof(int32_t) atIndex:n_inputs + 2];
+  MTLSize grid = MTLSizeMake((NSUInteger)n_elements, 1, 1);
+  NSUInteger tg = std::min<NSUInteger>((NSUInteger)n_elements,
+                                       pso.maxTotalThreadsPerThreadgroup);
+  if (tg == 0) tg = 1;
+  [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+}
+
 static int32_t synth_pointwise_impl(const char *msl_source,
                                     const char *metallib_path, const char *entry,
                                     const void *const *inputs,
@@ -10247,21 +10272,7 @@ static int32_t synth_pointwise_impl(const char *msl_source,
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
-    [enc setComputePipelineState:pso];
-    for (int32_t i = 0; i < n_inputs; ++i)
-      [enc setBuffer:ins[(size_t)i] offset:0 atIndex:(NSUInteger)i];
-    [enc setBuffer:bufO offset:0 atIndex:(NSUInteger)n_inputs];
-    [enc setBytes:&n_elements length:sizeof(int32_t)
-          atIndex:(NSUInteger)(n_inputs + 1)];
-    // Broadcast modulus at n_inputs+2. Harmless when the MSL omits it (no
-    // broadcast input) — Metal ignores a binding the kernel does not declare.
-    [enc setBytes:&cols length:sizeof(int32_t)
-          atIndex:(NSUInteger)(n_inputs + 2)];
-    MTLSize grid = MTLSizeMake((NSUInteger)n_elements, 1, 1);
-    NSUInteger tg = std::min<NSUInteger>((NSUInteger)n_elements,
-                                         pso.maxTotalThreadsPerThreadgroup);
-    if (tg == 0) tg = 1;
-    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+    encode_synth_pointwise(enc, pso, ins, bufO, n_elements, cols);
     [enc endEncoding];
     if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_pointwise"))
       return 0;
@@ -10855,9 +10866,10 @@ extern "C" int32_t tessera_apple_gpu_tile_simdgroup_gemm_bf16(
 //   buffers[2*i]   = role (0 input, 1 private, 2 output)
 //   buffers[2*i+1] = bytes
 //   hosts[i]       = input source / output destination (NULL for private)
-//   stages[10*j]   = kind (1 softmax f16, 2 TILE-1 simdgroup GEMM f16->f32),
+//   stages[10*j]   = kind (1 softmax f16, 2 TILE-1 simdgroup GEMM f16->f32,
+//                    3 tanh GELU f16, 4 synthesized f16 activation),
 //                    in0, in1 (-1 when unused), out, M, N, K, bm, bn, threads
-//   sources/entries[j] = MSL source + entry for kind 2 (NULL for kind 1)
+//   sources/entries[j] = MSL source + entry for kinds 2 and 4 (NULL otherwise)
 //   receipt[0..3]  = command buffers, dispatches, private buffers, GPU ns
 // Returns 1 on success, or a negative code: -1 frame contract, -2 no Metal
 // device, -3 pipeline, -4 allocation, -5 command buffer failed or timed out.
@@ -10869,7 +10881,7 @@ extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
     const int64_t* stages, const char* const* sources,
     const char* const* entries, int32_t stage_count, int64_t* receipt) {
   constexpr int64_t kInput = 0, kPrivate = 1, kOutput = 2;
-  constexpr int64_t kSoftmax = 1, kGemm = 2, kGelu = 3;
+  constexpr int64_t kSoftmax = 1, kGemm = 2, kGelu = 3, kSynthActivation = 4;
   if (!buffers || !hosts || !stages || !sources || !entries || !receipt ||
       buffer_count < 2 || buffer_count > 128 || stage_count < 1 ||
       stage_count > 64)
@@ -10904,6 +10916,13 @@ extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
           buffers[2 * in0 + 1] != 2 * M * K || buffers[2 * out + 1] != 2 * M * K ||
           (kind == kGelu && M * K > INT32_MAX))
         return -1;
+    } else if (kind == kSynthActivation) {
+      // X[M,K] -> Out[M,K], f16, elementwise over M*K elements with the
+      // compiler-synthesized kernel the stage carries (pointwise layout).
+      if (in1 != -1 || N != 1 || !sources[j] || !entries[j] ||
+          buffers[2 * in0 + 1] != 2 * M * K || buffers[2 * out + 1] != 2 * M * K ||
+          M * K > INT32_MAX)
+        return -1;
     } else if (kind == kGemm) {
       if (!in_range(in1) || !written[in1] || !sources[j] || !entries[j] ||
           st[7] <= 0 || st[8] <= 0 || st[9] != 32 ||
@@ -10930,7 +10949,9 @@ extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
       } else {
         psos[j] = compile_msl_kernel(ctx, [NSString stringWithUTF8String:sources[j]],
                                      [NSString stringWithUTF8String:entries[j]]);
-        if (psos[j] && psos[j].maxTotalThreadsPerThreadgroup < 32) psos[j] = nil;
+        if (psos[j] && stages[10 * j] == kGemm &&
+            psos[j].maxTotalThreadsPerThreadgroup < 32)
+          psos[j] = nil;
       }
       if (!psos[j]) return -3;
     }
@@ -10972,6 +10993,9 @@ extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
       else if (st[0] == kGelu)
         encode_gelu_f16(enc, psos[j], metal[st[1]], metal[st[3]],
                         static_cast<int32_t>(st[4] * st[6]));
+      else if (st[0] == kSynthActivation)
+        encode_synth_pointwise(enc, psos[j], {metal[st[1]]}, metal[st[3]],
+                               static_cast<int32_t>(st[4] * st[6]), K);
       else
         encode_tile_simdgroup_gemm(enc, psos[j], metal[st[1]], metal[st[2]],
                                    metal[st[3]], M, N, K, (int32_t)st[7],

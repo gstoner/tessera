@@ -1252,6 +1252,10 @@ def _gamma_layer_norm_product(x, g, w):
     return ts.ops.matmul(ts.ops.layer_norm(x, g), w, output_dtype="fp32")
 
 
+def _beta_layer_norm_product(x, b, w):
+    return ts.ops.matmul(ts.ops.layer_norm(x, beta=b), w, output_dtype="fp32")
+
+
 def _weighted_residual_product(x, g, b, w):
     # A pre-norm residual block: add(layer_norm(x; gamma, beta), x) @ w.
     return ts.ops.matmul(ts.ops.add(ts.ops.layer_norm(x, g, b), x), w, output_dtype="fp32")
@@ -1272,8 +1276,10 @@ def test_the_synthesized_weighted_norm_names_its_affine_contract():
     both = synthesize_norm_msl("layernorm", "bf16", epsilon_bits=bits, affine="gamma_beta")
     assert "B    [[buffer(5)]]" in both and "fma(y, float(G[c]), float(B[c]))" in both
     assert "affine=true bias=true" in both and "typedef bfloat T;" in both
-    # beta belongs to layer_norm only; an unknown form never falls back.
-    for kind, affine in (("rmsnorm", "gamma_beta"), ("layernorm", "beta")):
+    # The weighted forms are rmsnorm(gamma) and layernorm(gamma, beta); a
+    # gamma-only layernorm does not decode, and an unknown form never falls back.
+    for kind, affine in (("rmsnorm", "gamma_beta"), ("layernorm", "gamma"),
+                         ("layernorm", "beta")):
         with pytest.raises(ValueError, match="synthesized Apple norm"):
             synthesize_norm_msl(kind, "f16", epsilon_bits=bits, affine=affine)
 
@@ -1281,8 +1287,6 @@ def test_the_synthesized_weighted_norm_names_its_affine_contract():
 @pytest.mark.parametrize("fn, arrays, names, kind, affine", [
     (_weighted_rmsnorm_product, (_half(64, 32), _half(32), _half(32, 48)), ("x", "g", "w"),
      "rmsnorm", "gamma"),
-    (_gamma_layer_norm_product, (_half(64, 32), _half(32), _half(32, 48)), ("x", "g", "w"),
-     "layernorm", "gamma"),
     (_weighted_layer_norm_product, (_half(64, 32), _half(32), _half(32), _half(32, 48)),
      ("x", "g", "b", "w"), "layernorm", "gamma_beta"),
 ])
@@ -1345,7 +1349,7 @@ def test_a_weighted_norm_outside_the_apple_contract_is_refused():
 
 @pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("kind, affine", [
-    ("rmsnorm", "gamma"), ("layer_norm", "gamma"), ("layer_norm", "gamma_beta")])
+    ("rmsnorm", "gamma"), ("layer_norm", "gamma_beta")])
 @pytest.mark.parametrize("dtype", ["f16", "bf16"])
 def test_standalone_weighted_norm_rounds_the_f32_contract_once(kind, affine, dtype):
     from tests._support.apple import require_apple_chip_identity
@@ -1472,5 +1476,39 @@ def test_public_jit_declines_a_vector_input_that_is_not_a_norm_weight():
 
     program = ts.jit(target="apple_gpu")(unused_vector)
     program(_half(16, 8, seed=191), _half(8, seed=192), _half(8, 4, seed=193))
+    assert program._apple_tensor_last_receipt is None
+    assert set(program._apple_tensor_program_cache.values()) <= {None}
+
+
+
+@pytest.mark.parametrize("fn", [_gamma_layer_norm_product, _beta_layer_norm_product])
+def test_a_two_operand_layer_norm_member_is_refused(fn):
+    # The tracer drops keyword names: layer_norm(x, beta=b) and
+    # layer_norm(x, gamma) both arrive as (x, v), so neither may be read as a
+    # gamma (tessera.layer_norm is in the undecodable-operand ratchet).
+    program = _graph(fn, (_half(64, 32), _half(32), _half(32, 48)), ("x", "v", "w"))
+    assert len(program.functions[0].body[0].operands) == 2
+    with pytest.raises(RuntimeError, match="APPLE_TENSOR_PROGRAM_UNSUPPORTED: an Apple weighted "
+                                           "norm member is rmsnorm"):
+        atp.compile_apple_tensor_program(program)
+
+
+def test_an_isolated_two_operand_layer_norm_is_not_lowered_as_weighted():
+    from tessera.compiler.scheduled_kernel import lower_scheduled_kernel
+
+    x, b = _half(8, 16), _half(16)
+    module = to_graph_ir_module(trace(lambda x, b: ts.ops.layer_norm(x, beta=b), x, b,
+                                      arg_names=("x", "b")), name="s", target="apple_gpu")
+    with pytest.raises(ValueError, match="layer_norm\\(x, gamma, beta\\)"):
+        lower_scheduled_kernel(module, target="apple_gpu")
+
+
+@pytest.mark.hardware_apple_gpu
+def test_public_jit_declines_a_beta_only_layer_norm_program():
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    program = ts.jit(target="apple_gpu")(_beta_layer_norm_product)
+    program(_half(16, 8, seed=201), _half(8, seed=202), _half(8, 4, seed=203))
     assert program._apple_tensor_last_receipt is None
     assert set(program._apple_tensor_program_cache.values()) <= {None}

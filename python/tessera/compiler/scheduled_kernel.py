@@ -389,7 +389,7 @@ def _lower_apple_add(module: GraphIRModule) -> ScheduledKernelArtifact:
 def _lower_apple_affine_norm(module: GraphIRModule) -> ScheduledKernelArtifact:
     """Lower the isolated apple7 weighted row norm (APPLE-NTBI-2 slice 10).
 
-    ``rmsnorm(x, gamma)`` or ``layer_norm(x, gamma[, beta])`` over the
+    ``rmsnorm(x, gamma)`` or ``layer_norm(x, gamma, beta)`` over the
     function's arguments, in order, whose result is returned: ``x`` static
     rank two, gamma/beta the ``[columns]`` vector, all one f16 or bf16
     storage, no keyword beyond ``eps``/``axis = -1``. Every field is read
@@ -399,13 +399,17 @@ def _lower_apple_affine_norm(module: GraphIRModule) -> ScheduledKernelArtifact:
     op = function.body[0]
     operands = [value.removeprefix("%") for value in op.operands]
     args = [arg.name for arg in function.args]
-    limit = 3 if op.op_name == "tessera.layer_norm" else 2
-    if (not 2 <= len(args) <= limit or operands != args or len(function.result_types) != 1
+    # Only positionally decodable lists: rmsnorm(x, gamma), layer_norm(x,
+    # gamma, beta). A two-operand layer_norm may be (x, beta=b) -- the tracer
+    # drops keyword names -- so it is refused rather than read as gamma.
+    required = 3 if op.op_name == "tessera.layer_norm" else 2
+    if (len(args) != required or operands != args or len(function.result_types) != 1
             or set(op.kwargs) - {"eps", "epsilon", "axis"} or not op.result
             or len(function.return_values) != 1
             or function.return_values[0].removeprefix("%") != op.result.removeprefix("%")):
-        raise ValueError("scheduled apple7 weighted norm requires norm(x, gamma[, beta]) over "
-                         "its arguments, returned, with only eps/axis")
+        raise ValueError("scheduled apple7 weighted norm requires rmsnorm(x, gamma) or "
+                         "layer_norm(x, gamma, beta) over its arguments, returned, with only "
+                         "eps/axis")
     try:
         shapes = [tuple(int(d) for d in arg.ir_type.shape) for arg in function.args]
         output_shape = tuple(int(d) for d in function.result_types[0].shape)

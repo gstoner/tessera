@@ -92,3 +92,14 @@ module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
     return %0 : tensor<5x11xf16>
   }
 }
+
+// -----
+
+// A gamma-only layernorm does not decode (layer_norm(x, beta=b) traces the same).
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
+  func.func @gamma_only_layernorm(%x: tensor<5x11xf16>) -> tensor<5x11xf16> {
+    // expected-error @+1 {{a weighted norm requires apple7 with affine = true}}
+    %0 = schedule.norm %x {accum = "f32", affine = true, arch = "apple7", artifact_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", axis = -1 : i64, bias = false, epsilon = 1.0e-05 : f32, kind = "layernorm", storage = "f16", workgroup_size = 1 : i64} : tensor<5x11xf16> -> tensor<5x11xf16>
+    return %0 : tensor<5x11xf16>
+  }
+}

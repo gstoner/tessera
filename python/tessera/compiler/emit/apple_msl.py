@@ -1619,8 +1619,8 @@ def synthesize_norm_msl(kind: str, storage: str, *, epsilon_bits: int,
     """Emit the MSL for one Tile ``norm_kernel`` contract, deterministically.
 
     ``epsilon_bits`` is the f32 bit pattern the Schedule hashed. ``affine``
-    is ``"none"`` (slice 9), ``"gamma"`` or ``"gamma_beta"`` (slice 10, beta
-    for layernorm only); a weighted kernel reads gamma at buffer 4 and beta
+    is ``"none"`` (slice 9), ``"gamma"`` (rmsnorm) or ``"gamma_beta"``
+    (layernorm; slice 10); a weighted kernel reads gamma at buffer 4 and beta
     at buffer 5. A contract with no emitted form raises; it never falls back
     to another semantic.
     """
@@ -1629,6 +1629,9 @@ def synthesize_norm_msl(kind: str, storage: str, *, epsilon_bits: int,
 
     if (kind not in _NORM_BODIES or storage not in _NORM_TYPES
             or affine not in _NORM_AFFINE
+            # The weighted forms are rmsnorm(gamma) and layernorm(gamma, beta):
+            # a gamma-only layer_norm does not decode (beta=b traces the same).
+            or (affine == "gamma" and kind != "rmsnorm")
             or (affine == "gamma_beta" and kind != "layernorm")
             or type(epsilon_bits) is not int or not 0 <= epsilon_bits < 2**32):
         raise ValueError(

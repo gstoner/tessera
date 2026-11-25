@@ -2156,12 +2156,18 @@ static bool isIsolatedResultOverArguments(Operation *op) {
 /// the input's storage -- the only weighted form the apple7 kernel computes.
 /// The Graph->Schedule collector claims nothing else, so any other weighted
 /// norm keeps its existing route instead of failing closed here.
+///
+/// Only operand lists that decode by position are admitted: rmsnorm(x, gamma)
+/// and layer_norm(x, gamma, beta). A two-operand layer_norm is ambiguous --
+/// the tracer drops keyword names, so layer_norm(x, beta=b) and
+/// layer_norm(x, gamma=g) both arrive as (x, v) (tessera.layer_norm is in
+/// test_op_arity_contract's undecodable-operand ratchet) -- and is refused.
 static bool affineNormOperandsMatch(Operation *op) {
   auto input = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
   StringRef name = op->getName().getStringRef();
-  unsigned maxOperands = name == "tessera.layer_norm" ? 3 : name == "tessera.rmsnorm" ? 2 : 1;
-  if (!input || input.getRank() != 2 || !input.hasStaticShape() ||
-      op->getNumOperands() < 2 || op->getNumOperands() > maxOperands)
+  unsigned required = name == "tessera.layer_norm" ? 3 : name == "tessera.rmsnorm" ? 2 : 0;
+  if (!input || input.getRank() != 2 || !input.hasStaticShape() || required == 0 ||
+      op->getNumOperands() != required)
     return false;
   for (unsigned i = 1; i < op->getNumOperands(); ++i) {
     auto param = dyn_cast<RankedTensorType>(op->getOperand(i).getType());
@@ -2202,9 +2208,9 @@ static StringRef storageName(Type type) {
 static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op) {
   ModuleOp module = op->getParentOfType<ModuleOp>();
   bool binary = op->getName().getStringRef() == "tessera.add";
-  // APPLE-NTBI-2 slice 10: a weighted norm adds gamma (rmsnorm, layer_norm)
-  // or gamma and beta (layer_norm); the norm branch admits them on apple7
-  // only and refuses them for every other target.
+  // APPLE-NTBI-2 slice 10: a weighted norm adds gamma (rmsnorm) or gamma and
+  // beta (layer_norm); the norm branch admits them on apple7 only (and only
+  // the positionally decodable lists) and refuses them for every other target.
   bool weightedNorm =
       (op->getName().getStringRef() == "tessera.rmsnorm" && op->getNumOperands() == 2) ||
       (op->getName().getStringRef() == "tessera.layer_norm" &&

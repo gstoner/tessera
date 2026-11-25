@@ -1429,6 +1429,7 @@ def _tile_norm_contract(tile_ir: str) -> dict:
     affine = ("gamma_beta" if bias else "gamma") if weighted else "none"
     if (set(attrs) != {"kind", "storage", "accum"}
             or pointers != {"none": 2, "gamma": 3, "gamma_beta": 4}[affine]
+            or (weighted and bias != (attrs.get("kind") == "layernorm"))
             or (not weighted and (re.search(r"(?:^|, )affine = false(?:,|$)", attrs_text) is None
                                   or "bias = " in attrs_text))
             or (bias and attrs.get("kind") != "layernorm")
@@ -1503,7 +1504,7 @@ def _verify_apple_affine_norm_projection(artifact: ScheduledKernelArtifact) -> s
             or re.search(r"(?:^|, )affine = true(?:,|$)", norms[0]) is None
             or re.search(rf"(?:^|, )bias = {'true' if affine == 'gamma_beta' else 'false'}(?:,|$)",
                          norms[0]) is None
-            or (affine == "gamma_beta" and artifact.kind != "layernorm")
+            or affine != ("gamma_beta" if artifact.kind == "layernorm" else "gamma")
             or (artifact.storage, artifact.dtype) != (storage, _SYNTH_DTYPES[storage])
             or len(artifact.input_names) != 1 + len(vectors)
             or artifact.input_names[0] != artifact.input_name

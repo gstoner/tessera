@@ -149,3 +149,17 @@ module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
     return %o : tensor<64x48xf32>
   }
 }
+
+// -----
+
+// A two-operand layer_norm does not say whether its vector is gamma or beta
+// (the tracer drops keyword names), so it is not an Apple weighted member.
+// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: an Apple weighted norm member is rmsnorm(x, gamma) or layer_norm(x, gamma, beta)
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
+                   tessera.native.apple_tensor_program_request} {
+  func.func @two_operand_layer_norm(%x: tensor<64x32xf16>, %v: tensor<32xf16>, %w: tensor<32x48xf16>) -> tensor<64x48xf32> {
+    %n = tessera.layer_norm %x, %v : (tensor<64x32xf16>, tensor<32xf16>) -> tensor<64x32xf16>
+    %o = tessera.matmul %n, %w {output_dtype = "fp32"} : (tensor<64x32xf16>, tensor<32x48xf16>) -> tensor<64x48xf32>
+    return %o : tensor<64x48xf32>
+  }
+}

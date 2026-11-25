@@ -151,3 +151,16 @@ module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
 
 // SCHEDULE-LABEL: func.func @apple_weighted_norm_chain
 // SCHEDULE-NOT: schedule.norm
+
+// -----
+
+// A two-operand layer_norm may be layer_norm(x, beta=b): it is not claimed.
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
+  func.func @apple_two_operand_layer_norm(%x: tensor<5x11xf16>, %v: tensor<11xf16>) -> tensor<5x11xf16> {
+    %0 = tessera.layer_norm %x, %v : (tensor<5x11xf16>, tensor<11xf16>) -> tensor<5x11xf16>
+    return %0 : tensor<5x11xf16>
+  }
+}
+
+// SCHEDULE-LABEL: func.func @apple_two_operand_layer_norm
+// SCHEDULE-NOT: schedule.norm

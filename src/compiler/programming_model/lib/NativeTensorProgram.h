@@ -140,13 +140,14 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
           name != "tessera.layer_norm")
         return reject("an Apple member must be tessera.matmul, tessera.softmax, tessera.gelu, tessera.relu, tessera.add, tessera.rmsnorm or tessera.layer_norm");
       // APPLE-NTBI-2 slices 9 and 10: the synthesized row kernel computes
-      // the unweighted norm and the weighted one whose gamma (and, for
-      // layer_norm, beta) is the [columns] vector in the input's storage.
+      // the unweighted norm, rmsnorm(x, gamma) and layer_norm(x, gamma, beta)
+      // with [columns] vectors in the input's storage. A two-operand
+      // layer_norm does not say whether its vector is gamma or beta.
       if ((name == "tessera.rmsnorm" || name == "tessera.layer_norm") &&
           (op->getNumResults() != 1 ||
            (op->getNumOperands() != 1 && !affineNormOperandsMatch(op))))
-        return reject("an Apple norm member takes gamma (and beta for layer_norm) "
-                      "only as the [columns] vector in its storage");
+        return reject("an Apple weighted norm member is rmsnorm(x, gamma) or "
+                      "layer_norm(x, gamma, beta) with [columns] vectors in its storage");
       for (Type type : llvm::concat<Type>(op->getOperandTypes(), op->getResultTypes()))
         if (!isa<RankedTensorType>(type) || !cast<RankedTensorType>(type).hasStaticShape())
           return reject("the Apple native tensor program supports static shapes only");

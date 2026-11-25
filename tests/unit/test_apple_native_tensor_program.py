@@ -126,7 +126,8 @@ def test_frame_stages_must_bind_the_traced_operands(program):
 @pytest.mark.parametrize("fn, arrays, why", [
     (lambda a, c, b: ts.ops.matmul(ts.ops.mul(a, c), b, output_dtype="fp32"),
      (_half(64, 32), _half(64, 32), _half(32, 48)),
-     "must be tessera.matmul, tessera.softmax, tessera.gelu, tessera.relu or tessera.add"),
+     "must be tessera.matmul, tessera.softmax, tessera.gelu, tessera.relu, tessera.add, "
+     "tessera.rmsnorm or tessera.layer_norm"),
     (lambda a, b: ts.ops.softmax(ts.ops.matmul(a, b, output_dtype="fp32"), axis=-1),
      (_half(64, 32), _half(32, 48)), "must end in its matrix product"),
     (lambda a: ts.ops.matmul(a, a, output_dtype="fp32"),
@@ -990,5 +991,233 @@ def test_public_jit_runs_a_bf16_program_and_declines_bf16_softmax():
 
     declined = ts.jit(target="apple_gpu")(bf16_softmax_product)
     declined(x, w)
+    assert declined._apple_tensor_last_receipt is None
+    assert set(declined._apple_tensor_program_cache.values()) <= {None}
+
+
+# --- Slice 9: unweighted row norms as compiler-synthesized MSL -------------------
+
+
+def _norm_reference(kind, x, eps):
+    """The f32 contract: row statistics in f32, one rounding to storage after."""
+    x = np.asarray(x).astype(np.float32)
+    if kind == "layer_norm":
+        mean = x.mean(-1, keepdims=True)
+        return (x - mean) / np.sqrt(((x - mean) ** 2).mean(-1, keepdims=True) + eps)
+    return x / np.sqrt((x * x).mean(-1, keepdims=True) + eps)
+
+
+def _within_one_storage_step(got, reference, dtype):
+    """``got`` is the storage rounding of the f32 reference, or its neighbour."""
+    rounded = reference.astype(dtype)
+    bits = rounded.view(np.uint16).astype(np.int32)
+    above = (bits + 1).astype(np.uint16).view(dtype).astype(np.float32)
+    below = (bits - 1).astype(np.uint16).view(dtype).astype(np.float32)
+    # fmax: the neighbour of a signed zero across the sign bit is a NaN pattern.
+    with np.errstate(invalid="ignore"):
+        step = np.fmax(np.abs(above - rounded.astype(np.float32)),
+                       np.abs(rounded.astype(np.float32) - below))
+    error = np.abs(np.asarray(got).astype(np.float32) - reference)
+    assert np.isfinite(np.asarray(got).astype(np.float32)).all()
+    assert (error <= step).all(), float((error - step).max())
+
+
+def _rmsnorm_product(x, w):
+    return ts.ops.matmul(ts.ops.rmsnorm(x), w, output_dtype="fp32")
+
+
+def _layer_norm_product(x, w):
+    return ts.ops.matmul(ts.ops.layer_norm(x, eps=1e-6), w, output_dtype="fp32")
+
+
+def _residual_norm_product(x, w):
+    # A pre-norm residual: the add reads the program input and the norm.
+    return ts.ops.matmul(ts.ops.add(ts.ops.rmsnorm(x), x), w, output_dtype="fp32")
+
+
+def test_the_synthesized_norm_comes_from_the_tile_contract():
+    from tessera.compiler.emit.apple_msl import synthesize_norm_msl
+
+    bits = apple_native._f32_bits(1e-5)
+    source = synthesize_norm_msl("rmsnorm", "f16", epsilon_bits=bits)
+    assert "kernel void synth_norm_rmsnorm_f16(" in source and "typedef half T;" in source
+    assert f"as_type<float>(0x{bits:08x}u)" in source and "precise::sqrt" in source
+    layer = synthesize_norm_msl("layernorm", "bf16", epsilon_bits=bits)
+    assert "typedef bfloat T;" in layer and "- mean" in layer
+    for kind, storage, eps in (("rmsnorm", "f32", bits), ("groupnorm", "f16", bits),
+                               ("rmsnorm", "f16", apple_native._f32_bits(0.0)),
+                               ("rmsnorm", "f16", apple_native._f32_bits(float("inf")))):
+        with pytest.raises(ValueError, match="synthesized Apple norm"):
+            synthesize_norm_msl(kind, storage, epsilon_bits=eps)
+
+
+@pytest.mark.parametrize("fn, abi, kind", [
+    (_rmsnorm_product, "APPLE_SYNTH_NORM_F16_ABI", "rmsnorm"),
+    (_layer_norm_product, "APPLE_SYNTH_NORM_F16_ABI", "layernorm"),
+])
+def test_a_norm_member_packages_synthesized_msl(fn, abi, kind):
+    import hashlib
+
+    program = atp.compile_apple_tensor_program(
+        _graph(fn, (_half(64, 32), _half(32, 48)), ("x", "w")))
+    norm, product = program.stages
+    assert norm.carrier == "tile.norm_kernel"
+    descriptor = norm.package.descriptor
+    assert descriptor.abi_id == getattr(apple_native, abi)
+    assert descriptor.entry_symbol == apple_native.APPLE_SYNTH_ROWS_SYMBOL
+    assert (descriptor.provenance["kind"], descriptor.provenance["route"]) == (
+        kind, "apple_gpu_synth_norm_f16")
+    source = norm.package.target_ir.split("// ---- synthesized MSL ----\n", 1)[1]
+    assert hashlib.sha256(source.encode()).hexdigest() == descriptor.provenance["source_sha256"]
+    eps = 1e-6 if kind == "layernorm" else 1e-5
+    assert descriptor.provenance["epsilon_bits"] == apple_native._f32_bits(eps)
+    assert product.inputs == (norm.output, "w")
+    program.validate()
+
+
+def test_a_bf16_norm_member_packages_at_bf16():
+    program = atp.compile_apple_tensor_program(
+        _graph(_rmsnorm_product, (_bf(64, 32), _bf(32, 48)), ("x", "w")))
+    assert [stage.package.descriptor.abi_id for stage in program.stages] == [
+        apple_native.APPLE_SYNTH_NORM_BF16_ABI, apple_native.APPLE_SIMDGROUP_GEMM_BF16_ABI]
+
+
+def test_a_norm_package_refuses_a_tile_launch_with_another_epsilon():
+    from tessera.compiler.scheduled_kernel import lower_scheduled_kernel
+
+    x = _half(8, 16)
+    module = to_graph_ir_module(trace(lambda x: ts.ops.rmsnorm(x), x, arg_names=("x",)),
+                                name="s", target="apple_gpu")
+    kernel = lower_scheduled_kernel(module, target="apple_gpu")
+    drifted = dataclasses.replace(kernel, epsilon=2e-5)
+    with pytest.raises(ValueError):
+        apple_native.package_scheduled_kernel(drifted, pipeline_name=atp.PIPELINE)
+
+
+@pytest.mark.parametrize("fn, arrays", [
+    # f32 storage has no apple7 synthesized norm.
+    (lambda x: ts.ops.rmsnorm(x), (np.zeros((8, 16), np.float32),)),
+    # Rank three is outside the rank-two launch contract.
+    (lambda x: ts.ops.rmsnorm(x), (np.zeros((2, 8, 16), np.float16),)),
+    # A numeric-policy request selects nothing the kernel computes.
+    (lambda x: ts.ops.rmsnorm(x, numeric_policy={"accum": "fp32"}), (np.zeros((8, 16), np.float16),)),
+])
+def test_scheduled_norm_outside_the_apple_contract_is_refused(fn, arrays):
+    from tessera.compiler.scheduled_kernel import lower_scheduled_kernel
+
+    module = to_graph_ir_module(trace(fn, *arrays, arg_names=("x",)), name="s",
+                                target="apple_gpu")
+    with pytest.raises((ValueError, RuntimeError)):
+        lower_scheduled_kernel(module, target="apple_gpu")
+
+
+def test_a_weighted_norm_member_is_refused():
+    def weighted(x, g, w):
+        return ts.ops.matmul(ts.ops.rmsnorm(x, g), w, output_dtype="fp32")
+
+    with pytest.raises(RuntimeError, match="APPLE_TENSOR_PROGRAM_UNSUPPORTED: .*unweighted row norm"):
+        atp.compile_apple_tensor_program(
+            _graph(weighted, (_half(64, 32), _half(32), _half(32, 48)), ("x", "g", "w")))
+
+
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.parametrize("kind", ["rmsnorm", "layer_norm"])
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+def test_standalone_norm_rounds_the_f32_contract_once(kind, dtype):
+    from tests._support.apple import require_apple_chip_identity
+    from tessera.compiler.scheduled_kernel import lower_scheduled_kernel
+    from tessera.runtime import RuntimeArtifact, launch
+
+    require_apple_chip_identity()
+    storage = np.dtype(np.float16) if dtype == "f16" else _BF16
+    rng = np.random.default_rng(131)
+    # An offset mean, a wide scale, a constant row (layer_norm's eps-only
+    # variance) and an all-zero row (rmsnorm's eps-only mean square).
+    x = (rng.standard_normal((37, 53)) * 3 + 0.5).astype(storage)
+    x[3] = storage.type(2.0)
+    x[4] = storage.type(0.0)
+    op = getattr(ts.ops, kind)
+    module = to_graph_ir_module(trace(lambda x: op(x, eps=1e-5), x, arg_names=("x",)),
+                                name="s", target="apple_gpu")
+    package = apple_native.package_scheduled_kernel(
+        lower_scheduled_kernel(module, target="apple_gpu"), pipeline_name=atp.PIPELINE)
+    out_name = package.descriptor.buffers[-1].name
+    artifact = RuntimeArtifact(
+        metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
+        target_ir=package.target_ir, native_image=package.image,
+        launch_descriptor=package.descriptor)
+    launched = launch(artifact, {"x": x, out_name: np.full(x.shape, np.nan, storage)})
+    assert launched["ok"] and launched["execution_kind"] == "native_gpu"
+    _within_one_storage_step(launched["output"], _norm_reference(kind, x, 1e-5), storage)
+
+
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.parametrize("fn, shapes, members", [
+    (_rmsnorm_product, ((64, 32), (32, 48)), 2),
+    (_layer_norm_product, ((100, 37), (37, 53)), 2),
+    (_residual_norm_product, ((100, 37), (37, 53)), 3),
+])
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+def test_frame_owner_runs_norm_programs_in_one_command_buffer(fn, shapes, members, dtype):
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    make = _half if dtype == "f16" else _bf
+    arrays = [make(*shape, seed=i + 141) for i, shape in enumerate(shapes)]
+    inputs = dict(zip(("x", "w"), arrays))
+    program = atp.compile_apple_tensor_program(_graph(fn, arrays, ("x", "w")))
+    output, receipt = atp.execute_frame(program, inputs)
+    assert (receipt["command_buffers"], receipt["dispatches"]) == (1, members)
+    assert receipt["private_device_buffers"] == members - 1
+    sequential, _ = atp.run_members_sequentially(program, inputs)
+    assert output.dtype == np.float32 and output.tobytes() == sequential.tobytes()
+
+
+@pytest.mark.hardware_apple_gpu
+def test_frame_owner_refuses_a_norm_stage_without_its_kernel_or_extent():
+    import ctypes
+
+    from tessera._apple_gpu_dispatch import bind_registered
+
+    owner = bind_registered("tessera_apple_gpu_tensor_frame_execute")
+    assert owner is not None
+    x, out = np.zeros((4, 8), np.float16), np.full((4, 8), -1, np.float16)
+    hosts = (ctypes.c_void_p * 2)(x.ctypes.data, out.ctypes.data)
+    none = (ctypes.c_char_p * 1)(None)
+    receipt = (ctypes.c_int64 * 4)()
+    # Kind 5 carries its synthesized source; a stage without one is refused.
+    buffers = (ctypes.c_int64 * 4)(0, x.nbytes, 2, out.nbytes)
+    stage = (ctypes.c_int64 * 10)(5, 0, -1, 1, 4, 1, 8, 0, 0, 0)
+    assert owner(buffers, hosts, 2, stage, none, none, 1, receipt) == -1
+    # With its kernel, an output one element short is refused.
+    source, entry = apple_native.synthesized_norm_source(
+        "rmsnorm", "f16", apple_native._f32_bits(1e-5))
+    sources = (ctypes.c_char_p * 1)(source.encode())
+    entries = (ctypes.c_char_p * 1)(entry.encode())
+    short = (ctypes.c_int64 * 4)(0, x.nbytes, 2, out.nbytes - 2)
+    assert owner(short, hosts, 2, stage, sources, entries, 1, receipt) == -1
+    assert list(receipt) == [0, 0, 0, 0] and (out == -1).all()
+
+
+@pytest.mark.hardware_apple_gpu
+def test_public_jit_runs_a_norm_program_and_declines_a_weighted_norm():
+    from tests._support.apple import require_apple_chip_identity
+    from tessera import runtime as rt
+
+    require_apple_chip_identity()
+    x, w = _half(100, 37, seed=151), _half(37, 53, seed=152)
+    program = ts.jit(target="apple_gpu")(_residual_norm_product)
+    output = program(x, w)
+    receipt = program._apple_tensor_last_receipt
+    assert receipt["compiler_path"] == "canonical_apple_tensor_program"
+    assert (receipt["command_buffers"], receipt["dispatches"]) == (1, 3)
+    launched = rt.launch(program.runtime_artifact(), {"x": x, "w": w})
+    assert launched["ok"] and np.asarray(launched["output"]).tobytes() == output.tobytes()
+
+    def weighted(x, g, w):
+        return ts.ops.matmul(ts.ops.rmsnorm(x, g), w, output_dtype="fp32")
+
+    declined = ts.jit(target="apple_gpu")(weighted)
+    declined(x, _half(37, seed=153), w)
     assert declined._apple_tensor_last_receipt is None
     assert set(declined._apple_tensor_program_cache.values()) <= {None}

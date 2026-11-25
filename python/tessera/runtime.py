@@ -6731,6 +6731,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         APPLE_FLASH_ATTN_BWD_ALL_ABIS,
         APPLE_SYNTH_ACTIVATION_ABIS,
         APPLE_SYNTH_BINARY_ABIS,
+        APPLE_SYNTH_NORM_ABIS,
         APPLE_SYNTH_REDUCE_F32_ABI,
         APPLE_TRANSPOSE_BF16_ABI,
         APPLE_TRANSPOSE_F16_ABI,
@@ -6772,6 +6773,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 APPLE_FLASH_ATTN_VARIANT_F32_ABI,
                 *APPLE_SYNTH_ACTIVATION_ABIS.values(),
                 *APPLE_SYNTH_BINARY_ABIS.values(),
+                *APPLE_SYNTH_NORM_ABIS.values(),
                 APPLE_SYNTH_REDUCE_F32_ABI,
                 APPLE_TOPK_DYNAMIC_F32_I32_ABI,
                 APPLE_TRANSPOSE_F32_ABI,
@@ -7270,13 +7272,64 @@ def _submit_apple_gpu_native(
         APPLE_SYNTH_ACTIVATION_ABIS,
         APPLE_SYNTH_ACTIVATION_F16_SYMBOL,
         APPLE_SYNTH_BINARY_ABIS,
+        APPLE_SYNTH_NORM_ABIS,
         APPLE_SYNTH_REDUCE_F32_ABI,
         APPLE_SYNTH_REDUCE_F32_SYMBOL,
+        APPLE_SYNTH_ROWS_SYMBOL,
         APPLE_SYNTH_REDUCE_KINDS,
     )
 
     _synth_storage = {abi: storage for storage, abi in
                       (*APPLE_SYNTH_ACTIVATION_ABIS.items(), *APPLE_SYNTH_BINARY_ABIS.items())}
+    if descriptor.abi_id in APPLE_SYNTH_NORM_ABIS.values():
+        # APPLE-NTBI-2 slice 9: the f16/bf16 row norm as COMPILER-SYNTHESIZED
+        # MSL through the source-carrying row ABI, one thread per row. The
+        # kernel is re-derived from the packaged contract and digest-checked;
+        # a refusal raises instead of computing a reference.
+        import hashlib as _hashlib
+
+        from tessera._apple_gpu_dispatch import bind_registered
+        from tessera.compiler.apple_native import synthesized_norm_source
+
+        provenance = descriptor.provenance
+        ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+        if (descriptor.entry_symbol != APPLE_SYNTH_ROWS_SYMBOL or len(ordered) != 2
+                or [item.direction for item in ordered] != ["input", "output"]):
+            raise RuntimeError(
+                "Apple synthesized-norm descriptor ABI or buffer contract is invalid"
+            )
+        source_in, out = (buffers[item.name] for item in ordered)
+        norm_storage = {abi: st for st, abi in APPLE_SYNTH_NORM_ABIS.items()}[descriptor.abi_id]
+        element = "float16" if norm_storage == "f16" else "bfloat16"
+        if (not isinstance(source_in, np.ndarray) or not isinstance(out, np.ndarray)
+                or source_in.dtype.name != element or out.dtype.name != element
+                or not source_in.flags.c_contiguous or not out.flags.c_contiguous
+                or source_in.shape != out.shape or source_in.ndim != 2
+                or source_in.size > 2**31 - 1):
+            raise RuntimeError(
+                f"Apple synthesized norm requires contiguous rank-two {norm_storage} "
+                "buffers of one shape with an int32 element count"
+            )
+        epsilon_bits = provenance["epsilon_bits"]
+        if type(epsilon_bits) is not int:
+            raise RuntimeError("Apple synthesized norm descriptor lacks its epsilon bits")
+        source, entry = synthesized_norm_source(
+            str(provenance["kind"]), norm_storage, epsilon_bits)
+        if (_hashlib.sha256(source.encode()).hexdigest() != provenance["source_sha256"]
+                or entry != provenance["entry"]):
+            raise RuntimeError(
+                "Apple synthesized norm kernel does not match the packaged source digest"
+            )
+        rows_call = bind_registered(APPLE_SYNTH_ROWS_SYMBOL)
+        if rows_call is None:
+            raise RuntimeError(f"the Apple GPU runtime lacks {APPLE_SYNTH_ROWS_SYMBOL}")
+        status = rows_call(source.encode(), entry.encode(), source_in.ctypes.data,
+                           out.ctypes.data, int(source_in.shape[0]), int(source_in.shape[1]))
+        if status != 1:
+            raise RuntimeError(
+                f"Apple synthesized norm did not execute on Metal (status {status})")
+        return out
+
     if descriptor.abi_id in APPLE_SYNTH_BINARY_ABIS.values():
         # APPLE-NTBI-2 slice 7: the f16 add as COMPILER-SYNTHESIZED MSL, run
         # through the same source-carrying ABI with two inputs. The kernel is

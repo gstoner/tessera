@@ -2394,7 +2394,17 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
                        opName == "tessera.rmsnorm" &&
                        (schedule.storage == "f16" || schedule.storage == "bf16" ||
                         schedule.storage == "f32");
-    if ((!nvidia && !x86 && !gfx1201Norm) || (x86 && schedule.storage != "f32") ||
+    // APPLE-NTBI-2 slice 9 (2026-11-25): apple7 takes the static rank-two
+    // f16/bf16 unweighted row norm as compiler-synthesized MSL, one thread per
+    // row (serial, workgroup 1). The runtime ABI and frame stage take int32
+    // rows and columns over an int32 element count.
+    bool appleNorm = apple_gpu && schedule.arch == "apple7" &&
+                     (schedule.storage == "f16" || schedule.storage == "bf16") &&
+                     input.getRank() == 2 && input.hasStaticShape() &&
+                     !input.getEncoding() && input.getDimSize(0) > 0 &&
+                     input.getDimSize(1) > 0 && input.getDimSize(0) <= INT32_MAX &&
+                     input.getDimSize(1) <= INT32_MAX / input.getDimSize(0);
+    if ((!nvidia && !x86 && !gfx1201Norm && !appleNorm) || (x86 && schedule.storage != "f32") ||
         schedule.storage.empty() || input.getShape() != output.getShape() ||
         input.getElementType() != output.getElementType() ||
         (axis && axis.getInt() != -1 && axis.getInt() != input.getRank() - 1))
@@ -2468,6 +2478,18 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
       schedule.reductionSchedule = mode.getValue();
     if (schedule.reductionSchedule != "serial" &&
         (!nvidia || schedule.reductionSchedule != "cooperative_128")) return failure();
+    // The synthesized Apple row kernel computes exactly the eps/axis contract;
+    // any other keyword (a schedule request included) selects nothing it does.
+    if (appleNorm)
+      for (NamedAttribute attr : op->getAttrs()) {
+        StringRef key = attr.getName().getValue();
+        if (key == "schedule" || key == "numeric_policy") return failure();
+        if (key == "tessera.effect_kind" &&
+            attr.getValue() != StringAttr::get(op->getContext(), "pure"))
+          return failure();
+        if (key != "eps" && key != "axis" && key != "tessera.effect_kind" &&
+            key != "schedule.artifact_hash") return failure();
+      }
     return schedule;
   }
   if (opName == "tessera.softmax") {
@@ -4500,7 +4522,14 @@ struct GraphToSchedulePass
             isa<RankedTensorType>(op->getResult(0).getType()) &&
             (cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isF16() ||
              cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isBF16())));
-      if (binary || appleAdd || appleGelu || (name == "tessera.relu" && target == "nvidia_sm120") ||
+      // APPLE-NTBI-2 slice 9: likewise the isolated f16/bf16 row norm.
+      bool appleNorm = norm && target == "apple_gpu" && isIsolatedUnaryResult(op) &&
+          op->getNumResults() == 1 &&
+          isa<RankedTensorType>(op->getResult(0).getType()) &&
+          (cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isF16() ||
+           cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isBF16());
+      if (binary || appleAdd || appleGelu || appleNorm ||
+          (name == "tessera.relu" && target == "nvidia_sm120") ||
           name == "tessera.softmax" || name == "tessera.reduce" ||
           (norm && (target == "nvidia_sm120" ||
                     (target == "rocm" && architecture == "gfx1201" &&
@@ -5272,7 +5301,8 @@ struct ScheduleToTilePass
           if (child) child.walk([&](Operation *op) {
             auto name = op->getName().getStringRef();
             if (name == "tile.matmul_kernel" || name == "tile.softmax_kernel" ||
-                name == "tile.activation_kernel" || name == "tile.elementwise_kernel")
+                name == "tile.activation_kernel" || name == "tile.elementwise_kernel" ||
+                name == "tile.norm_kernel")
               carriers.push_back(op);
           });
           auto source = child ? child.lookupSymbol<func::FuncOp>("source") : func::FuncOp{};

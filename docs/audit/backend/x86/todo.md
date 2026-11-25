@@ -12753,3 +12753,5 @@ The plugin's x86 branch was refactored with the Apple consumer; the identity val
 ## `APPLE-NTBI-2-add-2026-11-24`: sibling outcome — not applicable — the apple7 f16 add admission is target-gated; x86 add lowering is unchanged.
 
 ## `APPLE-NTBI-2-bf16-2026-11-25`: sibling outcome — not applicable — apple7-gated bf16 admission; the x86 bf16 matmul contract is unchanged.
+
+## `APPLE-NTBI-2-norms-2026-11-25`: sibling outcome — not applicable — apple7-gated norm admission; the Zen 5 f32 unweighted norm contract is unchanged.

@@ -494,7 +494,9 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             raise ValueError("gfx1151 scheduled softmax requires f16/f32 storage preserved to the output")
         if not softmax_like and (dtype not in {"fp16", "bf16", "fp32"} or output_dtype != "fp32"):
             raise ValueError("gfx1151 scheduled reduction requires f16/bf16/f32 storage and f32 output")
-    elif target == "nvidia_sm120" or (target == "apple_gpu" and op.op_name in {"tessera.softmax", "tessera.gelu", "tessera.relu"}) or (
+    elif target == "nvidia_sm120" or (target == "apple_gpu" and op.op_name in {
+        "tessera.softmax", "tessera.gelu", "tessera.relu",
+        "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm"}) or (
         target == "rocm_gfx1201" and op.op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe"}
     ):
         expected_dtype = dtype if op.op_name in {"tessera.softmax", "tessera.softmax_safe", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm", "tessera.relu", "tessera.gelu"} else "fp32"
@@ -564,8 +566,19 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
 
         # E2E-REAL-6 x86 (2026-09-28): Zen 5 carries the static f32
         # unweighted row normalization the retired `package_cohort2` served.
-        norm = _norm_contract(module) if target in {"nvidia_sm120", "x86", "rocm_gfx1201"} else None
+        norm = (_norm_contract(module)
+                if target in {"nvidia_sm120", "x86", "rocm_gfx1201", "apple_gpu"} else None)
         if norm is not None and target == "x86" and norm[0] != "fp32":
+            norm = None
+        # APPLE-NTBI-2 slice 9 (2026-11-25): apple7 takes the static rank-two
+        # f16/bf16 unweighted norm as compiler-synthesized MSL. Its runtime ABI
+        # and frame stage take int32 extents; no keyword beyond eps/axis
+        # (a schedule request included) selects anything that kernel computes.
+        if norm is not None and target == "apple_gpu" and (
+            norm[0] not in {"fp16", "bf16"} or len(input_shape) != 2
+            or math.prod(input_shape) > 2**31 - 1
+            or set(op.kwargs) - {"eps", "epsilon", "axis"}
+        ):
             norm = None
         if norm is not None and target == "rocm_gfx1201" and (
             norm[0] not in {"fp16", "bf16", "fp32"} or norm[1] != "rmsnorm"

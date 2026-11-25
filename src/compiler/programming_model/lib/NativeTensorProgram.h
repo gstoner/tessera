@@ -122,8 +122,8 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
   // The Apple profile (APPLE-NTBI-2 slices 1, 5 and 6): a matrix product
   // whose producers are Apple-scheduled semantic kernels -- softmax, the tanh
   // GELU activation, and the f16 ReLU and add (compiler-synthesized MSL,
-  // slices 6 and 7) and the f16/bf16 unweighted row norms (synthesized MSL,
-  // slice 9) -- static shapes only.
+  // slices 6 and 7) and the f16/bf16 row norms (synthesized MSL; unweighted
+  // in slice 9, gamma/beta-weighted in slice 10) -- static shapes only.
   if (apple) {
     auto reject = [&](const char *why) {
       return root.emitError("APPLE_TENSOR_PROGRAM_UNSUPPORTED: ") << why;
@@ -139,11 +139,14 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
           name != "tessera.relu" && name != "tessera.add" && name != "tessera.rmsnorm" &&
           name != "tessera.layer_norm")
         return reject("an Apple member must be tessera.matmul, tessera.softmax, tessera.gelu, tessera.relu, tessera.add, tessera.rmsnorm or tessera.layer_norm");
-      // APPLE-NTBI-2 slice 9: the synthesized row kernel is the unweighted
-      // norm; a gamma/beta operand is a semantic it does not compute.
+      // APPLE-NTBI-2 slices 9 and 10: the synthesized row kernel computes
+      // the unweighted norm and the weighted one whose gamma (and, for
+      // layer_norm, beta) is the [columns] vector in the input's storage.
       if ((name == "tessera.rmsnorm" || name == "tessera.layer_norm") &&
-          (op->getNumOperands() != 1 || op->getNumResults() != 1))
-        return reject("an Apple norm member is the unweighted row norm");
+          (op->getNumResults() != 1 ||
+           (op->getNumOperands() != 1 && !affineNormOperandsMatch(op))))
+        return reject("an Apple norm member takes gamma (and beta for layer_norm) "
+                      "only as the [columns] vector in its storage");
       for (Type type : llvm::concat<Type>(op->getOperandTypes(), op->getResultTypes()))
         if (!isa<RankedTensorType>(type) || !cast<RankedTensorType>(type).hasStaticShape())
           return reject("the Apple native tensor program supports static shapes only");
@@ -339,7 +342,17 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
   }
   auto bufferType = [&](Value value) -> MemRefType {
     auto tensor = dyn_cast<RankedTensorType>(value.getType());
-    if (!tensor || tensor.getRank() != 2 ||
+    // APPLE-NTBI-2 slice 10: an Apple weighted norm's gamma/beta is a static
+    // rank-one [columns] program input used only as a norm's affine operand;
+    // every other buffer (each member result included) is rank two.
+    bool appleVector = apple && tensor && tensor.getRank() == 1 && tensor.hasStaticShape() &&
+        isa<BlockArgument>(value) && !value.use_empty() &&
+        llvm::all_of(value.getUses(), [](OpOperand &use) {
+          StringRef user = use.getOwner()->getName().getStringRef();
+          return use.getOperandNumber() >= 1 &&
+                 (user == "tessera.rmsnorm" || user == "tessera.layer_norm");
+        });
+    if (!tensor || (tensor.getRank() != 2 && !appleVector) ||
         (!tensor.hasStaticShape() && !shapeProfile && (!rowBound || !tensor.isDynamicDim(0) || tensor.isDynamicDim(1))) ||
         tensor.getEncoding() ||
         (!tensor.getElementType().isF16() && !tensor.getElementType().isBF16() &&
@@ -405,10 +418,14 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
     if (op->getNumResults() != 1 || !bufferType(op->getResult(0)) ||
         op->getNumRegions() || !isMemoryEffectFree(op) ||
         (!terminal && !live.contains(op)) ||
-        (!matrix && (op->getNumOperands() != (name == "tessera.add" ? 2u : 1u) ||
-                     !llvm::all_of(op->getOperandTypes(), [&](Type input) {
-                       return input == op->getResult(0).getType();
-                     }))))
+        (!matrix && !(apple && (name == "tessera.rmsnorm" || name == "tessera.layer_norm") &&
+                      op->getNumOperands() > 1 &&
+                      op->getOperand(0).getType() == op->getResult(0).getType() &&
+                      affineNormOperandsMatch(op)) &&
+         (op->getNumOperands() != (name == "tessera.add" ? 2u : 1u) ||
+          !llvm::all_of(op->getOperandTypes(), [&](Type input) {
+            return input == op->getResult(0).getType();
+          }))))
       return reject();
     for (Value input : op->getOperands())
       if (!available.contains(input)) return reject();
@@ -419,7 +436,7 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
   for (Operation *op : operations)
     storage.push_back(bufferType(op->getResult(0)));
   if (failed(tessera::native_tensor_program::verifyFrameCapacity(
-          root, storage, operations.size())))
+          root, storage, operations.size(), apple)))
     return failure();
   // Work on detached members first. No mutation of the original source occurs
   // until its complete dependency closure and each native leaf are admitted.
@@ -677,7 +694,7 @@ inline mlir::LogicalResult exportFrame(mlir::ModuleOp module) {
     if (native_tensor_program::isInvocation(&operation)) ++stageCount;
   }
   if (failed(tessera::native_tensor_program::verifyFrameCapacity(
-          host, storage, stageCount)))
+          host, storage, stageCount, apple)))
     return failure();
   llvm::DenseMap<Value,int64_t> ids;
   llvm::json::Array buffers, roots, stages;

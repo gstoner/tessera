@@ -2106,6 +2106,10 @@ struct SemanticKernelSchedule {
   // Empty for ReLU, which has none; "tanh" names the only GELU form the
   // Apple MSL consumer computes, so an erf GELU can never share its digest.
   StringRef approximation;
+  // APPLE-NTBI-2 slice 10: the affine operands of a weighted apple7 norm --
+  // 0 unweighted, 1 gamma, 2 gamma and beta (layer_norm only). Each is a
+  // static rank-one [columns] tensor in the input's storage.
+  unsigned affineOperands = 0;
 };
 
 /// Signed-zero contract of a storage-preserving activation. ReLU's f16 path
@@ -2130,20 +2134,49 @@ static bool isIsolatedUnaryResult(Operation *op) {
          function.getBody().front().getOperations().size() == 2;
 }
 
-/// Whether `op` is the whole body of its function: one binary op over the two
-/// arguments, in order, whose single result is returned and has no other use.
-static bool isIsolatedBinaryResult(Operation *op) {
+/// Whether `op` is the whole body of its function: one op over all of the
+/// function's arguments, in order, whose single result is returned and has no
+/// other use.
+static bool isIsolatedResultOverArguments(Operation *op) {
   auto function = op->getParentOfType<func::FuncOp>();
   if (!function || !llvm::hasSingleElement(function.getBody()) ||
-      function.getNumArguments() != 2 || function.getNumResults() != 1 ||
-      op->getNumOperands() != 2 || op->getNumResults() != 1 ||
-      op->getOperand(0) != function.getArgument(0) ||
-      op->getOperand(1) != function.getArgument(1) ||
-      !op->getResult(0).hasOneUse())
+      function.getNumArguments() != op->getNumOperands() ||
+      function.getNumResults() != 1 || op->getNumOperands() == 0 ||
+      op->getNumResults() != 1 || !op->getResult(0).hasOneUse())
     return false;
+  for (unsigned i = 0; i < op->getNumOperands(); ++i)
+    if (op->getOperand(i) != function.getArgument(i)) return false;
   auto ret = dyn_cast<func::ReturnOp>(*op->getResult(0).getUsers().begin());
   return ret && ret.getNumOperands() == 1 &&
          function.getBody().front().getOperations().size() == 2;
+}
+
+/// APPLE-NTBI-2 slice 10: whether every affine operand of a weighted norm
+/// (gamma, and beta for layer_norm) is the static rank-one [columns] vector in
+/// the input's storage -- the only weighted form the apple7 kernel computes.
+/// The Graph->Schedule collector claims nothing else, so any other weighted
+/// norm keeps its existing route instead of failing closed here.
+static bool affineNormOperandsMatch(Operation *op) {
+  auto input = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+  StringRef name = op->getName().getStringRef();
+  unsigned maxOperands = name == "tessera.layer_norm" ? 3 : name == "tessera.rmsnorm" ? 2 : 1;
+  if (!input || input.getRank() != 2 || !input.hasStaticShape() ||
+      op->getNumOperands() < 2 || op->getNumOperands() > maxOperands)
+    return false;
+  for (unsigned i = 1; i < op->getNumOperands(); ++i) {
+    auto param = dyn_cast<RankedTensorType>(op->getOperand(i).getType());
+    if (!param || param.getRank() != 1 || !param.hasStaticShape() ||
+        param.getEncoding() || param.getElementType() != input.getElementType() ||
+        param.getDimSize(0) != input.getDimSize(1))
+      return false;
+  }
+  return true;
+}
+
+/// Whether `op` is the whole body of its function: one binary op over the two
+/// arguments, in order, whose single result is returned and has no other use.
+static bool isIsolatedBinaryResult(Operation *op) {
+  return op->getNumOperands() == 2 && isIsolatedResultOverArguments(op);
 }
 
 /// The tessera.quantize_scaled consuming a norm result, seen directly at
@@ -2169,7 +2202,14 @@ static StringRef storageName(Type type) {
 static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op) {
   ModuleOp module = op->getParentOfType<ModuleOp>();
   bool binary = op->getName().getStringRef() == "tessera.add";
-  if (!module || op->getNumOperands() != (binary ? 2u : 1u) ||
+  // APPLE-NTBI-2 slice 10: a weighted norm adds gamma (rmsnorm, layer_norm)
+  // or gamma and beta (layer_norm); the norm branch admits them on apple7
+  // only and refuses them for every other target.
+  bool weightedNorm =
+      (op->getName().getStringRef() == "tessera.rmsnorm" && op->getNumOperands() == 2) ||
+      (op->getName().getStringRef() == "tessera.layer_norm" &&
+       (op->getNumOperands() == 2 || op->getNumOperands() == 3));
+  if (!module || (op->getNumOperands() != (binary ? 2u : 1u) && !weightedNorm) ||
       op->getNumResults() != 1)
     return failure();
   auto input = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
@@ -2404,6 +2444,12 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
                      !input.getEncoding() && input.getDimSize(0) > 0 &&
                      input.getDimSize(1) > 0 && input.getDimSize(0) <= INT32_MAX &&
                      input.getDimSize(1) <= INT32_MAX / input.getDimSize(0);
+    // APPLE-NTBI-2 slice 10: the affine operands are applied in f32 before
+    // the one rounding, so each must be the static [columns] vector in the
+    // input's storage. Only the apple7 synthesized kernel computes them.
+    unsigned affineOperands = op->getNumOperands() - 1;
+    if (affineOperands && (!appleNorm || !affineNormOperandsMatch(op))) return failure();
+    schedule.affineOperands = affineOperands;
     if ((!nvidia && !x86 && !gfx1201Norm && !appleNorm) || (x86 && schedule.storage != "f32") ||
         schedule.storage.empty() || input.getShape() != output.getShape() ||
         input.getElementType() != output.getElementType() ||
@@ -2605,6 +2651,10 @@ static std::string semanticKernelDigest(const SemanticKernelSchedule &schedule) 
     contract += ";epsilon_bits=" + Twine(llvm::APFloat(static_cast<float>(schedule.epsilon)).bitcastToAPInt().getZExtValue()).str();
     if (!schedule.outputStorage.empty())
       contract += (Twine(";output_storage=") + schedule.outputStorage + ";scale=per_tensor_f32").str();
+    // Only a weighted norm names its affine operands, so the established
+    // unweighted digests are byte-identical.
+    if (schedule.affineOperands)
+      contract += schedule.affineOperands == 2 ? ";affine=gamma_beta" : ";affine=gamma";
   }
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
                      /*LowerCase=*/true);
@@ -4523,7 +4573,10 @@ struct GraphToSchedulePass
             (cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isF16() ||
              cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isBF16())));
       // APPLE-NTBI-2 slice 9: likewise the isolated f16/bf16 row norm.
-      bool appleNorm = norm && target == "apple_gpu" && isIsolatedUnaryResult(op) &&
+      // Slice 10: a weighted norm is claimed the same way -- the isolated
+      // norm over (x, gamma[, beta]), the request its Apple package lowers.
+      bool appleNorm = norm && target == "apple_gpu" && isIsolatedResultOverArguments(op) &&
+          (op->getNumOperands() == 1 || affineNormOperandsMatch(op)) &&
           op->getNumResults() == 1 &&
           isa<RankedTensorType>(op->getResult(0).getType()) &&
           (cast<RankedTensorType>(op->getResult(0).getType()).getElementType().isF16() ||
@@ -4586,6 +4639,10 @@ struct GraphToSchedulePass
         if (!selected->outputStorage.empty()) {
           state.addAttribute("output_storage", builder.getStringAttr(selected->outputStorage));
           state.addAttribute("scale", builder.getStringAttr("per_tensor_f32"));
+        }
+        if (selected->affineOperands) {
+          state.addAttribute("affine", builder.getBoolAttr(true));
+          state.addAttribute("bias", builder.getBoolAttr(selected->affineOperands == 2));
         }
         tessera::addBoundedQueryNormShape(state,builder,selected->queryShape);
       } else if (selected->family == "softmax") {
@@ -6728,8 +6785,11 @@ struct ScheduleToTilePass
       bool isNorm = scheduled->getName().getStringRef() == "schedule.norm";
       bool isSoftmax = scheduled->getName().getStringRef() == "schedule.softmax";
       Operation *graph = scheduled->getOperand(0).getDefiningOp();
-      if (!graph || graph->getNumOperands() != (isBinary ? 2u : 1u) ||
-          graph->getNumResults() != 1) {
+      // A weighted (slice 10) norm retains its gamma[, beta] operands; the
+      // replayed selection below re-checks them against the Schedule hash.
+      if (!graph || graph->getNumResults() != 1 ||
+          (isNorm ? graph->getNumOperands() < 1u || graph->getNumOperands() > 3u
+                  : graph->getNumOperands() != (isBinary ? 2u : 1u))) {
         scheduled->emitError(
             "E2E-REAL-5 requires the retained Graph semantic-kernel result");
         return signalPassFailure();
@@ -6788,6 +6848,10 @@ struct ScheduleToTilePass
                   attrString("output_storage") != selected->outputStorage ||
                   attrString("scale") != (selected->outputStorage.empty() ? "" : "per_tensor_f32") ||
                   !eps || eps.getValueAsDouble() != selected->epsilon ||
+                  (selected->affineOperands
+                       ? attrBool("affine") != true ||
+                             attrBool("bias") != (selected->affineOperands == 2)
+                       : scheduled->hasAttr("affine") || scheduled->hasAttr("bias")) ||
                   queryShape->bounded != selected->queryShape.bounded ||
                   queryShape->sequenceBound != selected->queryShape.sequenceBound ||
                   queryShape->rowCapacity != selected->queryShape.rowCapacity ||
@@ -7036,12 +7100,31 @@ struct ScheduleToTilePass
             builder.create<arith::ConstantIntOp>(loc, selected->columns, 64);
         Value epsilon = builder.create<arith::ConstantOp>(
             loc, builder.getF32FloatAttr(selected->epsilon));
-        kernelState.addOperands({inputPointer, outputPointer, rows, columns, epsilon});
+        // APPLE-NTBI-2 slice 10: a weighted apple7 norm passes gamma (and
+        // beta) between the source and the destination:
+        // (x, gamma[, beta], o, rows, cols, eps).
+        kernelState.addOperands(inputPointer);
+        for (unsigned i = 1; i <= selected->affineOperands; ++i) {
+          Value param = graph->getOperand(i);
+          auto paramType = cast<RankedTensorType>(param.getType());
+          Value paramBuffer = builder.create<bufferization::ToBufferOp>(
+              loc, MemRefType::get(paramType.getShape(), paramType.getElementType()),
+              param);
+          Value paramIndex =
+              builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, paramBuffer);
+          Value paramInteger =
+              builder.create<arith::IndexCastOp>(loc, builder.getI64Type(), paramIndex);
+          kernelState.addOperands(
+              builder.create<LLVM::IntToPtrOp>(loc, pointerType, paramInteger).getResult());
+        }
+        kernelState.addOperands({outputPointer, rows, columns, epsilon});
         kernelState.addAttribute("kind", builder.getStringAttr(selected->kind));
         kernelState.addAttribute("storage", builder.getStringAttr(selected->storage));
         kernelState.addAttribute("accum", builder.getStringAttr(selected->accum));
         kernelState.addAttribute("axis", builder.getI64IntegerAttr(-1));
-        kernelState.addAttribute("affine", builder.getBoolAttr(false));
+        kernelState.addAttribute("affine", builder.getBoolAttr(selected->affineOperands != 0));
+        if (selected->affineOperands)
+          kernelState.addAttribute("bias", builder.getBoolAttr(selected->affineOperands == 2));
       } else if (isSoftmax) {
         Value rows = builder.create<arith::ConstantIntOp>(loc, selected->rows, 64);
         Value columns =

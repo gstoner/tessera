@@ -1596,45 +1596,84 @@ _NORM_BODIES = {
 }
 
 
-def norm_entry(kind: str, storage: str) -> str:
+#: APPLE-NTBI-2 slice 10 -- affine form -> the f32 expression the row body
+#: stores (``y`` is the normalized f32 value). gamma and beta are widened to
+#: f32 and applied before the one rounding to storage; ``fma`` makes the
+#: gamma*y+beta step one f32 rounding regardless of fast-math contraction.
+_NORM_AFFINE = {
+    "none": "y",
+    "gamma": "y * float(G[c])",
+    "gamma_beta": "fma(y, float(G[c]), float(B[c]))",
+}
+
+
+def norm_entry(kind: str, storage: str, affine: str = "none") -> str:
     """The synthesized norm kernel's entry symbol."""
-    return f"synth_norm_{kind}_{storage}"
+    if affine == "none":
+        return f"synth_norm_{kind}_{storage}"
+    return f"synth_norm_{kind}_{affine}_{storage}"
 
 
-def synthesize_norm_msl(kind: str, storage: str, *, epsilon_bits: int) -> str:
+def synthesize_norm_msl(kind: str, storage: str, *, epsilon_bits: int,
+                        affine: str = "none") -> str:
     """Emit the MSL for one Tile ``norm_kernel`` contract, deterministically.
 
-    ``epsilon_bits`` is the f32 bit pattern the Schedule hashed. A contract
-    with no emitted form raises; it never falls back to another semantic.
+    ``epsilon_bits`` is the f32 bit pattern the Schedule hashed. ``affine``
+    is ``"none"`` (slice 9), ``"gamma"`` or ``"gamma_beta"`` (slice 10, beta
+    for layernorm only); a weighted kernel reads gamma at buffer 4 and beta
+    at buffer 5. A contract with no emitted form raises; it never falls back
+    to another semantic.
     """
     import math
     import struct
 
     if (kind not in _NORM_BODIES or storage not in _NORM_TYPES
+            or affine not in _NORM_AFFINE
+            or (affine == "gamma_beta" and kind != "layernorm")
             or type(epsilon_bits) is not int or not 0 <= epsilon_bits < 2**32):
         raise ValueError(
-            f"no synthesized Apple norm for kind={kind!r} storage={storage!r}")
+            f"no synthesized Apple norm for kind={kind!r} storage={storage!r} "
+            f"affine={affine!r}")
     epsilon = struct.unpack("<f", struct.pack("<I", epsilon_bits))[0]
     if not math.isfinite(epsilon) or epsilon <= 0.0:
         raise ValueError("synthesized Apple norm epsilon must be positive finite f32")
     element = _NORM_TYPES[storage]
+    body = _NORM_BODIES[kind]
+    params = ""
+    contract = "affine=false"
+    if affine != "none":
+        # The unweighted store `o[c] = T(<y>);` becomes the weighted one.
+        normalized = ("float(x[c]) * inv" if kind == "rmsnorm"
+                      else "(float(x[c]) - mean) * inv")
+        stored = f"    for (uint c = 0; c < C; ++c) o[c] = T({normalized});\n"
+        if not body.endswith(stored):
+            raise RuntimeError(f"Apple norm body for {kind!r} has no store to weight")
+        body = body[: -len(stored)] + (
+            "    for (uint c = 0; c < C; ++c) {\n"
+            f"        const float y = {normalized};\n"
+            f"        o[c] = T({_NORM_AFFINE[affine]});\n"
+            "    }\n")
+        params = "    device const T*  G    [[buffer(4)]],\n"
+        if affine == "gamma_beta":
+            params += "    device const T*  B    [[buffer(5)]],\n"
+        contract = f"affine=true bias={'true' if affine == 'gamma_beta' else 'false'}"
     return f"""#include <metal_stdlib>
 using namespace metal;
-// Tile norm_kernel: kind={kind} storage={storage} accum=f32 axis=-1 affine=false schedule=serial epsilon_bits=0x{epsilon_bits:08x}
+// Tile norm_kernel: kind={kind} storage={storage} accum=f32 axis=-1 {contract} schedule=serial epsilon_bits=0x{epsilon_bits:08x}
 typedef {element} T;
-kernel void {norm_entry(kind, storage)}(
+kernel void {norm_entry(kind, storage, affine)}(
     device const T*  in0  [[buffer(0)]],
     device T*        O    [[buffer(1)]],
     constant int&    ROWS [[buffer(2)]],
     constant int&    COLS [[buffer(3)]],
-    uint gid [[thread_position_in_grid]])
+{params}    uint gid [[thread_position_in_grid]])
 {{
     if (gid >= (uint)ROWS) return;
     const float EPS = as_type<float>(0x{epsilon_bits:08x}u);
     const uint C = (uint)COLS;
     device const T* x = in0 + ulong(gid) * ulong(C);
     device T*       o = O   + ulong(gid) * ulong(C);
-{_NORM_BODIES[kind]}}}
+{body}}}
 """
 
 

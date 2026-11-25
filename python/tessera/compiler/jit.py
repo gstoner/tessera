@@ -3941,7 +3941,7 @@ class JitFn:
         Declines (other Apple routes stay eligible) only before admission: a
         missing compiler or runtime, inputs outside the profile's f16/bf16 storage, a
         body that cannot be traced, a traced body that is not a
-        softmax/GELU/ReLU/add/rmsnorm/layer_norm -> matmul DAG ending in its product, or the compiler's own
+        softmax/GELU/ReLU/add/rmsnorm/layer_norm (weighted or not) -> matmul DAG ending in its product, or the compiler's own
         ``APPLE_TENSOR_PROGRAM_UNSUPPORTED`` refusal. Any failure after the
         compiler formed the program raises.
         """
@@ -3950,7 +3950,10 @@ class JitFn:
         from .scheduled_matmul import find_tessera_opt
 
         # One f16 or bf16 storage across the program (APPLE-NTBI-2 slice 8).
-        if (any(value.ndim != 2 for value in ordered)
+        # Inputs are rank two, or rank one for a weighted norm's gamma/beta
+        # (slice 10); the compiler checks each binding.
+        if (any(value.ndim not in (1, 2) for value in ordered)
+                or not any(value.ndim == 2 for value in ordered)
                 or {value.dtype.name for value in ordered} not in ({"float16"}, {"bfloat16"})):
             return None
         # A cached program replays only the traced Graph. A host side effect
@@ -3975,6 +3978,17 @@ class JitFn:
         body = module.functions[0].body
         if (len(body) < 2 or any(op.op_name not in atp._CARRIERS for op in body)
                 or body[-1].op_name != "tessera.matmul"):
+            return None
+        # A rank-one input is admitted only as a weighted norm's gamma/beta
+        # (slice 10); any other use leaves the body to the other Apple routes.
+        vectors = {arg.name for arg, value in zip(module.functions[0].args, ordered)
+                   if value.ndim == 1}
+        for op in body:
+            for position, operand in enumerate(op.operands):
+                if operand.lstrip("%") in vectors and (
+                        position == 0 or op.op_name not in {"tessera.rmsnorm", "tessera.layer_norm"}):
+                    return None
+        if vectors - {operand.lstrip("%") for op in body for operand in op.operands[1:]}:
             return None
         # The program has exactly one result: the final product. Any other
         # return contract (a tuple, an intermediate) is refused by the

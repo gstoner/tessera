@@ -35,9 +35,13 @@ inline bool isInvocation(mlir::Operation *op) {
 }
 // The frame ABI carries only positive compact rank-two f32/f16/bf16
 // buffers. Check every root and allocation, even one not used by this stage.
-inline bool isPhysicalBuffer(mlir::Type raw) {
+// APPLE-NTBI-2 slice 10: an apple7 frame also carries the static rank-one
+// [columns] gamma/beta of a weighted norm (`allowVector`); the SM120 frame
+// owner's buffers stay rank two.
+inline bool isPhysicalBuffer(mlir::Type raw, bool allowVector = false) {
   auto type = mlir::dyn_cast<mlir::MemRefType>(raw);
-  if (!type || !type.hasStaticShape() || type.getRank() != 2 ||
+  if (!type || !type.hasStaticShape() ||
+      (type.getRank() != 2 && !(allowVector && type.getRank() == 1)) ||
       !type.getLayout().isIdentity() || type.getMemorySpace())
     return false;
   auto element = type.getElementType();
@@ -53,17 +57,18 @@ inline bool isPhysicalBuffer(mlir::Type raw) {
 // Arithmetic uses a wider intermediate so individually valid buffers cannot
 // overflow the aggregate 256-byte-aligned arena before allocation.
 inline mlir::LogicalResult verifyFrameCapacity(
-    mlir::Operation *anchor, llvm::ArrayRef<mlir::Type> buffers, size_t stages) {
+    mlir::Operation *anchor, llvm::ArrayRef<mlir::Type> buffers, size_t stages,
+    bool allowVectors = false) {
   using namespace mlir;
   if (buffers.size() < 2 || buffers.size() > 128 || stages < 1 || stages > 64)
     return anchor->emitOpError("native frame supports at most 64 stages and 128 buffers");
   __int128 arena = 0;
   for (Type raw : buffers) {
-    if (!isPhysicalBuffer(raw))
+    if (!isPhysicalBuffer(raw, allowVectors))
       return anchor->emitOpError("native frame capacity requires checked physical buffers");
     auto type = cast<MemRefType>(raw);
-    __int128 bytes = static_cast<__int128>(type.getDimSize(0)) *
-                     type.getDimSize(1) * (type.getElementType().isF32() ? 4 : 2);
+    __int128 bytes = type.getElementType().isF32() ? 4 : 2;
+    for (int64_t extent : type.getShape()) bytes *= extent;
     arena = (arena + bytes + 255) & ~static_cast<__int128>(255);
     if (arena > UINT64_MAX)
       return anchor->emitOpError("native frame aligned arena exceeds its 64-bit capacity");
@@ -288,9 +293,11 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
   if (!count || !count.getType().isInteger(64))
     return emitOpError("requires an i64 input count");
   int64_t reads = count.getInt();
+  // A weighted apple7 layer_norm member reads x, gamma and beta.
+  const bool appleFrame = programKind == ProgramTarget::Apple7;
   if (!schema || !schema.getType().isInteger(64) || schema.getInt() != moduleSchema.getInt() ||
       !host.getBody().hasOneBlock() ||
-      reads < 1 || reads > 2 || buffers.size() != unsigned(reads + 1))
+      reads < 1 || reads > (appleFrame ? 3 : 2) || buffers.size() != unsigned(reads + 1))
     return emitOpError("requires its typed native program and one fresh output");
   // A current invocation can precede malformed later view/allocation ops.
   // Validate their standard operand/result invariants before typed accessors
@@ -326,7 +333,7 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
     return emitOpError("bounded frame requires a positive row capacity");
   auto physical = [&](Type type) -> MemRefType {
     return bounded ? capacityType(type,rowBound.getInt()) :
-                     (isPhysicalBuffer(type) ? cast<MemRefType>(type) : MemRefType{});
+                     (isPhysicalBuffer(type, appleFrame) ? cast<MemRefType>(type) : MemRefType{});
   };
   for (Value argument : host.getArguments())
     if (!(shaped ? shape.capacity(argument) : physical(argument.getType())))
@@ -338,7 +345,8 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
     if (!isInvocation(&candidate)) continue;
     auto inputs = candidate.getAttrOfType<IntegerAttr>("input_count");
     if (!inputs || !inputs.getType().isInteger(64) || inputs.getInt() < 1 ||
-        inputs.getInt() > 2 || candidate.getNumOperands() != unsigned(inputs.getInt() + 1))
+        inputs.getInt() > (appleFrame ? 3 : 2) ||
+        candidate.getNumOperands() != unsigned(inputs.getInt() + 1))
       return candidate.emitOpError("requires checked input/output arity before program lifetime verification");
   }
   SmallVector<Type> storage;
@@ -354,7 +362,7 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
       owned.push_back(allocation.getResult());
     }
   }
-  if (failed(verifyFrameCapacity(op, storage, stages))) return failure();
+  if (failed(verifyFrameCapacity(op, storage, stages, appleFrame))) return failure();
   if (bounded) {
     auto i64 = [](IntegerAttr attr) { return attr && attr.getType().isInteger(64); };
     if (!i64(rowBound) || rowBound.getInt() <= 0 || rowBound.getInt() > INT32_MAX ||
@@ -380,7 +388,13 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
     if (shaped) return shape.matches(buffer, active);
     auto capacity = physical(buffer.getType());
     auto shape = dyn_cast<ShapedType>(active);
-    if (!shape || !shape.hasRank() || shape.getRank() != 2 ||
+    // An apple7 rank-one gamma/beta matches its static vector exactly.
+    if (appleFrame && capacity && shape && shape.hasRank() && shape.getRank() == 1)
+      return capacity.getRank() == 1 && shape.hasStaticShape() &&
+             shape.getElementType() == capacity.getElementType() &&
+             shape.getDimSize(0) == capacity.getDimSize(0);
+    if (!capacity || !shape || !shape.hasRank() || shape.getRank() != 2 ||
+        capacity.getRank() != 2 ||
         shape.getElementType() != capacity.getElementType()) return false;
     if (shape.getDimSize(1) != capacity.getDimSize(1)) return false;
     return activeRows(buffer) ? ShapedType::isDynamic(shape.getDimSize(0)) :

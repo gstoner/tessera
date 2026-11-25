@@ -579,6 +579,15 @@ LogicalResult NormOp::verify() {
         (output.getValue() != "fp8_e4m3" && output.getValue() != "fp8_e5m2"))
       return emitOpError("scaled norm output requires SM120 fp8_e4m3|fp8_e5m2 with a per_tensor_f32 scale");
   }
+  // APPLE-NTBI-2 slice 10: a weighted norm is apple7 only; `affine` is
+  // present exactly when `bias` is, `affine` is true, and only a layer_norm
+  // carries a beta.
+  if (getAffineAttr() || getBiasAttr()) {
+    if (!apple7 || !getAffineAttr() || !getBiasAttr() || !*getAffine() ||
+        (*getBias() && getKind() != "layernorm"))
+      return emitOpError("a weighted norm requires apple7 with affine = true and a "
+                         "bias flag (true only for layernorm)");
+  }
   return success();
 }
 

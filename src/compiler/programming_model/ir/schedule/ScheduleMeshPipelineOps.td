@@ -164,11 +164,16 @@ def Schedule_BinaryKernelOp : Op<ScheduleDialect, "binary_kernel", [Pure]> {
 }
 
 def Schedule_NormOp : Op<ScheduleDialect, "norm", [Pure]> {
-  let summary = "Scheduled unweighted row normalization with immutable epsilon";
+  let summary = "Scheduled row normalization with immutable epsilon";
+  // APPLE-NTBI-2 slice 10: `affine` marks a weighted apple7 norm whose Graph
+  // subject carries gamma, and `bias` its layer_norm beta. Both are absent on
+  // every unweighted norm; the hashed contract names them.
   let arguments = (ins AnyType:$subject, StrAttr:$artifact_hash,
                        StrAttr:$arch, StrAttr:$storage, StrAttr:$accum,
                        StrAttr:$kind, I64Attr:$axis, F32Attr:$epsilon,
                        I64Attr:$workgroup_size, DefaultValuedAttr<StrAttr, "\"serial\"">:$schedule,
+                       OptionalAttr<BoolAttr>:$affine,
+                       OptionalAttr<BoolAttr>:$bias,
                        OptionalAttr<StrAttr>:$shape_policy,
                        OptionalAttr<I64Attr>:$sequence_bound,
                        OptionalAttr<I64Attr>:$row_capacity,

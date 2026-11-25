@@ -10367,6 +10367,58 @@ extern "C" int32_t tessera_apple_gpu_synth_pointwise_reduce_f16(
                               out, rows, cols, sizeof(uint16_t));
 }
 
+// APPLE-NTBI-2 slice 9 (2026-11-25) — the synthesized row kernel layout
+// (in0, O, rows at 2, cols at 3), one thread per row over rows*cols
+// elements in and out. Encode-only: the standalone ABI below and the tensor
+// frame owner's row stage share it. The compiler-synthesized source names
+// the element type; this layer moves 16-bit element bytes.
+static void encode_synth_rows(id<MTLComputeCommandEncoder> enc,
+                              id<MTLComputePipelineState> pso,
+                              id<MTLBuffer> bufX, id<MTLBuffer> bufO,
+                              int32_t rows, int32_t cols) {
+  [enc setComputePipelineState:pso];
+  [enc setBuffer:bufX offset:0 atIndex:0];
+  [enc setBuffer:bufO offset:0 atIndex:1];
+  [enc setBytes:&rows length:sizeof(int32_t) atIndex:2];
+  [enc setBytes:&cols length:sizeof(int32_t) atIndex:3];
+  NSUInteger tg = std::min<NSUInteger>((NSUInteger)rows,
+                                       pso.maxTotalThreadsPerThreadgroup);
+  if (tg == 0) tg = 1;
+  [enc dispatchThreads:MTLSizeMake((NSUInteger)rows, 1, 1)
+      threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+}
+
+// Returns 1 after the dispatch completed and the output was copied out; 0
+// when nothing ran (bad arguments, no device, pipeline or buffer failure,
+// or a failed/timed-out command buffer). There is no reference path.
+extern "C" int32_t tessera_apple_gpu_synth_rows_f16(
+    const char *msl_source, const char *entry, const void *x, void *out,
+    int32_t rows, int32_t cols) {
+  if (!msl_source || !entry || !x || !out || rows <= 0 || cols <= 0 ||
+      static_cast<int64_t>(rows) * cols > INT32_MAX)
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        acquire_pipeline(ctx, msl_source, nullptr, entry);
+    if (!pso) return 0;
+    const NSUInteger bytes =
+        sizeof(uint16_t) * (NSUInteger)rows * (NSUInteger)cols;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, x, bytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, bytes);
+    if (!bufX || !bufO) return 0;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    encode_synth_rows(enc, pso, bufX, bufO, rows, cols);
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_rows_f16"))
+      return 0;
+    std::memcpy(out, [bufO contents], bytes);
+    return 1;
+  }
+}
+
 // ── AOT (`.metallib`) twins ──────────────────────────────────────────────────
 // Each is a wrapper over the same `_impl` its JIT sibling uses, differing only
 // in which pipeline source `acquire_pipeline` resolves. Adding a lane costs a
@@ -10868,9 +10920,10 @@ extern "C" int32_t tessera_apple_gpu_tile_simdgroup_gemm_bf16(
 //   hosts[i]       = input source / output destination (NULL for private)
 //   stages[10*j]   = kind (1 softmax f16, 2 TILE-1 simdgroup GEMM f16->f32,
 //                    3 tanh GELU f16, 4 synthesized f16 elementwise:
-//                    in1 = -1 for an activation, a written buffer for add),
+//                    in1 = -1 for an activation, a written buffer for add,
+//                    5 synthesized 16-bit row kernel (norm), in1 = -1),
 //                    in0, in1 (-1 when unused), out, M, N, K, bm, bn, threads
-//   sources/entries[j] = MSL source + entry for kinds 2 and 4 (NULL otherwise)
+//   sources/entries[j] = MSL source + entry for kinds 2, 4 and 5 (NULL otherwise)
 //   receipt[0..3]  = command buffers, dispatches, private buffers, GPU ns
 // Returns 1 on success, or a negative code: -1 frame contract, -2 no Metal
 // device, -3 pipeline, -4 allocation, -5 command buffer failed or timed out.
@@ -10882,7 +10935,8 @@ extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
     const int64_t* stages, const char* const* sources,
     const char* const* entries, int32_t stage_count, int64_t* receipt) {
   constexpr int64_t kInput = 0, kPrivate = 1, kOutput = 2;
-  constexpr int64_t kSoftmax = 1, kGemm = 2, kGelu = 3, kSynthActivation = 4;
+  constexpr int64_t kSoftmax = 1, kGemm = 2, kGelu = 3, kSynthActivation = 4,
+                    kSynthRows = 5;
   if (!buffers || !hosts || !stages || !sources || !entries || !receipt ||
       buffer_count < 2 || buffer_count > 128 || stage_count < 1 ||
       stage_count > 64)
@@ -10924,6 +10978,13 @@ extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
       if ((in1 != -1 && (!in_range(in1) || !written[in1] ||
                          buffers[2 * in1 + 1] != 2 * M * K)) ||
           N != 1 || !sources[j] || !entries[j] ||
+          buffers[2 * in0 + 1] != 2 * M * K || buffers[2 * out + 1] != 2 * M * K ||
+          M * K > INT32_MAX)
+        return -1;
+    } else if (kind == kSynthRows) {
+      // X[M,K] -> Out[M,K], 16-bit, one thread per row with the
+      // compiler-synthesized row kernel the stage carries (norm).
+      if (in1 != -1 || N != 1 || !sources[j] || !entries[j] ||
           buffers[2 * in0 + 1] != 2 * M * K || buffers[2 * out + 1] != 2 * M * K ||
           M * K > INT32_MAX)
         return -1;
@@ -11003,6 +11064,8 @@ extern "C" int32_t tessera_apple_gpu_tensor_frame_execute(
       else if (st[0] == kSynthActivation)
         encode_synth_pointwise(enc, psos[j], {metal[st[1]], metal[st[2]]}, metal[st[3]],
                                static_cast<int32_t>(st[4] * st[6]), K);
+      else if (st[0] == kSynthRows)
+        encode_synth_rows(enc, psos[j], metal[st[1]], metal[st[3]], M, K);
       else
         encode_tile_simdgroup_gemm(enc, psos[j], metal[st[1]], metal[st[2]],
                                    metal[st[3]], M, N, K, (int32_t)st[7],

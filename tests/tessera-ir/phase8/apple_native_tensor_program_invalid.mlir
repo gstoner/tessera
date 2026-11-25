@@ -6,7 +6,7 @@
 // RUN: not tessera-opt %s --split-input-file --tessera-graph-to-schedule 2>&1 | FileCheck %s
 
 // mul has no Apple scheduled kernel (relu and add became members in slices 6 and 7).
-// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: an Apple member must be tessera.matmul, tessera.softmax, tessera.gelu, tessera.relu or tessera.add
+// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: an Apple member must be tessera.matmul, tessera.softmax, tessera.gelu, tessera.relu, tessera.add, tessera.rmsnorm or tessera.layer_norm
 module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
                    tessera.native.apple_tensor_program_request} {
   func.func @mul_product(%a: tensor<64x32xf16>, %c: tensor<64x32xf16>, %b: tensor<32x48xf16>) -> tensor<64x48xf32> {
@@ -119,6 +119,32 @@ module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
   func.func @bf16_softmax(%s: tensor<64x32xbf16>, %v: tensor<32x48xbf16>) -> tensor<64x48xf32> {
     %p = tessera.softmax %s {axis = -1 : i64} : (tensor<64x32xbf16>) -> tensor<64x32xbf16>
     %o = tessera.matmul %p, %v {output_dtype = "fp32"} : (tensor<64x32xbf16>, tensor<32x48xbf16>) -> tensor<64x48xf32>
+    return %o : tensor<64x48xf32>
+  }
+}
+
+// -----
+
+// APPLE-NTBI-2 slice 9: the synthesized row kernel is the unweighted norm.
+// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: an Apple norm member is the unweighted row norm
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
+                   tessera.native.apple_tensor_program_request} {
+  func.func @weighted_norm(%x: tensor<64x32xf16>, %g: tensor<32xf16>, %w: tensor<32x48xf16>) -> tensor<64x48xf32> {
+    %n = tessera.rmsnorm %x, %g : (tensor<64x32xf16>, tensor<32xf16>) -> tensor<64x32xf16>
+    %o = tessera.matmul %n, %w {output_dtype = "fp32"} : (tensor<64x32xf16>, tensor<32x48xf16>) -> tensor<64x48xf32>
+    return %o : tensor<64x48xf32>
+  }
+}
+
+// -----
+
+// f32 norms have no apple7 synthesized kernel (the frame is 16-bit).
+// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: no apple7 scheduled kernel for this producer
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
+                   tessera.native.apple_tensor_program_request} {
+  func.func @f32_norm(%x: tensor<64x32xf32>, %w: tensor<32x48xf32>) -> tensor<64x48xf32> {
+    %n = tessera.rmsnorm %x : (tensor<64x32xf32>) -> tensor<64x32xf32>
+    %o = tessera.matmul %n, %w : (tensor<64x32xf32>, tensor<32x48xf32>) -> tensor<64x48xf32>
     return %o : tensor<64x48xf32>
   }
 }

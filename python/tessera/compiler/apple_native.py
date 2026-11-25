@@ -1243,7 +1243,8 @@ def package_scheduled_kernel(
         or artifact.architecture != "apple7"
         or artifact.accum != "f32"
         or (artifact.dtype, artifact.storage) not in (("fp32", "f32"), ("fp16", "f16"), ("bf16", "bf16"))
-        or (artifact.family not in {"softmax", "activation", "binary"} and artifact.storage != "f32")
+        or (artifact.family not in {"softmax", "activation", "binary", "norm"}
+            and artifact.storage != "f32")
     ):
         raise ValueError(
             "Apple GPU scheduled kernel requires the f32 apple7 contract"
@@ -1253,6 +1254,8 @@ def package_scheduled_kernel(
     _verify_kernel_schedule_ancestry(artifact)
     if artifact.family == "reduce":
         return _package_scheduled_reduce(artifact, pipeline_name=pipeline_name)
+    if artifact.family == "norm":
+        return _package_scheduled_norm(artifact, pipeline_name=pipeline_name)
     if artifact.family == "activation" and artifact.kind == "relu":
         return _package_scheduled_relu(artifact, pipeline_name=pipeline_name)
     if artifact.family == "activation":
@@ -1370,6 +1373,156 @@ def synthesized_binary_source(kind: str, storage: str, nan_mode: str) -> tuple[s
     from .emit.apple_msl import binary_entry, synthesize_binary_msl
 
     return synthesize_binary_msl(kind, storage, nan_mode=nan_mode), binary_entry(kind, storage)
+
+
+APPLE_SYNTH_NORM_F16_ABI = "tessera.apple.synth.norm.x_o_rows_columns.f16.v1"
+APPLE_SYNTH_NORM_BF16_ABI = "tessera.apple.synth.norm.x_o_rows_columns.bf16.v1"
+#: storage -> synthesized row-norm ABI (APPLE-NTBI-2 slice 9). Both run
+#: through the 16-bit source-carrying row symbol; the source names the type.
+APPLE_SYNTH_NORM_ABIS = {"f16": APPLE_SYNTH_NORM_F16_ABI, "bf16": APPLE_SYNTH_NORM_BF16_ABI}
+#: The source-carrying row ABI: buffers (x, O, rows, cols), one thread per row.
+APPLE_SYNTH_ROWS_SYMBOL = "tessera_apple_gpu_synth_rows_f16"
+
+
+def _f32_bits(value: float) -> int:
+    import struct
+
+    return struct.unpack("<I", struct.pack("<f", value))[0]
+
+
+def _tile_norm_contract(tile_ir: str) -> dict:
+    """The numerical contract the one ``tile.norm_kernel`` launch carries.
+
+    The epsilon is the f32 constant the launch passes as its last operand,
+    read back as its bit pattern; nothing comes from Python fields.
+    """
+    import re
+
+    lines = re.findall(r"(?m)^\s*tile\.norm_kernel (%[\w.]+), (%[\w.]+), (%[\w.]+), "
+                       r"(%[\w.]+), (%[\w.]+) \{([^{}]*)\} : !llvm\.ptr, !llvm\.ptr, i64, i64, f32$",
+                       tile_ir)
+    if len(lines) != 1:
+        raise ValueError("Apple synthesized norm requires one Tile norm launch")
+    *_, rows_ssa, columns_ssa, eps_ssa, attrs_text = lines[0]
+    attrs = dict(re.findall(r'\b(kind|storage|accum) = "([^"]+)"', attrs_text))
+    if (set(attrs) != {"kind", "storage", "accum"}
+            or re.search(r"(?:^|, )affine = false(?:,|$)", attrs_text) is None
+            or re.search(r"(?:^|, )axis = -1 : i64(?:,|$)", attrs_text) is None
+            or re.search(r"(?:^|, )tessera\.workgroup_size = 1 : i64(?:,|$)", attrs_text) is None
+            or "schedule = " in attrs_text or "output_storage" in attrs_text):
+        raise ValueError("Apple synthesized norm Tile launch lacks its numerical contract")
+
+    def constant(ssa: str, kind: str) -> str:
+        found = re.findall(rf"(?m)^\s*{re.escape(ssa)} = arith\.constant ([^\s:]+) : {kind}$", tile_ir)
+        if len(found) != 1:
+            raise ValueError("Apple synthesized norm Tile launch lacks a constant operand")
+        return found[0]
+
+    try:
+        epsilon = float(constant(eps_ssa, "f32"))
+        rows, columns = int(constant(rows_ssa, "i64")), int(constant(columns_ssa, "i64"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Apple synthesized norm Tile launch constants are malformed") from exc
+    return {**attrs, "epsilon_bits": _f32_bits(epsilon), "rows": rows, "columns": columns}
+
+
+def synthesized_norm_source(kind: str, storage: str, epsilon_bits: int) -> tuple[str, str]:
+    """``(msl, entry)`` for one Tile norm contract, deterministically."""
+    from .emit.apple_msl import norm_entry, synthesize_norm_msl
+
+    return (synthesize_norm_msl(kind, storage, epsilon_bits=epsilon_bits),
+            norm_entry(kind, storage))
+
+
+def _package_scheduled_norm(
+    artifact: ScheduledKernelArtifact,
+    *,
+    pipeline_name: str,
+) -> AppleNativePackage:
+    """Package the apple7 f16/bf16 row norm as compiler-synthesized MSL.
+
+    APPLE-NTBI-2 slice 9 (2026-11-25). The Schedule decision is replayed and
+    projected (``verify_unary_projection``); the kernel is emitted from the
+    contract the replayed Tile launch carries (kind, storage, the epsilon's
+    f32 bits), its source digest recorded in the Target IR and re-verified at
+    submission. A failed dispatch raises; there is no reference path.
+    """
+    _verify_kernel_schedule_ancestry(artifact)
+    contract = _tile_norm_contract(artifact.tile_ir)
+    storage = contract["storage"]
+    if (storage not in APPLE_SYNTH_NORM_ABIS or contract["accum"] != "f32"
+            or contract["kind"] != artifact.kind or artifact.storage != storage
+            or artifact.dtype != _SYNTH_DTYPES[storage] or len(artifact.input_shape) != 2
+            or artifact.input_shape != artifact.output_shape
+            or (contract["rows"], contract["columns"]) != artifact.input_shape
+            or contract["epsilon_bits"] != _f32_bits(artifact.epsilon)):
+        raise ValueError("Apple GPU scheduled norm supports only the rank-two f16/bf16 contract")
+    rows, columns = artifact.input_shape
+    if rows * columns > 2**31 - 1:
+        raise ValueError("Apple GPU scheduled norm takes int32 extents")
+    source, entry = synthesized_norm_source(contract["kind"], storage, contract["epsilon_bits"])
+    source_digest = hashlib.sha256(source.encode()).hexdigest()
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError(
+            "APPLE-NTBI-2 Apple GPU scheduled norm requires a fresh Tessera "
+            "Apple GPU runtime dylib"
+        )
+    dtype = _SYNTH_DTYPES[storage]
+    symbol, abi = APPLE_SYNTH_ROWS_SYMBOL, APPLE_SYNTH_NORM_ABIS[storage]
+    epsilon_hex = f"0x{contract['epsilon_bits']:08x}"
+    target_ir = (
+        f'tessera_apple.gpu.msl_kernel @{symbol} '
+        f'{{abi = "{abi}", kind = "{contract["kind"]}", storage = "{storage}", '
+        f'accumulation = "f32", epsilon_bits = "{epsilon_hex}", entry = "{entry}", '
+        f'source_sha256 = "{source_digest}", schedule_hash = "{artifact.schedule_digest}", '
+        f'status = "executable"}}\n// ---- synthesized MSL ----\n{source}'
+    )
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    image = NativeImageArtifact(
+        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="shared_object", payload=payload,
+        entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
+    )
+    x, out = artifact.input_name, artifact.output_name
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        buffers=(
+            BufferBinding(0, x, "input", dtype, 2, "row_major", 2),
+            BufferBinding(1, out, "output", dtype, 2, "row_major", 2),
+        ),
+        shape_guards=tuple(
+            ShapeGuard(name, axis, "eq", extent)
+            for name in (x, out)
+            for axis, extent in enumerate(artifact.input_shape)
+        ),
+        geometry=LaunchGeometry(policy="apple_msl_synth_rows"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("return",),
+        ),
+        provenance={
+            "work_item": "APPLE-NTBI-2",
+            "route": f"apple_gpu_synth_norm_{storage}",
+            "op_kind": contract["kind"],
+            "family": "norm",
+            "kind": contract["kind"],
+            "synthesized": True,
+            "entry": entry,
+            "source_sha256": source_digest,
+            "epsilon_bits": contract["epsilon_bits"],
+            "accumulation": "f32",
+            "shape": list(artifact.input_shape),
+            "storage": dtype,
+            "dynamic_shape": False,
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return AppleNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
 
 
 def _verify_apple_binary_projection(artifact: ScheduledKernelArtifact) -> dict:

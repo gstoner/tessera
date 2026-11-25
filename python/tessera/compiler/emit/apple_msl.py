@@ -1563,6 +1563,82 @@ kernel void {binary_entry(kind, storage)}(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# APPLE-NTBI-2 slice 9 (2026-11-25) — the scheduled Tile `norm_kernel` contract
+# (unweighted rmsnorm / layernorm over the last axis, f32 accumulation, one
+# rounding to storage) as synthesized MSL. One thread walks one row in index
+# order (the Tile `serial` schedule), so the reduction order is fixed by the
+# source. The epsilon is baked in as its exact f32 bit pattern, so the source
+# digest covers it. Division and square root use the `precise` forms: Metal
+# compiles with fast math by default. The buffer layout (in0, O, rows, cols)
+# is shared by the standalone `tessera_apple_gpu_synth_rows_f16` call and the
+# tensor frame owner's row stage.
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: storage -> MSL element type of a synthesized norm kernel's buffers.
+_NORM_TYPES = {"f16": "half", "bf16": "bfloat"}
+#: kind -> the row body. `x` is the row, `C` its length, `EPS` the epsilon.
+_NORM_BODIES = {
+    "rmsnorm": (
+        "    float ss = 0.0f;\n"
+        "    for (uint c = 0; c < C; ++c) { const float v = float(x[c]); ss = fma(v, v, ss); }\n"
+        "    const float inv = precise::divide(1.0f,\n"
+        "        precise::sqrt(precise::divide(ss, float(C)) + EPS));\n"
+        "    for (uint c = 0; c < C; ++c) o[c] = T(float(x[c]) * inv);\n"),
+    "layernorm": (
+        "    float s = 0.0f;\n"
+        "    for (uint c = 0; c < C; ++c) s += float(x[c]);\n"
+        "    const float mean = precise::divide(s, float(C));\n"
+        "    float ss = 0.0f;\n"
+        "    for (uint c = 0; c < C; ++c) { const float d = float(x[c]) - mean; ss = fma(d, d, ss); }\n"
+        "    const float inv = precise::divide(1.0f,\n"
+        "        precise::sqrt(precise::divide(ss, float(C)) + EPS));\n"
+        "    for (uint c = 0; c < C; ++c) o[c] = T((float(x[c]) - mean) * inv);\n"),
+}
+
+
+def norm_entry(kind: str, storage: str) -> str:
+    """The synthesized norm kernel's entry symbol."""
+    return f"synth_norm_{kind}_{storage}"
+
+
+def synthesize_norm_msl(kind: str, storage: str, *, epsilon_bits: int) -> str:
+    """Emit the MSL for one Tile ``norm_kernel`` contract, deterministically.
+
+    ``epsilon_bits`` is the f32 bit pattern the Schedule hashed. A contract
+    with no emitted form raises; it never falls back to another semantic.
+    """
+    import math
+    import struct
+
+    if (kind not in _NORM_BODIES or storage not in _NORM_TYPES
+            or type(epsilon_bits) is not int or not 0 <= epsilon_bits < 2**32):
+        raise ValueError(
+            f"no synthesized Apple norm for kind={kind!r} storage={storage!r}")
+    epsilon = struct.unpack("<f", struct.pack("<I", epsilon_bits))[0]
+    if not math.isfinite(epsilon) or epsilon <= 0.0:
+        raise ValueError("synthesized Apple norm epsilon must be positive finite f32")
+    element = _NORM_TYPES[storage]
+    return f"""#include <metal_stdlib>
+using namespace metal;
+// Tile norm_kernel: kind={kind} storage={storage} accum=f32 axis=-1 affine=false schedule=serial epsilon_bits=0x{epsilon_bits:08x}
+typedef {element} T;
+kernel void {norm_entry(kind, storage)}(
+    device const T*  in0  [[buffer(0)]],
+    device T*        O    [[buffer(1)]],
+    constant int&    ROWS [[buffer(2)]],
+    constant int&    COLS [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{{
+    if (gid >= (uint)ROWS) return;
+    const float EPS = as_type<float>(0x{epsilon_bits:08x}u);
+    const uint C = (uint)COLS;
+    device const T* x = in0 + ulong(gid) * ulong(C);
+    device T*       o = O   + ulong(gid) * ulong(C);
+{_NORM_BODIES[kind]}}}
+"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # M5 — pointwise -> plain row-reduction fusion (sum/mean/amax/amin).
 #
 # A pointwise chain feeding a plain reduction over the last axis — sum(x*x) (L2²),

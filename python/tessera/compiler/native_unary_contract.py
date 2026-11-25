@@ -92,6 +92,13 @@ def verify_unary_projection(artifact, parent: str) -> None:
         norm_target_ok = artifact.target == 'x86' or (
             artifact.target == 'rocm' and artifact.architecture == 'gfx1201'
             and storage in {'f16', 'bf16', 'f32'} and kind is not None and kind[1] == 'rmsnorm'
+        ) or (
+            # APPLE-NTBI-2 slice 9 (2026-11-25): the apple7 f16/bf16 rank-two
+            # serial row norm, consumed as compiler-synthesized MSL.
+            (artifact.target, artifact.architecture) == ('apple_gpu', 'apple7')
+            and storage in {'f16', 'bf16'} and len(input_shape) == 2
+            and re.search(r'(?:^|, )arch = "apple7"(?:,|$)', attrs) is not None
+            and 'schedule = ' not in attrs
         )
         if (not norm_target_ok or axis != -1 or output_shape != input_shape
                 or kind is None or eps is None

@@ -19646,3 +19646,5 @@ The attention VJP plugin's ROCm branch was refactored alongside the new Apple co
 ## `APPLE-NTBI-2-add-2026-11-24`: sibling outcome — not applicable — the apple7 f16 add admission is target-gated; no ROCm add lowering, ABI or result changes.
 
 ## `APPLE-NTBI-2-bf16-2026-11-25`: sibling outcome — not applicable — apple7-gated bf16 admission; no ROCm lowering, ABI or result changes.
+
+## `APPLE-NTBI-2-norms-2026-11-25`: sibling outcome — not applicable — apple7-gated norm admission; the gfx1201 RMSNorm row contract, its workgroup and its lowering are unchanged.

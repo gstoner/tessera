@@ -553,10 +553,21 @@ LogicalResult NormOp::verify() {
   bool gfx1201 = getArch() == "gfx1201" && getWorkgroupSize() == 256 &&
                  (getStorage() == "f16" || getStorage() == "bf16" || getStorage() == "f32") &&
                  getKind() == "rmsnorm";
-  if ((!sm120 && !zen5 && !gfx1201) || getAccum() != "f32" || getAxis() != -1 ||
+  // APPLE-NTBI-2 slice 9 (2026-11-25): apple7 f16/bf16, one serial row
+  // thread, static rank two (the synthesized kernel's int32 extents).
+  auto subject = dyn_cast<RankedTensorType>(getSubject().getType());
+  bool apple7 = getArch() == "apple7" && getWorkgroupSize() == 1 &&
+                (getStorage() == "f16" || getStorage() == "bf16") &&
+                getSchedule() == "serial" && subject && subject.getRank() == 2 &&
+                subject.hasStaticShape() && subject.getDimSize(0) > 0 &&
+                subject.getDimSize(1) > 0 && subject.getDimSize(0) <= INT32_MAX &&
+                subject.getDimSize(1) <= INT32_MAX / subject.getDimSize(0) &&
+                !getOperation()->hasAttr("row_bound") &&
+                !getOperation()->hasAttr("shape_bounds");
+  if ((!sm120 && !zen5 && !gfx1201 && !apple7) || getAccum() != "f32" || getAxis() != -1 ||
       (getKind() != "rmsnorm" && getKind() != "layernorm") ||
       !getEpsilon().isFinite() || getEpsilon().convertToDouble() <= 0.0)
-    return emitOpError("requires SM120, Zen 5, or the bounded gfx1201 RMSNorm row contract with positive finite f32 epsilon");
+    return emitOpError("requires SM120, Zen 5, apple7 f16/bf16 serial, or the bounded gfx1201 RMSNorm row contract with positive finite f32 epsilon");
   if (getSchedule() != "serial" && (!sm120 || getSchedule() != "cooperative_128"))
     return emitOpError("norm cooperative_128 schedule requires SM120");
   // SM120-W11-FP8-RHS-20261026: a fused quantize_scaled store names its FP8

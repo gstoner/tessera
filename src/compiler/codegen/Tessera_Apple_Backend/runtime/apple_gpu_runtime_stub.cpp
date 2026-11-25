@@ -1208,6 +1208,12 @@ extern "C" int32_t tessera_apple_gpu_synth_pointwise_f16(
   return 0;
 }
 
+// APPLE-NTBI-2 slice 9: the synthesized row (norm) kernel; nothing runs.
+extern "C" int32_t tessera_apple_gpu_synth_rows_f16(
+    const char*, const char*, const void*, void*, int32_t, int32_t) {
+  return 0;
+}
+
 extern "C" int32_t tessera_apple_gpu_synth_pointwise_reduce_f32(
     const char*, const char*, const void* const*, int32_t, void*, int32_t,
     int32_t) {

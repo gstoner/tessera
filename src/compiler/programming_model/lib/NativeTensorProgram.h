@@ -118,12 +118,12 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
   if (operations.size() == 2 && product->getNumOperands() == 2)
     if (Operation *rhs = product->getOperand(1).getDefiningOp())
       if (rhs->getName().getStringRef() == "tessera.dequantize_scaled")
-        return decline("an Apple member must be tessera.matmul, tessera.softmax, tessera.gelu, tessera.relu or tessera.add");
+        return decline("an Apple member must be tessera.matmul, tessera.softmax, tessera.gelu, tessera.relu, tessera.add, tessera.rmsnorm or tessera.layer_norm");
   // The Apple profile (APPLE-NTBI-2 slices 1, 5 and 6): a matrix product
   // whose producers are Apple-scheduled semantic kernels -- softmax, the tanh
   // GELU activation, and the f16 ReLU and add (compiler-synthesized MSL,
-  // slices 6 and 7) -- static shapes only. rmsnorm/layer_norm have no Apple
-  // scheduled carrier.
+  // slices 6 and 7) and the f16/bf16 unweighted row norms (synthesized MSL,
+  // slice 9) -- static shapes only.
   if (apple) {
     auto reject = [&](const char *why) {
       return root.emitError("APPLE_TENSOR_PROGRAM_UNSUPPORTED: ") << why;
@@ -136,10 +136,16 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
     for (Operation *op : operations) {
       auto name = op->getName().getStringRef();
       if (name != "tessera.matmul" && name != "tessera.softmax" && name != "tessera.gelu" &&
-          name != "tessera.relu" && name != "tessera.add")
-        return reject("an Apple member must be tessera.matmul, tessera.softmax, tessera.gelu, tessera.relu or tessera.add");
+          name != "tessera.relu" && name != "tessera.add" && name != "tessera.rmsnorm" &&
+          name != "tessera.layer_norm")
+        return reject("an Apple member must be tessera.matmul, tessera.softmax, tessera.gelu, tessera.relu, tessera.add, tessera.rmsnorm or tessera.layer_norm");
+      // APPLE-NTBI-2 slice 9: the synthesized row kernel is the unweighted
+      // norm; a gamma/beta operand is a semantic it does not compute.
+      if ((name == "tessera.rmsnorm" || name == "tessera.layer_norm") &&
+          (op->getNumOperands() != 1 || op->getNumResults() != 1))
+        return reject("an Apple norm member is the unweighted row norm");
       for (Type type : llvm::concat<Type>(op->getOperandTypes(), op->getResultTypes()))
-        if (!cast<RankedTensorType>(type).hasStaticShape())
+        if (!isa<RankedTensorType>(type) || !cast<RankedTensorType>(type).hasStaticShape())
           return reject("the Apple native tensor program supports static shapes only");
       // APPLE-NTBI-2 slice 8: the bf16 softmax and GELU runtime routes round
       // trip through host f32 buffers; they have no on-device bf16 kernel a

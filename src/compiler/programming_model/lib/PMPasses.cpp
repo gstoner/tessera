@@ -2272,7 +2272,10 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
         input.getEncoding() || op->getOperand(1).getType() != input ||
         schedule.storage.empty() || (appleAdd && schedule.storage != "f16") ||
         !llvm::all_of(inputCapacity, [](int64_t d) { return d > 0 && d <= INT32_MAX; }) ||
-        inputCapacity[0] * inputCapacity[1] > static_cast<int64_t>(INT32_MAX) * 128)
+        inputCapacity[0] * inputCapacity[1] > static_cast<int64_t>(INT32_MAX) * 128 ||
+        // The Apple kernel and frame stage take one int32 element count, so
+        // admission refuses here rather than at the Schedule verifier.
+        (appleAdd && inputCapacity[0] * inputCapacity[1] > INT32_MAX))
       return failure();
     for (NamedAttribute attr : op->getAttrs()) {
       StringRef name = attr.getName().getValue();
@@ -2333,7 +2336,9 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     // Match the checked runtime envelope before forming a flat grid or bytes.
     int64_t rows = inputCapacity[0];
     if (rows >= (1LL << 31) || inputCapacity[1] >= (1LL << 31) ||
-        rows > (1LL << 31) / inputCapacity[1])
+        rows > (1LL << 31) / inputCapacity[1] ||
+        // The apple7 synthesized kernel takes one int32 element count.
+        (appleRelu && rows * inputCapacity[1] > INT32_MAX))
       return failure();
     schedule.family = "activation";
     schedule.kind = "relu";

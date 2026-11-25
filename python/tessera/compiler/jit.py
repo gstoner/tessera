@@ -1706,6 +1706,11 @@ class JitFn:
             return native_storage(*args, **kwargs)
         native_routes_declined = False
         try:
+            if self._statement_calls():
+                # No native route may trace a body it cannot replay whole.
+                raise _DroppedCallTraceDecline(
+                    "the body runs " + ", ".join(self._statement_calls())
+                    + " for its side effect")
             source_attention = self._try_source_attention_call(args, kwargs)
             if source_attention is not _JIT_FALLBACK:
                 return source_attention
@@ -2842,6 +2847,24 @@ class JitFn:
         self._cached_artifact = call.artifact
         self.last_fallback_reason = None
         return array
+
+    def _statement_calls(self) -> Tuple[str, ...]:
+        """Unresolved calls the body runs as statements, for their effect.
+
+        Every native route captures the body by tracing it once per signature
+        and replays that capture on warm calls, so a call made only for its
+        side effect (``log.append(x)``, ``print(y)``) ran once, while tracing,
+        and never again -- measured on gfx1151, gfx1201 and sm_120
+        (JIT-NATIVE-STATEMENT-EFFECT-2026-11-24). A body that has one declines
+        every native route; the dropped-call guard then runs it eagerly.
+        """
+        cached = self.__dict__.get("_statement_call_scan")
+        if cached is None:
+            from .effect_scan import scan_call_effects
+
+            cached = scan_call_effects(self._fn, self._frontend_source_text).statement_calls
+            self.__dict__["_statement_call_scan"] = cached
+        return cached
 
     def _scan_is_source_attention(self) -> bool:
         """Whether the body's resolved calls are exactly rmsnorm, flash_attn."""

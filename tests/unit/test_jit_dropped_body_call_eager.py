@@ -262,3 +262,75 @@ def test_declarations_docstrings_and_catalogued_statements_are_not_dropped_calls
     x = _x()
     np.testing.assert_allclose(np.asarray(fn(x)), np.maximum(x, 0.0))
     assert fn.last_fallback_reason is None
+
+
+# ── JIT-NATIVE-STATEMENT-EFFECT-2026-11-24: native routes replay a trace ────
+# Every native route traces the body once per signature and replays the
+# capture on warm calls, so a statement run for its effect ran once, while
+# tracing (gfx1151, gfx1201: 1 of 3 calls), or once more than asked when the
+# route traced and then declined (sm_120: 4 of 3). A body with one now
+# declines every native route before any trace.
+
+from tessera.compiler.effect_scan import scan_call_effects  # noqa: E402
+
+
+def _helper_that_logs(x):
+    _EFFECT_LOG.append(2)
+    return tessera.ops.relu(x)
+
+
+def _calls_a_logging_helper(x: Tensor["N"]):
+    return _helper_that_logs(x)
+
+
+def _numpy_value_and_pure_builtin_statement(x: Tensor["N"]):
+    scale = np.float32(0.5)
+    len(x)
+    return tessera.ops.mul(x, scale)
+
+
+def _uninvoked_logging_def(x: Tensor["N"]):
+    def never(y):
+        print(y)
+    return tessera.ops.relu(x)
+
+
+def test_scan_reports_statement_calls_in_the_body_and_its_helpers():
+    assert scan_call_effects(_logs_then_relu).statement_calls == ("_EFFECT_LOG.append",)
+    assert scan_call_effects(_calls_a_logging_helper).statement_calls == (
+        "_helper_that_logs->_EFFECT_LOG.append",)
+
+
+@pytest.mark.parametrize("body", [
+    _numpy_value_and_pure_builtin_statement, _uninvoked_logging_def,
+    _declares_then_relu, _catalogued_statement_then_relu, _relu_then_numpy_exp])
+def test_scan_reports_no_statement_call_for_value_calls_and_declarations(body):
+    assert scan_call_effects(body).statement_calls == ()
+
+
+@pytest.mark.parametrize("target", ["nvidia_sm120", "rocm_gfx1151", "rocm_gfx1201"])
+@pytest.mark.parametrize("body", [_logs_then_relu, _calls_a_logging_helper])
+def test_a_statement_effect_declines_every_native_route_before_tracing(target, body, monkeypatch):
+    fn = tessera.jit(target=target)(body)
+
+    def traced(*_args, **_kwargs):
+        pytest.fail("a native route traced a body it cannot replay whole")
+
+    monkeypatch.setattr(fn, "_trace_frontend_capture", traced)
+    monkeypatch.setattr(fn, "_try_source_attention_call", traced)
+    monkeypatch.setattr(fn, "_try_traced_native_routes", traced)
+    del _EFFECT_LOG[:]
+    x = _x()
+    for _ in range(3):
+        np.testing.assert_allclose(np.asarray(fn(x)), np.maximum(x, 0.0))
+    assert len(_EFFECT_LOG) == 3
+    assert fn.last_fallback_reason is REASON
+
+
+@pytest.mark.parametrize("target", ["nvidia_sm120", "rocm_gfx1201"])
+def test_native_required_refuses_a_native_target_with_a_statement_effect(target):
+    fn = tessera.jit(target=target, native_required=True)(_logs_then_relu)
+    with pytest.raises(TesseraNativeRequiredError) as info:
+        fn(_x())
+    assert info.value.reason is REASON
+    assert "_EFFECT_LOG.append" in str(info.value)

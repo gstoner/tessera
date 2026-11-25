@@ -68,6 +68,12 @@ class CallScan:
     # included, while a nested ``def`` or named lambda the body never invokes
     # contributes nothing (``effect`` still joins it, conservatively).
     ops: Tuple[Tuple[str, str], ...] = ()
+    # Dotted spellings of unresolved calls the body can execute as a
+    # statement, its result unused (``log.append(x)``, ``print(y)``), helpers
+    # it calls included. Such a call runs only for its side effect, which no
+    # compiled program carries: a route that traces the body once and replays
+    # the trace would run it once, while tracing, and never again.
+    statement_calls: Tuple[str, ...] = ()
 
 
 def _ops_name(obj: Any, dotted: str) -> Optional[str]:
@@ -312,7 +318,8 @@ def scan_call_effects(
     state.scan_scope(node, {}, _ROOT)
     unresolved = tuple(state.unresolved)
     effect = Effect.top if unresolved else state.effect
-    return CallScan(effect, tuple(state.effectful), unresolved, True, state.reachable_ops())
+    return CallScan(effect, tuple(state.effectful), unresolved, True, state.reachable_ops(),
+                    state.reachable_statements())
 
 
 class _ScanState:
@@ -328,12 +335,16 @@ class _ScanState:
         # (owning scope, op name, dotted spelling); ``reachable_ops`` keeps
         # the ones whose scope the body invokes.
         self.ops: list[Tuple[int, str, str]] = []
+        # (owning scope, dotted spelling) of unresolved statement calls.
+        self.statements: list[Tuple[int, str]] = []
+        # ids of the Call nodes that are a whole expression statement.
+        self.statement_nodes: set = set()
         # owning scope -> nested scopes it calls by name.
         self.invokes: Dict[int, set] = {}
         self.scope_names: Dict[int, Dict[str, list]] = {}
         self.current = _ROOT
 
-    def reachable_ops(self) -> Tuple[Tuple[str, str], ...]:
+    def _reached(self) -> set:
         reached = {_ROOT}
         frontier = [_ROOT]
         while frontier:
@@ -341,7 +352,20 @@ class _ScanState:
                 if callee not in reached:
                     reached.add(callee)
                     frontier.append(callee)
+        return reached
+
+    def reachable_ops(self) -> Tuple[Tuple[str, str], ...]:
+        reached = self._reached()
         return tuple((op, dotted) for owner, op, dotted in self.ops if owner in reached)
+
+    def reachable_statements(self) -> Tuple[str, ...]:
+        reached = self._reached()
+        return tuple(dotted for owner, dotted in self.statements if owner in reached)
+
+    def unresolved_call(self, call: ast.Call, dotted: str) -> None:
+        self.unresolved.append(dotted)
+        if id(call) in self.statement_nodes:
+            self.statements.append((self.current, dotted))
 
     def join(self, op: str, op_effect: Any) -> None:
         from .effects import Effect
@@ -377,6 +401,9 @@ class _ScanState:
         names = {**(visible or {}), **local}
         self.scope_names[owner] = names
         self.current = owner
+        self.statement_nodes.update(
+            id(child.value) for child in own
+            if isinstance(child, ast.Expr) and isinstance(child.value, ast.Call))
         for child in own:
             if isinstance(child, (ast.Global, ast.Nonlocal)):
                 self.unresolved.append(f"<{type(child).__name__.lower()}>")
@@ -403,9 +430,9 @@ class _ScanState:
             # Calling the result of a call, a subscript or a lambda literal:
             # nothing names the callee, so nothing can be resolved.
             if isinstance(call.func, ast.Attribute):
-                self.unresolved.append(f"<expression>.{call.func.attr}")
+                self.unresolved_call(call, f"<expression>.{call.func.attr}")
             else:
-                self.unresolved.append("<dynamic>")
+                self.unresolved_call(call, "<dynamic>")
             return
         root = dotted.split(".")[0]
         local = bindings.get(root)
@@ -415,7 +442,7 @@ class _ScanState:
                 self.invokes.setdefault(self.current, set()).add(helper)
             return
         if isinstance(local, str):
-            self.unresolved.append(dotted)  # a method on a value, or a rebound name
+            self.unresolved_call(call, dotted)  # a method on a value, or a rebound name
             return
         if local is not None:
             obj = _resolve_dotted({root: local}, dotted)
@@ -425,7 +452,7 @@ class _ScanState:
             if ("." not in dotted and root in _PURE_BUILTINS
                     and getattr(builtins, root, None) is not None):
                 return
-            self.unresolved.append(dotted)
+            self.unresolved_call(call, dotted)
             return
         if _is_constraint_declaration(obj):
             return
@@ -441,5 +468,7 @@ class _ScanState:
             self.effectful.extend(inner.effectful_ops)
             self.ops.extend((self.current, op, spelling) for op, spelling in inner.ops)
             self.unresolved.extend(f"{dotted}->{name}" for name in inner.unresolved)
+            self.statements.extend(
+                (self.current, f"{dotted}->{name}") for name in inner.statement_calls)
             return
-        self.unresolved.append(dotted)
+        self.unresolved_call(call, dotted)

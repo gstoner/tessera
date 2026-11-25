@@ -1582,7 +1582,7 @@ def _package_scheduled_norm(
     )
     x, out = artifact.input_name, artifact.output_name
     params = artifact.input_names[1:]
-    buffers = (BufferBinding(0, x, "input", dtype, 2, "row_major", 2),)
+    buffers: tuple[BufferBinding, ...] = (BufferBinding(0, x, "input", dtype, 2, "row_major", 2),)
     buffers += tuple(BufferBinding(1 + i, name, "input", dtype, 1, "row_major", 2)
                      for i, name in enumerate(params))
     buffers += (BufferBinding(1 + len(params), out, "output", dtype, 2, "row_major", 2),)

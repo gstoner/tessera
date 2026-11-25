@@ -376,12 +376,12 @@ def _frame_stage(stage: AppleTensorStage, record: dict, frame: dict):
         # re-derived from the package's contract and digest-checked.
         # Slice 10: the weighted norm adds gamma (and beta) as member inputs.
         provenance = descriptor.provenance
-        storages = {abi: ("none", storage) for storage, abi in APPLE_SYNTH_NORM_ABIS.items()}
-        storages.update({abi: key for key, abi in APPLE_SYNTH_AFFINE_NORM_ABIS.items()})
-        if descriptor.abi_id not in storages:
+        norm_forms = {abi: ("none", storage) for storage, abi in APPLE_SYNTH_NORM_ABIS.items()}
+        norm_forms.update({abi: key for key, abi in APPLE_SYNTH_AFFINE_NORM_ABIS.items()})
+        if descriptor.abi_id not in norm_forms:
             raise AppleTensorProgramError(
                 f"Apple member {stage.index} has no frame encoder for {descriptor.abi_id}")
-        affine, storage = storages[descriptor.abi_id]
+        affine, storage = norm_forms[descriptor.abi_id]
         inputs = record["inputs"]
         if (provenance.get("affine", "none") != affine
                 or len(inputs) != {"none": 1, "gamma": 2, "gamma_beta": 3}[affine]):

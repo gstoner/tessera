@@ -85,3 +85,25 @@ module @relu_requested attributes {tessera.target = "apple_gpu", tessera.arch = 
     return %o : tensor<64x48xf32>
   }
 }
+
+// -----
+
+// APPLE-NTBI-2 slice 7: the f16 add is an Apple producer member over two
+// program inputs, ending at the shared elementwise launch carrier.
+// CHECK-LABEL: module @add_requested
+// CHECK-SAME: tessera.native.tensor_program = 1
+// CHECK: %[[S:.*]] = memref.alloc() : memref<64x32xf16>
+// CHECK: tile.program_invoke %arg0, %arg1, %[[S]] {callee = @tensor_stage_0::@source, carrier = "tile.elementwise_kernel"
+// CHECK: tile.program_invoke %[[S]], %arg2, %{{.*}} {callee = @tensor_stage_1::@source, carrier = "tile.matmul_kernel"
+// CHECK: module @tensor_stage_0
+// CHECK: tile.elementwise_kernel
+// CHECK-SAME: family = "binary"
+// CHECK-SAME: kind = "add"
+module @add_requested attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
+                                  tessera.native.apple_tensor_program_request} {
+  func.func @add_product(%x: tensor<64x32xf16>, %y: tensor<64x32xf16>, %w: tensor<32x48xf16>) -> tensor<64x48xf32> {
+    %s = tessera.add %x, %y : (tensor<64x32xf16>, tensor<64x32xf16>) -> tensor<64x32xf16>
+    %o = tessera.matmul %s, %w {output_dtype = "fp32"} : (tensor<64x32xf16>, tensor<32x48xf16>) -> tensor<64x48xf32>
+    return %o : tensor<64x48xf32>
+  }
+}

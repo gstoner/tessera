@@ -12749,3 +12749,5 @@ The plugin's x86 branch was refactored with the Apple consumer; the identity val
 ## `AR-DECODE-PROGRAM-1-S1c-2026-11-23`: sibling outcome — not applicable — the x86 `gather_f32` ABI contract (`NativeX86Kernel.h`, rank-1 source only) is unchanged; `schedule.embedding_gather` claims only `nvidia_sm120` modules, and a `cpu` module's gather passes through (lit `embedding_gather_schedule_tile.mlir`). A rank-2 embedding gather on x86 belongs to slice S7. ([plan](../../compiler/AR_DECODE_PROGRAM_PLAN.md#4d-s1c--embedding-row-gather-on-sm_120-2026-11-23))
 
 ## `APPLE-NTBI-2-relu-2026-11-24`: sibling outcome — not applicable — the apple7 f16 ReLU admission is target-gated; x86 ReLU lowering is unchanged. No x86 ABI or result changes.
+
+## `APPLE-NTBI-2-add-2026-11-24`: sibling outcome — not applicable — the apple7 f16 add admission is target-gated; x86 add lowering is unchanged.

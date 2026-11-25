@@ -40,7 +40,8 @@ _FRAME = r'tessera.native.tensor_program_frame_json = "([^"]+)"'
 _SOURCE = r'tessera.native.tensor_program_source_sha256 = "([0-9a-f]{64})"'
 #: Graph op -> the launch-level Tile carrier its Apple scheduled package consumes.
 _CARRIERS = {"tessera.matmul": "tile.matmul_kernel", "tessera.softmax": "tile.softmax_kernel",
-             "tessera.gelu": "tile.activation_kernel", "tessera.relu": "tile.activation_kernel"}
+             "tessera.gelu": "tile.activation_kernel", "tessera.relu": "tile.activation_kernel",
+             "tessera.add": "tile.elementwise_kernel"}
 _STORAGE = {"fp16": "f16", "fp32": "f32"}
 _NUMPY = {"f16": "float16", "f32": "float32"}
 
@@ -328,7 +329,8 @@ def run_members_sequentially(program: AppleTensorProgram, inputs: Mapping[str, A
 
 
 #: Frame-owner stage kinds (``_frame_stage`` selects one per member from its
-#: package ABI): 1 softmax, 2 simdgroup GEMM, 3 tanh GELU, 4 synthesized activation.
+#: package ABI): 1 softmax, 2 simdgroup GEMM, 3 tanh GELU, 4 synthesized
+#: elementwise (an activation, or the two-input add).
 _FRAME_ERRORS = {
     -1: "the runtime refused the frame contract",
     -2: "no Metal device",
@@ -343,7 +345,8 @@ def _frame_stage(stage: AppleTensorStage, record: dict, frame: dict):
     from .apple_native import (
         APPLE_GELU_F16_ABI, APPLE_SIMDGROUP_GEMM_F16_ABI,
         APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR, APPLE_SOFTMAX_F16_ABI,
-        APPLE_SYNTH_ACTIVATION_F16_ABI, synthesized_activation_source)
+        APPLE_SYNTH_ACTIVATION_F16_ABI, APPLE_SYNTH_BINARY_F16_ABI,
+        synthesized_activation_source, synthesized_binary_source)
 
     descriptor = stage.package.descriptor
     buffers = frame["buffers"]
@@ -353,6 +356,21 @@ def _frame_stage(stage: AppleTensorStage, record: dict, frame: dict):
                 f"Apple member {stage.index} has no frame encoder for {descriptor.abi_id}")
         rows, columns = buffers[record["inputs"][0]]["shape"]
         return [1, record["inputs"][0], -1, record["output"], rows, 1, columns, 0, 0, 0], None, None
+    if stage.carrier == "tile.elementwise_kernel":
+        # The compiler-synthesized add (APPLE-NTBI-2 slice 7): two inputs,
+        # the source re-derived from the package's contract and digest-checked.
+        provenance = descriptor.provenance
+        if descriptor.abi_id != APPLE_SYNTH_BINARY_F16_ABI:
+            raise AppleTensorProgramError(
+                f"Apple member {stage.index} has no frame encoder for {descriptor.abi_id}")
+        source, entry = synthesized_binary_source(provenance["kind"], "f16", provenance["nan_mode"])
+        if (hashlib.sha256(source.encode()).hexdigest() != provenance["source_sha256"]
+                or entry != provenance["entry"]):
+            raise AppleTensorProgramError(
+                f"Apple member {stage.index} synthesized kernel differs from its package")
+        a, b = record["inputs"]
+        rows, columns = buffers[a]["shape"]
+        return [4, a, b, record["output"], rows, 1, columns, 0, 0, 0], source, entry
     if stage.carrier == "tile.activation_kernel" and descriptor.abi_id == APPLE_SYNTH_ACTIVATION_F16_ABI:
         # The compiler-synthesized activation (APPLE-NTBI-2 slice 6): the frame
         # carries the same source the standalone package recorded, re-derived

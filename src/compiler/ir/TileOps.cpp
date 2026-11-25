@@ -1940,6 +1940,32 @@ LogicalResult ElementwiseKernelOp::verify() {
   if (!family || !kind || !storage || !outputStorage)
     return emitOpError(
         "requires family, kind, storage, and output_storage attributes");
+  // APPLE-NTBI-2 slice 7 (2026-11-24): the apple7 f16 add, consumed as
+  // compiler-synthesized MSL: (a, b, o, N), f32 arithmetic rounded once to
+  // f16, NaNs propagated, one serial element walk at workgroup 1.
+  if (auto module = getOperation()->getParentOfType<ModuleOp>()) {
+    auto arch = module->getAttrOfType<StringAttr>("tessera.arch");
+    if (arch && arch.getValue() == "apple7" && family.getValue() == "binary") {
+      auto str = [&](StringRef key) -> StringRef {
+        auto attr = getOperation()->getAttrOfType<StringAttr>(key);
+        return attr ? attr.getValue() : StringRef{};
+      };
+      auto axis = getOperation()->getAttrOfType<IntegerAttr>("axis");
+      auto threads = getOperation()->getAttrOfType<IntegerAttr>("tessera.workgroup_size");
+      if (kind.getValue() != "add" || storage.getValue() != "f16" ||
+          outputStorage.getValue() != "f16" || str("accum") != "f32" ||
+          str("schedule") != "serial" || str("nan_mode") != "propagate" ||
+          !axis || axis.getInt() != -1 || !threads || threads.getInt() != 1 ||
+          getInputs().size() != 4 ||
+          !llvm::all_of(getInputs().drop_back(), [](Value pointer) {
+            return isa<LLVM::LLVMPointerType>(pointer.getType());
+          }) ||
+          !getInputs().back().getType().isInteger(64))
+        return emitOpError("requires the apple7 f16 serial add (a, b, o, N), workgroup 1, "
+                           "f32 arithmetic and propagated NaNs");
+      return success();
+    }
+  }
   bool unary = family.getValue() == "unary";
   bool binary = family.getValue() == "binary";
   bool predicate = family.getValue() == "predicate";

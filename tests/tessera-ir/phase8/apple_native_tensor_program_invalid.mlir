@@ -5,12 +5,12 @@
 // REQUIRES: tessera-apple-backend
 // RUN: not tessera-opt %s --split-input-file --tessera-graph-to-schedule 2>&1 | FileCheck %s
 
-// add has no Apple scheduled kernel (relu became a member in slice 6).
-// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: an Apple member must be tessera.matmul, tessera.softmax, tessera.gelu or tessera.relu
+// mul has no Apple scheduled kernel (relu and add became members in slices 6 and 7).
+// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: an Apple member must be tessera.matmul, tessera.softmax, tessera.gelu, tessera.relu or tessera.add
 module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
                    tessera.native.apple_tensor_program_request} {
-  func.func @add_product(%a: tensor<64x32xf16>, %c: tensor<64x32xf16>, %b: tensor<32x48xf16>) -> tensor<64x48xf32> {
-    %r = tessera.add %a, %c : (tensor<64x32xf16>, tensor<64x32xf16>) -> tensor<64x32xf16>
+  func.func @mul_product(%a: tensor<64x32xf16>, %c: tensor<64x32xf16>, %b: tensor<32x48xf16>) -> tensor<64x48xf32> {
+    %r = tessera.mul %a, %c : (tensor<64x32xf16>, tensor<64x32xf16>) -> tensor<64x32xf16>
     %o = tessera.matmul %r, %b {output_dtype = "fp32"} : (tensor<64x32xf16>, tensor<32x48xf16>) -> tensor<64x48xf32>
     return %o : tensor<64x48xf32>
   }
@@ -78,5 +78,33 @@ module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
     %g = tessera.gelu %x {approximate = "none"} : (tensor<64x32xf16>) -> tensor<64x32xf16>
     %o = tessera.matmul %g, %w {output_dtype = "fp32"} : (tensor<64x32xf16>, tensor<32x48xf16>) -> tensor<64x48xf32>
     return %o : tensor<64x48xf32>
+  }
+}
+
+// -----
+
+// The synthesized add takes one int32 element count: 65536 x 32768 is 2^31
+// elements, one past it, so program admission refuses it (Decision #21)
+// instead of creating a binary schedule its verifier would reject.
+// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: no apple7 scheduled kernel for this producer
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
+                   tessera.native.apple_tensor_program_request} {
+  func.func @oversized_add(%a: tensor<65536x32768xf16>, %c: tensor<65536x32768xf16>, %b: tensor<32768x16xf16>) -> tensor<65536x16xf32> {
+    %r = tessera.add %a, %c : (tensor<65536x32768xf16>, tensor<65536x32768xf16>) -> tensor<65536x32768xf16>
+    %o = tessera.matmul %r, %b {output_dtype = "fp32"} : (tensor<65536x32768xf16>, tensor<32768x16xf16>) -> tensor<65536x16xf32>
+    return %o : tensor<65536x16xf32>
+  }
+}
+
+// -----
+
+// The same int32 element-count bound holds for the synthesized ReLU.
+// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: no apple7 scheduled kernel for this producer
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
+                   tessera.native.apple_tensor_program_request} {
+  func.func @oversized_relu(%a: tensor<65536x32768xf16>, %b: tensor<32768x16xf16>) -> tensor<65536x16xf32> {
+    %r = tessera.relu %a : (tensor<65536x32768xf16>) -> tensor<65536x32768xf16>
+    %o = tessera.matmul %r, %b {output_dtype = "fp32"} : (tensor<65536x32768xf16>, tensor<32768x16xf16>) -> tensor<65536x16xf32>
+    return %o : tensor<65536x16xf32>
   }
 }

@@ -2,17 +2,17 @@
   "architecture": "apple7",
   "files": {
     "report.json": {
-      "bytes": 4883,
-      "sha256": "4e8a2ff655eddd63a351712b00f0b228e50e813d3e439e45d5191d2e517397ec"
+      "bytes": 4885,
+      "sha256": "9421870544fb0a9d159ec769a36eb34d1dbf06c160c0b83f202d8dd3dd874c7f"
     },
     "resources.json": {
       "bytes": 4316,
-      "sha256": "5da12c7a8786d0678009df7bae90d97df4cbac84f915743ff2efaa5f3e1bd50b"
+      "sha256": "5ea5a6109cc1d58b8f8a35accdf394064b4e6a7a9273153924be19a6f7da32bd"
     }
   },
   "schema": "tessera.e2e-release-packet.v1",
   "target": "apple_gpu",
-  "tested_commit": "2a08e3311a8309f18aabdb8a5b93731937a51c52",
+  "tested_commit": "d24be80fa50a119485d84c318fc0695604871261",
   "validation": {
     "architecture": "apple7",
     "benchmark_rows": 4,
@@ -21,7 +21,7 @@
     "fixtures": 2,
     "level_c_fixtures": 2,
     "maximum_absolute_error": 0.0,
-    "source_commit": "2a08e3311a8309f18aabdb8a5b93731937a51c52",
+    "source_commit": "d24be80fa50a119485d84c318fc0695604871261",
     "target": "apple_gpu"
   }
 }

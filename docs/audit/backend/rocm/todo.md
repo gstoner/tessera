@@ -19650,3 +19650,5 @@ The attention VJP plugin's ROCm branch was refactored alongside the new Apple co
 ## `APPLE-NTBI-2-norms-2026-11-25`: sibling outcome — not applicable — apple7-gated norm admission; the gfx1201 RMSNorm row contract, its workgroup and its lowering are unchanged.
 
 ## `APPLE-NTBI-2-affine-norms-2026-11-25`: sibling outcome — not applicable — apple7-gated weighted-norm admission; the gfx1201 RMSNorm row contract is unweighted and unchanged, and its Tile consumer still requires `affine = false`.
+
+## `APPLE-NTBI-2-cooperative-norms-2026-11-26`: sibling outcome — not applicable — apple7-only row-norm schedule; the gfx1201 RMSNorm row contract and its Tile consumer are unchanged. Not run on Tajasarus or Princess-Luna (unreachable from this session; a lit check of the shared verifier edits is owed).

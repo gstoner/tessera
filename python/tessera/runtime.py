@@ -6733,6 +6733,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         APPLE_SYNTH_BINARY_ABIS,
         APPLE_SYNTH_AFFINE_NORM_ABIS,
         APPLE_SYNTH_NORM_ABIS,
+        APPLE_SYNTH_SIMDGROUP_NORM_ABIS,
         APPLE_SYNTH_REDUCE_F32_ABI,
         APPLE_TRANSPOSE_BF16_ABI,
         APPLE_TRANSPOSE_F16_ABI,
@@ -6776,6 +6777,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 *APPLE_SYNTH_BINARY_ABIS.values(),
                 *APPLE_SYNTH_NORM_ABIS.values(),
                 *APPLE_SYNTH_AFFINE_NORM_ABIS.values(),
+                *APPLE_SYNTH_SIMDGROUP_NORM_ABIS.values(),
                 APPLE_SYNTH_REDUCE_F32_ABI,
                 APPLE_TOPK_DYNAMIC_F32_I32_ABI,
                 APPLE_TRANSPOSE_F32_ABI,
@@ -7281,10 +7283,73 @@ def _submit_apple_gpu_native(
         APPLE_SYNTH_REDUCE_F32_SYMBOL,
         APPLE_SYNTH_ROWS_SYMBOL,
         APPLE_SYNTH_REDUCE_KINDS,
+        APPLE_SYNTH_SIMDGROUP_NORM_ABIS as _SIMDGROUP_NORM_ABIS,
+        APPLE_SYNTH_SIMDGROUP_ROWS_SYMBOL,
     )
 
     _synth_storage = {abi: storage for storage, abi in
                       (*APPLE_SYNTH_ACTIVATION_ABIS.items(), *APPLE_SYNTH_BINARY_ABIS.items())}
+    if descriptor.abi_id in _SIMDGROUP_NORM_ABIS.values():
+        # APPLE-NTBI-2 slice 11: the f16/bf16 row norm, unweighted or
+        # weighted, with one 32-lane simdgroup per row, as COMPILER-SYNTHESIZED
+        # MSL through the simdgroup row ABI (x, gamma | NULL, beta | NULL, O,
+        # rows, cols). The kernel is re-derived from the packaged contract and
+        # digest-checked; a refusal raises. It never falls back to the serial
+        # dispatch, whose reduction order is a different program.
+        import hashlib as _hashlib
+
+        from tessera._apple_gpu_dispatch import bind_registered
+        from tessera.compiler.apple_native import synthesized_norm_source
+
+        provenance = descriptor.provenance
+        affine, norm_storage = {abi: key for key, abi in
+                                _SIMDGROUP_NORM_ABIS.items()}[descriptor.abi_id]
+        ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+        params = {"none": 0, "gamma": 1, "gamma_beta": 2}[affine]
+        if (descriptor.entry_symbol != APPLE_SYNTH_SIMDGROUP_ROWS_SYMBOL
+                or len(ordered) != 2 + params or provenance.get("affine") != affine
+                or provenance.get("schedule") != "simdgroup_32"
+                or [item.direction for item in ordered] != ["input"] * (1 + params) + ["output"]):
+            raise RuntimeError(
+                "Apple synthesized simdgroup-norm descriptor ABI or buffer contract is invalid"
+            )
+        source_in, *vectors, out = (buffers[item.name] for item in ordered)
+        element = "float16" if norm_storage == "f16" else "bfloat16"
+        if (not isinstance(source_in, np.ndarray) or not isinstance(out, np.ndarray)
+                or source_in.dtype.name != element or out.dtype.name != element
+                or not source_in.flags.c_contiguous or not out.flags.c_contiguous
+                or source_in.shape != out.shape or source_in.ndim != 2
+                or source_in.size > 2**31 - 1 or source_in.shape[0] * 32 > 2**31 - 1
+                or any(not isinstance(v, np.ndarray) or v.dtype.name != element
+                       or not v.flags.c_contiguous or v.shape != (source_in.shape[1],)
+                       for v in vectors)):
+            raise RuntimeError(
+                f"Apple synthesized simdgroup norm requires contiguous rank-two {norm_storage} "
+                "buffers of one shape, [columns] gamma/beta, and int32 row and element counts"
+            )
+        epsilon_bits = provenance["epsilon_bits"]
+        if type(epsilon_bits) is not int:
+            raise RuntimeError("Apple synthesized norm descriptor lacks its epsilon bits")
+        source, entry = synthesized_norm_source(
+            str(provenance["kind"]), norm_storage, epsilon_bits, affine, "simdgroup_32")
+        if (_hashlib.sha256(source.encode()).hexdigest() != provenance["source_sha256"]
+                or entry != provenance["entry"]):
+            raise RuntimeError(
+                "Apple synthesized norm kernel does not match the packaged source digest"
+            )
+        simdgroup_call = bind_registered(APPLE_SYNTH_SIMDGROUP_ROWS_SYMBOL)
+        if simdgroup_call is None:
+            raise RuntimeError(f"the Apple GPU runtime lacks {APPLE_SYNTH_SIMDGROUP_ROWS_SYMBOL}")
+        gamma = vectors[0].ctypes.data if params >= 1 else None
+        beta = vectors[1].ctypes.data if params == 2 else None
+        status = simdgroup_call(source.encode(), entry.encode(), source_in.ctypes.data,
+                                gamma, beta, out.ctypes.data,
+                                int(source_in.shape[0]), int(source_in.shape[1]))
+        if status != 1:
+            raise RuntimeError(
+                f"Apple synthesized simdgroup norm did not execute on Metal (status {status})")
+        return out
+
     if descriptor.abi_id in APPLE_SYNTH_AFFINE_NORM_ABIS.values():
         # APPLE-NTBI-2 slice 10: the weighted f16/bf16 row norm as
         # COMPILER-SYNTHESIZED MSL through the source-carrying affine row ABI

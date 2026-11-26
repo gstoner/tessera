@@ -1394,6 +1394,19 @@ APPLE_SYNTH_AFFINE_NORM_ABIS = {
 }
 #: The source-carrying weighted row ABI: (x, gamma, beta | NULL, O, rows, cols).
 APPLE_SYNTH_AFFINE_ROWS_SYMBOL = "tessera_apple_gpu_synth_affine_rows_f16"
+#: APPLE-NTBI-2 slice 11: (affine form, storage) -> the simdgroup_32 row-norm
+#: ABI, one 32-lane simdgroup per row. ``none`` is the unweighted form; the
+#: weighted forms keep gamma at buffer 4 and beta at buffer 5.
+APPLE_SYNTH_SIMDGROUP_NORM_ABIS = {
+    (affine, storage): ("tessera.apple.synth.norm.x_o_rows_columns.simdgroup_32."
+                        f"{storage}.v1" if affine == "none" else
+                        f"tessera.apple.synth.norm.x_{affine}_o_rows_columns.simdgroup_32."
+                        f"{storage}.v1")
+    for affine in ("none", "gamma", "gamma_beta") for storage in ("f16", "bf16")
+}
+#: The simdgroup row ABI: (x, gamma | NULL, beta | NULL, O, rows, cols),
+#: dispatched rows * 32 threads.
+APPLE_SYNTH_SIMDGROUP_ROWS_SYMBOL = "tessera_apple_gpu_synth_simdgroup_rows_f16"
 
 
 def _f32_bits(value: float) -> int:
@@ -1427,6 +1440,11 @@ def _tile_norm_contract(tile_ir: str) -> dict:
     if weighted and (bias or re.search(r"(?:^|, )bias = false(?:,|$)", attrs_text)) is None:
         raise ValueError("Apple synthesized weighted norm Tile launch lacks its bias flag")
     affine = ("gamma_beta" if bias else "gamma") if weighted else "none"
+    # Slice 11: a simdgroup row schedule is named on the launch with its
+    # 32-lane workgroup; the serial launch names no schedule (workgroup 1).
+    schedules = re.findall(r'(?:^|, )schedule = "([^"]+)"(?:,|$)', attrs_text)
+    schedule = schedules[0] if len(schedules) == 1 else "serial"
+    workgroup = 32 if schedule == "simdgroup_32" else 1
     if (set(attrs) != {"kind", "storage", "accum"}
             or pointers != {"none": 2, "gamma": 3, "gamma_beta": 4}[affine]
             or (weighted and bias != (attrs.get("kind") == "layernorm"))
@@ -1434,8 +1452,10 @@ def _tile_norm_contract(tile_ir: str) -> dict:
                                   or "bias = " in attrs_text))
             or (bias and attrs.get("kind") != "layernorm")
             or re.search(r"(?:^|, )axis = -1 : i64(?:,|$)", attrs_text) is None
-            or re.search(r"(?:^|, )tessera\.workgroup_size = 1 : i64(?:,|$)", attrs_text) is None
-            or "schedule = " in attrs_text or "output_storage" in attrs_text):
+            or re.search(rf"(?:^|, )tessera\.workgroup_size = {workgroup} : i64(?:,|$)",
+                         attrs_text) is None
+            or len(schedules) > 1 or schedules == ["serial"]
+            or schedule not in ("serial", "simdgroup_32") or "output_storage" in attrs_text):
         raise ValueError("Apple synthesized norm Tile launch lacks its numerical contract")
 
     def constant(ssa: str, kind: str) -> str:
@@ -1450,26 +1470,28 @@ def _tile_norm_contract(tile_ir: str) -> dict:
     except (TypeError, ValueError) as exc:
         raise ValueError("Apple synthesized norm Tile launch constants are malformed") from exc
     return {**attrs, "epsilon_bits": _f32_bits(epsilon), "rows": rows, "columns": columns,
-            "affine": affine}
+            "affine": affine, "schedule": schedule}
 
 
 def synthesized_norm_source(kind: str, storage: str, epsilon_bits: int,
-                            affine: str = "none") -> tuple[str, str]:
+                            affine: str = "none",
+                            schedule: str = "serial") -> tuple[str, str]:
     """``(msl, entry)`` for one Tile norm contract, deterministically."""
     from .emit.apple_msl import norm_entry, synthesize_norm_msl
 
-    return (synthesize_norm_msl(kind, storage, epsilon_bits=epsilon_bits, affine=affine),
-            norm_entry(kind, storage, affine))
+    return (synthesize_norm_msl(kind, storage, epsilon_bits=epsilon_bits, affine=affine,
+                                schedule=schedule),
+            norm_entry(kind, storage, affine, schedule))
 
 
-def _verify_apple_affine_norm_projection(artifact: ScheduledKernelArtifact) -> str:
+def _verify_apple_affine_norm_projection(artifact: ScheduledKernelArtifact) -> tuple[str, str]:
     """Replay the Schedule and read the weighted-norm contract from native IR.
 
     APPLE-NTBI-2 slice 10. The parent function must be
     ``(x, gamma[, beta]) -> o`` over one static f16/bf16 type with
     ``[columns]`` affine vectors, and its ``schedule.norm`` decision the
-    apple7 serial norm whose ``affine``/``bias`` flags match the operands.
-    Returns the affine form (``gamma`` or ``gamma_beta``).
+    apple7 serial or simdgroup_32 norm (slice 11) whose ``affine``/``bias``
+    flags match the operands. Returns ``(affine form, schedule)``.
     """
     import re
 
@@ -1497,10 +1519,12 @@ def _verify_apple_affine_norm_projection(artifact: ScheduledKernelArtifact) -> s
         raise ValueError("Apple weighted norm package requires one native norm schedule")
     attrs = dict(re.findall(r'\b(\w+) = "([^"]+)"', norms[0]))
     expected = {"arch": "apple7", "kind": artifact.kind, "storage": storage, "accum": "f32"}
+    # The printer elides the default serial schedule.
+    schedule = attrs.get("schedule", "serial")
+    workgroup = 32 if schedule == "simdgroup_32" else 1
     if (any(attrs.get(key) != value for key, value in expected.items())
-            # The printer elides the default serial schedule.
-            or attrs.get("schedule", "serial") != "serial"
-            or "workgroup_size = 1 : i64" not in norms[0]
+            or schedule not in ("serial", "simdgroup_32")
+            or re.search(rf"(?:^|, )workgroup_size = {workgroup} : i64(?:,|$)", norms[0]) is None
             or re.search(r"(?:^|, )affine = true(?:,|$)", norms[0]) is None
             or re.search(rf"(?:^|, )bias = {'true' if affine == 'gamma_beta' else 'false'}(?:,|$)",
                          norms[0]) is None
@@ -1511,7 +1535,7 @@ def _verify_apple_affine_norm_projection(artifact: ScheduledKernelArtifact) -> s
             or len({*artifact.input_names, artifact.output_name}) != len(artifact.input_names) + 1
             or not all(n.isidentifier() for n in (*artifact.input_names, artifact.output_name))):
         raise ValueError("Apple weighted norm package contract disagrees with native IR")
-    return affine
+    return affine, schedule
 
 
 def _package_scheduled_norm(
@@ -1527,16 +1551,21 @@ def _package_scheduled_norm(
     f32 bits), its source digest recorded in the Target IR and re-verified at
     submission. A failed dispatch raises; there is no reference path.
     """
+    projected_schedule: str | None = None
     if len(artifact.input_names) > 1:
-        projected_affine = _verify_apple_affine_norm_projection(artifact)
+        projected_affine, projected_schedule = _verify_apple_affine_norm_projection(artifact)
     else:
         _verify_kernel_schedule_ancestry(artifact)
         projected_affine = "none"
     contract = _tile_norm_contract(artifact.tile_ir)
     storage = contract["storage"]
     affine = contract["affine"]
+    schedule = contract["schedule"]
     if (storage not in APPLE_SYNTH_NORM_ABIS or contract["accum"] != "f32"
             or affine != projected_affine
+            or (projected_schedule is not None and schedule != projected_schedule)
+            or artifact.schedule != schedule
+            or artifact.workgroup_size != (32 if schedule == "simdgroup_32" else 1)
             or contract["kind"] != artifact.kind or artifact.storage != storage
             or artifact.dtype != _SYNTH_DTYPES[storage] or len(artifact.input_shape) != 2
             or artifact.input_shape != artifact.output_shape
@@ -1547,7 +1576,7 @@ def _package_scheduled_norm(
     if rows * columns > 2**31 - 1:
         raise ValueError("Apple GPU scheduled norm takes int32 extents")
     source, entry = synthesized_norm_source(contract["kind"], storage, contract["epsilon_bits"],
-                                            affine)
+                                            affine, schedule)
     source_digest = hashlib.sha256(source.encode()).hexdigest()
     library = _runtime_library_path()
     if library is None:
@@ -1556,18 +1585,22 @@ def _package_scheduled_norm(
             "Apple GPU runtime dylib"
         )
     dtype = _SYNTH_DTYPES[storage]
-    if affine == "none":
+    affine_field = "" if affine == "none" else f'affine = "{affine}", '
+    schedule_field = "" if schedule == "serial" else f'schedule = "{schedule}", '
+    if schedule == "simdgroup_32":
+        symbol = APPLE_SYNTH_SIMDGROUP_ROWS_SYMBOL
+        abi = APPLE_SYNTH_SIMDGROUP_NORM_ABIS[(affine, storage)]
+    elif affine == "none":
         symbol, abi = APPLE_SYNTH_ROWS_SYMBOL, APPLE_SYNTH_NORM_ABIS[storage]
-        affine_field = ""
     else:
         symbol = APPLE_SYNTH_AFFINE_ROWS_SYMBOL
         abi = APPLE_SYNTH_AFFINE_NORM_ABIS[(affine, storage)]
-        affine_field = f'affine = "{affine}", '
     epsilon_hex = f"0x{contract['epsilon_bits']:08x}"
     target_ir = (
         f'tessera_apple.gpu.msl_kernel @{symbol} '
         f'{{abi = "{abi}", kind = "{contract["kind"]}", storage = "{storage}", '
-        f'accumulation = "f32", {affine_field}epsilon_bits = "{epsilon_hex}", entry = "{entry}", '
+        f'accumulation = "f32", {affine_field}{schedule_field}epsilon_bits = "{epsilon_hex}", '
+        f'entry = "{entry}", '
         f'source_sha256 = "{source_digest}", schedule_hash = "{artifact.schedule_digest}", '
         f'status = "executable"}}\n// ---- synthesized MSL ----\n{source}'
     )
@@ -1595,7 +1628,8 @@ def _package_scheduled_norm(
             for name in (x, out)
             for axis, extent in enumerate(artifact.input_shape)
         ) + tuple(ShapeGuard(name, 0, "eq", columns) for name in params),
-        geometry=LaunchGeometry(policy="apple_msl_synth_rows"),
+        geometry=LaunchGeometry(policy="apple_msl_synth_rows" if schedule == "serial"
+                                else "apple_msl_synth_simdgroup_rows"),
         ordering=OrderingSemantics(
             ordered_submission=True, residency="none", synchronization=("return",),
         ),
@@ -1610,6 +1644,7 @@ def _package_scheduled_norm(
             "source_sha256": source_digest,
             "epsilon_bits": contract["epsilon_bits"],
             "affine": affine,
+            "schedule": schedule,
             "accumulation": "f32",
             "shape": list(artifact.input_shape),
             "storage": dtype,

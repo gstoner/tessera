@@ -554,11 +554,16 @@ LogicalResult NormOp::verify() {
                  (getStorage() == "f16" || getStorage() == "bf16" || getStorage() == "f32") &&
                  getKind() == "rmsnorm";
   // APPLE-NTBI-2 slice 9 (2026-11-25): apple7 f16/bf16, one serial row
-  // thread, static rank two (the synthesized kernel's int32 extents).
+  // thread, static rank two (the synthesized kernel's int32 extents). Slice
+  // 11 (2026-11-26): or one 32-lane simdgroup per row, whose workgroup is the
+  // 32 threads that row owns.
   auto subject = dyn_cast<RankedTensorType>(getSubject().getType());
-  bool apple7 = getArch() == "apple7" && getWorkgroupSize() == 1 &&
+  bool appleSimdgroup = getSchedule() == "simdgroup_32";
+  bool apple7 = getArch() == "apple7" &&
+                getWorkgroupSize() == (appleSimdgroup ? 32 : 1) &&
                 (getStorage() == "f16" || getStorage() == "bf16") &&
-                getSchedule() == "serial" && subject && subject.getRank() == 2 &&
+                (getSchedule() == "serial" || appleSimdgroup) &&
+                subject && subject.getRank() == 2 &&
                 subject.hasStaticShape() && subject.getDimSize(0) > 0 &&
                 subject.getDimSize(1) > 0 && subject.getDimSize(0) <= INT32_MAX &&
                 subject.getDimSize(1) <= INT32_MAX / subject.getDimSize(0) &&
@@ -567,9 +572,10 @@ LogicalResult NormOp::verify() {
   if ((!sm120 && !zen5 && !gfx1201 && !apple7) || getAccum() != "f32" || getAxis() != -1 ||
       (getKind() != "rmsnorm" && getKind() != "layernorm") ||
       !getEpsilon().isFinite() || getEpsilon().convertToDouble() <= 0.0)
-    return emitOpError("requires SM120, Zen 5, apple7 f16/bf16 serial, or the bounded gfx1201 RMSNorm row contract with positive finite f32 epsilon");
-  if (getSchedule() != "serial" && (!sm120 || getSchedule() != "cooperative_128"))
-    return emitOpError("norm cooperative_128 schedule requires SM120");
+    return emitOpError("requires SM120, Zen 5, apple7 f16/bf16 serial|simdgroup_32, or the bounded gfx1201 RMSNorm row contract with positive finite f32 epsilon");
+  if (getSchedule() != "serial" && !(sm120 && getSchedule() == "cooperative_128") &&
+      !(apple7 && appleSimdgroup))
+    return emitOpError("norm cooperative_128 schedule requires SM120 and simdgroup_32 requires apple7");
   // SM120-W11-FP8-RHS-20261026: a fused quantize_scaled store names its FP8
   // storage and the per-tensor f32 scale together, on SM120 only.
   auto output = getOperation()->getAttrOfType<StringAttr>("output_storage");

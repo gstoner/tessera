@@ -2428,13 +2428,28 @@ LogicalResult NormKernelOp::verify() {
       !getOperation()->getAttrOfType<StringAttr>("schedule"))
     return emitOpError("norm schedule must be a string attribute");
   if (auto schedule = getOperation()->getAttrOfType<StringAttr>("schedule")) {
-    if (schedule.getValue() != "serial" && schedule.getValue() != "cooperative_128")
-      return emitOpError("norm requires serial|cooperative_128 schedule");
+    if (schedule.getValue() != "serial" && schedule.getValue() != "cooperative_128" &&
+        schedule.getValue() != "simdgroup_32")
+      return emitOpError("norm requires serial|cooperative_128|simdgroup_32 schedule");
     if (schedule.getValue() == "cooperative_128") {
       auto module = getOperation()->getParentOfType<ModuleOp>();
       auto arch = module ? module->getAttrOfType<StringAttr>("tessera.arch") : StringAttr();
       if (!arch || arch.getValue() != "sm_120")
         return emitOpError("cooperative norm requires module tessera.arch=sm_120");
+    }
+    // APPLE-NTBI-2 slice 11: one 32-lane simdgroup per row is the apple7
+    // synthesized row kernel's schedule only (f16/bf16, never the scaled or
+    // bounded-shape contracts).
+    if (schedule.getValue() == "simdgroup_32") {
+      auto module = getOperation()->getParentOfType<ModuleOp>();
+      auto arch = module ? module->getAttrOfType<StringAttr>("tessera.arch") : StringAttr();
+      auto workgroup = getOperation()->getAttrOfType<IntegerAttr>("tessera.workgroup_size");
+      if (!arch || arch.getValue() != "apple7" || scaled ||
+          getOperation()->hasAttr("shape_policy") || storage.getValue() == "f32" ||
+          (getOperation()->hasAttr("tessera.workgroup_size") &&
+           (!workgroup || workgroup.getInt() != 32)))
+        return emitOpError("simdgroup_32 norm requires module tessera.arch=apple7 with f16 or "
+                           "bf16 storage and a workgroup of 32");
     }
   }
   return success();

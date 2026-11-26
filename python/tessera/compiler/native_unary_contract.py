@@ -57,7 +57,12 @@ def verify_unary_projection(artifact, parent: str) -> None:
             raise ValueError('Native unary reduction output must be f32 storage')
     elif storage != output_storage:
         raise ValueError('Native unary input/output storage disagrees')
-    workgroup = 256 if rocm else 1
+    # APPLE-NTBI-2 slice 11 (2026-11-26): an apple7 norm may carry the
+    # simdgroup_32 row schedule, whose workgroup is the 32 lanes a row owns.
+    apple_simdgroup_norm = (
+        family == 'norm' and (artifact.target, artifact.architecture) == ('apple_gpu', 'apple7')
+        and re.findall(r'(?:^|, )schedule = "([^"]+)"(?:,|$)', attrs) == ['simdgroup_32'])
+    workgroup = 256 if rocm else 32 if apple_simdgroup_norm else 1
     required = ['accum = "f32"', f'storage = "{storage}"', f'workgroup_size = {workgroup} : i64']
     if family == 'softmax':
         required += ['exp_mode = "accurate"', 'ftz = false']
@@ -83,7 +88,8 @@ def verify_unary_projection(artifact, parent: str) -> None:
     expected = dict(function_name=name, input_shape=input_shape,
                     output_shape=output_shape, family=family, dtype={'f32': 'fp32', 'f16': 'fp16', 'bf16': 'bf16'}[storage],
                     storage=storage, accum='f32', keepdims=False,
-                    workgroup_size=workgroup, schedule='serial', epsilon=0.0)
+                    workgroup_size=workgroup,
+                    schedule='simdgroup_32' if apple_simdgroup_norm else 'serial', epsilon=0.0)
     if family == 'norm':
         # E2E-REAL-6 x86 (2026-09-28): the unweighted row normalization.
         import struct
@@ -94,11 +100,12 @@ def verify_unary_projection(artifact, parent: str) -> None:
             and storage in {'f16', 'bf16', 'f32'} and kind is not None and kind[1] == 'rmsnorm'
         ) or (
             # APPLE-NTBI-2 slice 9 (2026-11-25): the apple7 f16/bf16 rank-two
-            # serial row norm, consumed as compiler-synthesized MSL.
+            # serial row norm, consumed as compiler-synthesized MSL; slice 11
+            # adds the simdgroup_32 row schedule.
             (artifact.target, artifact.architecture) == ('apple_gpu', 'apple7')
             and storage in {'f16', 'bf16'} and len(input_shape) == 2
             and re.search(r'(?:^|, )arch = "apple7"(?:,|$)', attrs) is not None
-            and 'schedule = ' not in attrs
+            and ('schedule = ' not in attrs or apple_simdgroup_norm)
         )
         if (not norm_target_ok or axis != -1 or output_shape != input_shape
                 or kind is None or eps is None

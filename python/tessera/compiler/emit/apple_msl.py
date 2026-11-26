@@ -1607,28 +1607,74 @@ _NORM_AFFINE = {
 }
 
 
-def norm_entry(kind: str, storage: str, affine: str = "none") -> str:
+#: APPLE-NTBI-2 slice 11 -- the norm row schedules the Apple synthesizer
+#: emits: ``serial`` is one thread per row (slices 9-10); ``simdgroup_32`` is
+#: one 32-lane simdgroup per row, lane-strided columns, ``simd_sum`` reductions
+#: in f32. The reduction order is part of the schedule (and of its digest), so
+#: the two are different, individually deterministic programs.
+NORM_SCHEDULES = ("serial", "simdgroup_32")
+
+#: Lanes per row for each schedule; the runtime dispatches ``rows * lanes``
+#: threads and refuses a pipeline whose execution width is not 32.
+NORM_SCHEDULE_LANES = {"serial": 1, "simdgroup_32": 32}
+
+
+def norm_entry(kind: str, storage: str, affine: str = "none",
+               schedule: str = "serial") -> str:
     """The synthesized norm kernel's entry symbol."""
-    if affine == "none":
-        return f"synth_norm_{kind}_{storage}"
-    return f"synth_norm_{kind}_{affine}_{storage}"
+    base = (f"synth_norm_{kind}_{storage}" if affine == "none"
+            else f"synth_norm_{kind}_{affine}_{storage}")
+    return base if schedule == "serial" else f"{base}_{schedule}"
+
+
+_SERIAL_COLUMN_LOOP = "for (uint c = 0; c < C; ++c)"
+_LANE_COLUMN_LOOP = "for (uint c = lane; c < C; c += 32u)"
+
+
+def _simdgroup_norm_body(serial: str) -> str:
+    """Rewrite a serial row body as the lane-strided simdgroup body.
+
+    Every column loop becomes lane-strided, and each f32 accumulator is
+    combined across the simdgroup with ``simd_sum`` right after the loop that
+    produced it, before anything reads it. Raises if the serial body does not
+    have the shape this rewrite assumes, so a body edit cannot silently emit a
+    kernel that reads a lane-partial sum.
+    """
+    lines = serial.splitlines(keepends=True)
+    out = []
+    reduced = 0
+    for line in lines:
+        out.append(line.replace(_SERIAL_COLUMN_LOOP, _LANE_COLUMN_LOOP))
+        stripped = line.strip()
+        if not stripped.startswith(_SERIAL_COLUMN_LOOP):
+            continue
+        # An accumulating loop is `... ss = fma(...` or `... s += ...`.
+        for acc in ("ss", "s"):
+            if (f" {acc} = fma(" in stripped or f" {acc} += " in stripped):
+                out.append(f"    {acc} = simd_sum({acc});\n")
+                reduced += 1
+                break
+    if reduced == 0 or any(_SERIAL_COLUMN_LOOP in line for line in out):
+        raise RuntimeError("Apple norm body has no reduction to distribute across a simdgroup")
+    return "".join(out)
 
 
 def synthesize_norm_msl(kind: str, storage: str, *, epsilon_bits: int,
-                        affine: str = "none") -> str:
+                        affine: str = "none", schedule: str = "serial") -> str:
     """Emit the MSL for one Tile ``norm_kernel`` contract, deterministically.
 
     ``epsilon_bits`` is the f32 bit pattern the Schedule hashed. ``affine``
     is ``"none"`` (slice 9), ``"gamma"`` (rmsnorm) or ``"gamma_beta"``
     (layernorm; slice 10); a weighted kernel reads gamma at buffer 4 and beta
-    at buffer 5. A contract with no emitted form raises; it never falls back
-    to another semantic.
+    at buffer 5. ``schedule`` is ``"serial"`` (a thread per row) or
+    ``"simdgroup_32"`` (slice 11: a simdgroup per row). A contract with no
+    emitted form raises; it never falls back to another semantic.
     """
     import math
     import struct
 
     if (kind not in _NORM_BODIES or storage not in _NORM_TYPES
-            or affine not in _NORM_AFFINE
+            or affine not in _NORM_AFFINE or schedule not in NORM_SCHEDULES
             # The weighted forms are rmsnorm(gamma) and layernorm(gamma, beta):
             # a gamma-only layer_norm does not decode (beta=b traces the same).
             or (affine == "gamma" and kind != "rmsnorm")
@@ -1636,7 +1682,7 @@ def synthesize_norm_msl(kind: str, storage: str, *, epsilon_bits: int,
             or type(epsilon_bits) is not int or not 0 <= epsilon_bits < 2**32):
         raise ValueError(
             f"no synthesized Apple norm for kind={kind!r} storage={storage!r} "
-            f"affine={affine!r}")
+            f"affine={affine!r} schedule={schedule!r}")
     epsilon = struct.unpack("<f", struct.pack("<I", epsilon_bits))[0]
     if not math.isfinite(epsilon) or epsilon <= 0.0:
         raise ValueError("synthesized Apple norm epsilon must be positive finite f32")
@@ -1660,19 +1706,29 @@ def synthesize_norm_msl(kind: str, storage: str, *, epsilon_bits: int,
         if affine == "gamma_beta":
             params += "    device const T*  B    [[buffer(5)]],\n"
         contract = f"affine=true bias={'true' if affine == 'gamma_beta' else 'false'}"
+    if schedule == "serial":
+        thread = "    uint gid [[thread_position_in_grid]])\n"
+        row = "    if (gid >= (uint)ROWS) return;\n"
+    else:
+        # One simdgroup per row: the runtime dispatches ROWS*32 threads in
+        # threadgroups that are whole simdgroups, so a row's 32 lanes never
+        # straddle a threadgroup and a whole simdgroup leaves together.
+        body = _simdgroup_norm_body(body)
+        thread = ("    uint tid  [[thread_position_in_grid]],\n"
+                  "    uint lane [[thread_index_in_simdgroup]])\n")
+        row = ("    const uint gid = tid / 32u;\n"
+               "    if (gid >= (uint)ROWS) return;\n")
     return f"""#include <metal_stdlib>
 using namespace metal;
-// Tile norm_kernel: kind={kind} storage={storage} accum=f32 axis=-1 {contract} schedule=serial epsilon_bits=0x{epsilon_bits:08x}
+// Tile norm_kernel: kind={kind} storage={storage} accum=f32 axis=-1 {contract} schedule={schedule} epsilon_bits=0x{epsilon_bits:08x}
 typedef {element} T;
-kernel void {norm_entry(kind, storage, affine)}(
+kernel void {norm_entry(kind, storage, affine, schedule)}(
     device const T*  in0  [[buffer(0)]],
     device T*        O    [[buffer(1)]],
     constant int&    ROWS [[buffer(2)]],
     constant int&    COLS [[buffer(3)]],
-{params}    uint gid [[thread_position_in_grid]])
-{{
-    if (gid >= (uint)ROWS) return;
-    const float EPS = as_type<float>(0x{epsilon_bits:08x}u);
+{params}{thread}{{
+{row}    const float EPS = as_type<float>(0x{epsilon_bits:08x}u);
     const uint C = (uint)COLS;
     device const T* x = in0 + ulong(gid) * ulong(C);
     device T*       o = O   + ulong(gid) * ulong(C);

@@ -135,6 +135,8 @@ module @bf16_requested attributes {tessera.target = "apple_gpu", tessera.arch = 
 
 // APPLE-NTBI-2 slice 9: the unweighted f16 layer_norm is an Apple producer
 // member ending at the Tile norm launch carrier (compiler-synthesized MSL).
+// Slice 11: its 32 columns take the simdgroup-per-row schedule, whose
+// workgroup is the 32 lanes one row owns.
 // CHECK-LABEL: module @norm_requested
 // CHECK-SAME: tessera.native.tensor_program = 1
 // CHECK: %[[N:.*]] = memref.alloc() : memref<64x32xf16>
@@ -144,8 +146,9 @@ module @bf16_requested attributes {tessera.target = "apple_gpu", tessera.arch = 
 // CHECK: tile.norm_kernel
 // CHECK-SAME: affine = false
 // CHECK-SAME: kind = "layernorm"
+// CHECK-SAME: schedule = "simdgroup_32"
 // CHECK-SAME: storage = "f16"
-// CHECK-SAME: tessera.workgroup_size = 1 : i64
+// CHECK-SAME: tessera.workgroup_size = 32 : i64
 module @norm_requested attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
                                    tessera.native.apple_tensor_program_request} {
   func.func @norm_product(%x: tensor<64x32xf16>, %w: tensor<32x48xf16>) -> tensor<64x48xf32> {

@@ -1051,20 +1051,34 @@ def test_the_synthesized_norm_comes_from_the_tile_contract():
             synthesize_norm_msl(kind, storage, epsilon_bits=eps)
 
 
-@pytest.mark.parametrize("fn, abi, kind", [
-    (_rmsnorm_product, "APPLE_SYNTH_NORM_F16_ABI", "rmsnorm"),
-    (_layer_norm_product, "APPLE_SYNTH_NORM_F16_ABI", "layernorm"),
+def _norm_abi_and_symbol(affine, storage, columns):
+    """The ABI and symbol the Schedule's row-schedule cut selects (slice 11)."""
+    if columns >= 16:
+        return (apple_native.APPLE_SYNTH_SIMDGROUP_NORM_ABIS[(affine, storage)],
+                apple_native.APPLE_SYNTH_SIMDGROUP_ROWS_SYMBOL, "simdgroup_32")
+    if affine == "none":
+        return (apple_native.APPLE_SYNTH_NORM_ABIS[storage],
+                apple_native.APPLE_SYNTH_ROWS_SYMBOL, "serial")
+    return (apple_native.APPLE_SYNTH_AFFINE_NORM_ABIS[(affine, storage)],
+            apple_native.APPLE_SYNTH_AFFINE_ROWS_SYMBOL, "serial")
+
+
+@pytest.mark.parametrize("columns", [8, 32])
+@pytest.mark.parametrize("fn, kind", [
+    (_rmsnorm_product, "rmsnorm"),
+    (_layer_norm_product, "layernorm"),
 ])
-def test_a_norm_member_packages_synthesized_msl(fn, abi, kind):
+def test_a_norm_member_packages_synthesized_msl(fn, kind, columns):
     import hashlib
 
     program = atp.compile_apple_tensor_program(
-        _graph(fn, (_half(64, 32), _half(32, 48)), ("x", "w")))
+        _graph(fn, (_half(64, columns), _half(columns, 48)), ("x", "w")))
     norm, product = program.stages
     assert norm.carrier == "tile.norm_kernel"
     descriptor = norm.package.descriptor
-    assert descriptor.abi_id == getattr(apple_native, abi)
-    assert descriptor.entry_symbol == apple_native.APPLE_SYNTH_ROWS_SYMBOL
+    abi, symbol, schedule = _norm_abi_and_symbol("none", "f16", columns)
+    assert (descriptor.abi_id, descriptor.entry_symbol) == (abi, symbol)
+    assert descriptor.provenance["schedule"] == schedule
     assert (descriptor.provenance["kind"], descriptor.provenance["route"]) == (
         kind, "apple_gpu_synth_norm_f16")
     source = norm.package.target_ir.split("// ---- synthesized MSL ----\n", 1)[1]
@@ -1075,11 +1089,13 @@ def test_a_norm_member_packages_synthesized_msl(fn, abi, kind):
     program.validate()
 
 
-def test_a_bf16_norm_member_packages_at_bf16():
+@pytest.mark.parametrize("columns", [8, 32])
+def test_a_bf16_norm_member_packages_at_bf16(columns):
     program = atp.compile_apple_tensor_program(
-        _graph(_rmsnorm_product, (_bf(64, 32), _bf(32, 48)), ("x", "w")))
+        _graph(_rmsnorm_product, (_bf(64, columns), _bf(columns, 48)), ("x", "w")))
     assert [stage.package.descriptor.abi_id for stage in program.stages] == [
-        apple_native.APPLE_SYNTH_NORM_BF16_ABI, apple_native.APPLE_SIMDGROUP_GEMM_BF16_ABI]
+        _norm_abi_and_symbol("none", "bf16", columns)[0],
+        apple_native.APPLE_SIMDGROUP_GEMM_BF16_ABI]
 
 
 def test_a_norm_package_refuses_a_tile_launch_with_another_epsilon():
@@ -1123,9 +1139,10 @@ def test_an_f32_norm_member_is_refused():
 
 
 @pytest.mark.hardware_apple_gpu
+@pytest.mark.parametrize("columns", [11, 53])
 @pytest.mark.parametrize("kind", ["rmsnorm", "layer_norm"])
 @pytest.mark.parametrize("dtype", ["f16", "bf16"])
-def test_standalone_norm_rounds_the_f32_contract_once(kind, dtype):
+def test_standalone_norm_rounds_the_f32_contract_once(kind, dtype, columns):
     from tests._support.apple import require_apple_chip_identity
     from tessera.compiler.scheduled_kernel import lower_scheduled_kernel
     from tessera.runtime import RuntimeArtifact, launch
@@ -1134,8 +1151,10 @@ def test_standalone_norm_rounds_the_f32_contract_once(kind, dtype):
     storage = np.dtype(np.float16) if dtype == "f16" else _BF16
     rng = np.random.default_rng(131)
     # An offset mean, a wide scale, a constant row (layer_norm's eps-only
-    # variance) and an all-zero row (rmsnorm's eps-only mean square).
-    x = (rng.standard_normal((37, 53)) * 3 + 0.5).astype(storage)
+    # variance) and an all-zero row (rmsnorm's eps-only mean square). 11
+    # columns keep the serial row schedule; 53 take simdgroup_32 (slice 11),
+    # with a ragged last lane stride.
+    x = (rng.standard_normal((37, columns)) * 3 + 0.5).astype(storage)
     x[3] = storage.type(2.0)
     x[4] = storage.type(0.0)
     op = getattr(ts.ops, kind)
@@ -1143,6 +1162,8 @@ def test_standalone_norm_rounds_the_f32_contract_once(kind, dtype):
                                 name="s", target="apple_gpu")
     package = apple_native.package_scheduled_kernel(
         lower_scheduled_kernel(module, target="apple_gpu"), pipeline_name=atp.PIPELINE)
+    assert package.descriptor.provenance["schedule"] == (
+        "simdgroup_32" if columns >= 16 else "serial")
     out_name = package.descriptor.buffers[-1].name
     artifact = RuntimeArtifact(
         metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
@@ -1158,6 +1179,8 @@ def test_standalone_norm_rounds_the_f32_contract_once(kind, dtype):
     (_rmsnorm_product, ((64, 32), (32, 48)), 2),
     (_layer_norm_product, ((100, 37), (37, 53)), 2),
     (_residual_norm_product, ((100, 37), (37, 53)), 3),
+    # 8 columns keep the serial row schedule (slice 11's cut is 16).
+    (_layer_norm_product, ((100, 8), (8, 53)), 2),
 ])
 @pytest.mark.parametrize("dtype", ["f16", "bf16"])
 def test_frame_owner_runs_norm_programs_in_one_command_buffer(fn, shapes, members, dtype):
@@ -1284,21 +1307,23 @@ def test_the_synthesized_weighted_norm_names_its_affine_contract():
             synthesize_norm_msl(kind, "f16", epsilon_bits=bits, affine=affine)
 
 
-@pytest.mark.parametrize("fn, arrays, names, kind, affine", [
-    (_weighted_rmsnorm_product, (_half(64, 32), _half(32), _half(32, 48)), ("x", "g", "w"),
-     "rmsnorm", "gamma"),
-    (_weighted_layer_norm_product, (_half(64, 32), _half(32), _half(32), _half(32, 48)),
-     ("x", "g", "b", "w"), "layernorm", "gamma_beta"),
+@pytest.mark.parametrize("columns", [8, 32])
+@pytest.mark.parametrize("fn, names, kind, affine", [
+    (_weighted_rmsnorm_product, ("x", "g", "w"), "rmsnorm", "gamma"),
+    (_weighted_layer_norm_product, ("x", "g", "b", "w"), "layernorm", "gamma_beta"),
 ])
-def test_a_weighted_norm_member_packages_synthesized_msl(fn, arrays, names, kind, affine):
+def test_a_weighted_norm_member_packages_synthesized_msl(fn, names, kind, affine, columns):
     import hashlib
 
+    vectors = tuple(_half(columns) for _ in names[1:-1])
+    arrays = (_half(64, columns), *vectors, _half(columns, 48))
     program = atp.compile_apple_tensor_program(_graph(fn, arrays, names))
     norm, product = program.stages
     assert norm.carrier == "tile.norm_kernel"
     descriptor = norm.package.descriptor
-    assert descriptor.abi_id == apple_native.APPLE_SYNTH_AFFINE_NORM_ABIS[(affine, "f16")]
-    assert descriptor.entry_symbol == apple_native.APPLE_SYNTH_AFFINE_ROWS_SYMBOL
+    abi, symbol, schedule = _norm_abi_and_symbol(affine, "f16", columns)
+    assert (descriptor.abi_id, descriptor.entry_symbol) == (abi, symbol)
+    assert descriptor.provenance["schedule"] == schedule
     assert (descriptor.provenance["kind"], descriptor.provenance["affine"]) == (kind, affine)
     # Bindings in Tile operand order: x, gamma[, beta], o; vectors are rank one.
     params = names[1:-1]
@@ -1315,7 +1340,7 @@ def test_a_bf16_weighted_norm_member_packages_at_bf16():
         _weighted_layer_norm_product, (_bf(64, 32), _bf(32), _bf(32), _bf(32, 48)),
         ("x", "g", "b", "w")))
     assert [stage.package.descriptor.abi_id for stage in program.stages] == [
-        apple_native.APPLE_SYNTH_AFFINE_NORM_ABIS[("gamma_beta", "bf16")],
+        apple_native.APPLE_SYNTH_SIMDGROUP_NORM_ABIS[("gamma_beta", "bf16")],
         apple_native.APPLE_SIMDGROUP_GEMM_BF16_ABI]
 
 
@@ -1348,10 +1373,11 @@ def test_a_weighted_norm_outside_the_apple_contract_is_refused():
 
 
 @pytest.mark.hardware_apple_gpu
+@pytest.mark.parametrize("columns", [11, 53])
 @pytest.mark.parametrize("kind, affine", [
     ("rmsnorm", "gamma"), ("layer_norm", "gamma_beta")])
 @pytest.mark.parametrize("dtype", ["f16", "bf16"])
-def test_standalone_weighted_norm_rounds_the_f32_contract_once(kind, affine, dtype):
+def test_standalone_weighted_norm_rounds_the_f32_contract_once(kind, affine, dtype, columns):
     from tests._support.apple import require_apple_chip_identity
     from tessera.compiler.scheduled_kernel import lower_scheduled_kernel
     from tessera.runtime import RuntimeArtifact, launch
@@ -1359,12 +1385,12 @@ def test_standalone_weighted_norm_rounds_the_f32_contract_once(kind, affine, dty
     require_apple_chip_identity()
     storage = np.dtype(np.float16) if dtype == "f16" else _BF16
     rng = np.random.default_rng(161)
-    x = (rng.standard_normal((37, 53)) * 3 + 0.5).astype(storage)
+    x = (rng.standard_normal((37, columns)) * 3 + 0.5).astype(storage)
     x[3] = storage.type(2.0)
     x[4] = storage.type(0.0)
-    gamma = (rng.standard_normal(53) * 2).astype(storage)
+    gamma = (rng.standard_normal(columns) * 2).astype(storage)
     gamma[5] = storage.type(0.0)
-    beta = rng.standard_normal(53).astype(storage) if affine == "gamma_beta" else None
+    beta = rng.standard_normal(columns).astype(storage) if affine == "gamma_beta" else None
     op = getattr(ts.ops, kind)
     arrays = (x, gamma) if beta is None else (x, gamma, beta)
     names = ("x", "g") if beta is None else ("x", "g", "b")
@@ -1375,6 +1401,8 @@ def test_standalone_weighted_norm_rounds_the_f32_contract_once(kind, affine, dty
     package = apple_native.package_scheduled_kernel(
         lower_scheduled_kernel(module, target="apple_gpu"), pipeline_name=atp.PIPELINE)
     assert package.descriptor.provenance["affine"] == affine
+    assert package.descriptor.provenance["schedule"] == (
+        "simdgroup_32" if columns >= 16 else "serial")
     out_name = package.descriptor.buffers[-1].name
     artifact = RuntimeArtifact(
         metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
@@ -1390,6 +1418,7 @@ def test_standalone_weighted_norm_rounds_the_f32_contract_once(kind, affine, dty
 @pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("fn, shapes, names, members", [
     (_weighted_rmsnorm_product, ((64, 32), (32,), (32, 48)), ("x", "g", "w"), 2),
+    (_weighted_rmsnorm_product, ((64, 8), (8,), (8, 48)), ("x", "g", "w"), 2),
     (_weighted_layer_norm_product, ((100, 37), (37,), (37,), (37, 53)), ("x", "g", "b", "w"), 2),
     (_weighted_residual_product, ((100, 37), (37,), (37,), (37, 53)), ("x", "g", "b", "w"), 3),
 ])
@@ -1512,3 +1541,133 @@ def test_public_jit_declines_a_beta_only_layer_norm_program():
     program(_half(16, 8, seed=201), _half(8, seed=202), _half(8, 4, seed=203))
     assert program._apple_tensor_last_receipt is None
     assert set(program._apple_tensor_program_cache.values()) <= {None}
+
+
+# --- Slice 11: the simdgroup-per-row norm schedule ----------------------------
+
+
+def test_the_simdgroup_norm_is_the_serial_body_lane_strided():
+    from tessera.compiler.emit.apple_msl import NORM_SCHEDULES, norm_entry, synthesize_norm_msl
+
+    bits = apple_native._f32_bits(1e-5)
+    assert NORM_SCHEDULES == ("serial", "simdgroup_32")
+    for kind, affine, reductions in (("rmsnorm", "none", 1), ("layernorm", "none", 2),
+                                     ("rmsnorm", "gamma", 1), ("layernorm", "gamma_beta", 2)):
+        serial = synthesize_norm_msl(kind, "f16", epsilon_bits=bits, affine=affine)
+        simd = synthesize_norm_msl(kind, "f16", epsilon_bits=bits, affine=affine,
+                                   schedule="simdgroup_32")
+        entry = norm_entry(kind, "f16", affine, "simdgroup_32")
+        assert entry == norm_entry(kind, "f16", affine) + "_simdgroup_32"
+        assert f"kernel void {entry}(" in simd and "schedule=simdgroup_32" in simd
+        # Every column loop is lane-strided, and each f32 accumulator is
+        # combined across the simdgroup before it is read.
+        assert "for (uint c = 0; c < C; ++c)" not in simd
+        assert simd.count("simd_sum(") == reductions
+        assert "[[thread_index_in_simdgroup]]" in simd and "tid / 32u" in simd
+        assert "simd_sum" not in serial and "schedule=serial" in serial
+    with pytest.raises(ValueError, match="synthesized Apple norm"):
+        synthesize_norm_msl("rmsnorm", "f16", epsilon_bits=bits, schedule="cooperative_128")
+
+
+@pytest.mark.parametrize("columns, schedule, workgroup", [
+    (15, "serial", 1), (16, "simdgroup_32", 32), (4096, "simdgroup_32", 32)])
+def test_the_schedule_picks_the_row_schedule_at_sixteen_columns(columns, schedule, workgroup):
+    from tessera.compiler.scheduled_kernel import lower_scheduled_kernel
+
+    x = _half(4, columns)
+    module = to_graph_ir_module(trace(lambda x: ts.ops.rmsnorm(x), x, arg_names=("x",)),
+                                name="s", target="apple_gpu")
+    kernel = lower_scheduled_kernel(module, target="apple_gpu")
+    assert (kernel.schedule, kernel.workgroup_size) == (schedule, workgroup)
+    package = apple_native.package_scheduled_kernel(kernel, pipeline_name=atp.PIPELINE)
+    assert package.descriptor.abi_id == _norm_abi_and_symbol("none", "f16", columns)[0]
+    assert package.descriptor.geometry.policy == (
+        "apple_msl_synth_simdgroup_rows" if schedule == "simdgroup_32"
+        else "apple_msl_synth_rows")
+
+
+def test_a_simdgroup_norm_package_refuses_a_tile_launch_without_its_schedule():
+    from tessera.compiler.scheduled_kernel import lower_scheduled_kernel
+
+    x = _half(4, 64)
+    module = to_graph_ir_module(trace(lambda x: ts.ops.rmsnorm(x), x, arg_names=("x",)),
+                                name="s", target="apple_gpu")
+    kernel = lower_scheduled_kernel(module, target="apple_gpu")
+    assert 'schedule = "simdgroup_32"' in kernel.tile_ir
+    for tile_ir in (kernel.tile_ir.replace('schedule = "simdgroup_32", ', ""),
+                    kernel.tile_ir.replace('schedule = "simdgroup_32"', 'schedule = "serial"')):
+        with pytest.raises(ValueError):
+            apple_native.package_scheduled_kernel(
+                dataclasses.replace(kernel, tile_ir=tile_ir), pipeline_name=atp.PIPELINE)
+
+
+@pytest.mark.hardware_apple_gpu
+def test_the_simdgroup_row_abis_refuse_a_lane_count_their_entry_does_not_name():
+    import ctypes
+
+    from tessera._apple_gpu_dispatch import bind_registered
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    simd = bind_registered(apple_native.APPLE_SYNTH_SIMDGROUP_ROWS_SYMBOL)
+    serial = bind_registered(apple_native.APPLE_SYNTH_ROWS_SYMBOL)
+    owner = bind_registered("tessera_apple_gpu_tensor_frame_execute")
+    assert simd is not None and serial is not None and owner is not None
+    bits = apple_native._f32_bits(1e-5)
+    x, g = _half(4, 64, seed=191), _half(64, seed=192)
+    out = np.full((4, 64), -1, np.float16)
+    simd_src, simd_entry = apple_native.synthesized_norm_source(
+        "rmsnorm", "f16", bits, "none", "simdgroup_32")
+    serial_src, serial_entry = apple_native.synthesized_norm_source("rmsnorm", "f16", bits)
+    ptr = lambda a: a.ctypes.data  # noqa: E731
+    # Each ABI refuses the other schedule's kernel, and beta without gamma.
+    assert simd(serial_src.encode(), serial_entry.encode(), ptr(x), None, None, ptr(out), 4, 64) == 0
+    assert serial(simd_src.encode(), simd_entry.encode(), ptr(x), ptr(out), 4, 64) == 0
+    assert simd(simd_src.encode(), simd_entry.encode(), ptr(x), None, ptr(g), ptr(out), 4, 64) == 0
+    assert (out == -1).all()
+    # In contract it runs, deterministically, within one f16 step of f32.
+    assert simd(simd_src.encode(), simd_entry.encode(), ptr(x), None, None, ptr(out), 4, 64) == 1
+    again = np.full_like(out, -1)
+    assert simd(simd_src.encode(), simd_entry.encode(), ptr(x), None, None, ptr(again), 4, 64) == 1
+    assert again.tobytes() == out.tobytes()
+    _within_one_storage_step(out, _norm_reference("rmsnorm", x, 1e-5), np.dtype(np.float16))
+
+    # The frame owner: kind 5 lanes are 0 or 32, named by the entry, with the
+    # bm/bn slots zero.
+    frame_out = np.full((4, 64), -1, np.float16)
+    hosts = (ctypes.c_void_p * 2)(x.ctypes.data, frame_out.ctypes.data)
+    buffers = (ctypes.c_int64 * 4)(0, x.nbytes, 2, frame_out.nbytes)
+    receipt = (ctypes.c_int64 * 4)()
+    simd_sources = (ctypes.c_char_p * 1)(simd_src.encode())
+    simd_entries = (ctypes.c_char_p * 1)(simd_entry.encode())
+    serial_sources = (ctypes.c_char_p * 1)(serial_src.encode())
+    serial_entries = (ctypes.c_char_p * 1)(serial_entry.encode())
+    for lanes, bm, srcs, ents in ((16, 0, simd_sources, simd_entries),
+                                  (0, 0, simd_sources, simd_entries),
+                                  (32, 0, serial_sources, serial_entries),
+                                  (32, 1, simd_sources, simd_entries)):
+        stage = (ctypes.c_int64 * 10)(5, 0, -1, 1, 4, 1, 64, bm, 0, lanes)
+        assert owner(buffers, hosts, 2, stage, srcs, ents, 1, receipt) == -1
+    assert list(receipt) == [0, 0, 0, 0] and (frame_out == -1).all()
+    good = (ctypes.c_int64 * 10)(5, 0, -1, 1, 4, 1, 64, 0, 0, 32)
+    assert owner(buffers, hosts, 2, good, simd_sources, simd_entries, 1, receipt) == 1
+    assert frame_out.tobytes() == out.tobytes()
+
+
+@pytest.mark.hardware_apple_gpu
+def test_public_jit_runs_the_simdgroup_and_serial_norm_schedules():
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    for columns, schedule in ((8, "serial"), (64, "simdgroup_32")):
+        x, w = _half(40, columns, seed=193), _half(columns, 24, seed=194)
+        program = ts.jit(target="apple_gpu")(_rmsnorm_product)
+        output = program(x, w)
+        receipt = program._apple_tensor_last_receipt
+        assert receipt["compiler_path"] == "canonical_apple_tensor_program"
+        compiled = program._apple_tensor_last_program
+        norm = compiled.stages[0]
+        assert norm.package.descriptor.provenance["schedule"] == schedule
+        roots = [arg.name for arg in compiled.graph.functions[0].args]
+        sequential, _ = atp.run_members_sequentially(compiled, dict(zip(roots, (x, w))))
+        assert output.tobytes() == sequential.tobytes()

@@ -2520,16 +2520,28 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
       schedule.queryShape.fixedColumns = schedule.columns;
       schedule.queryShape.rowMultiple = capacity[0] * capacity[1];
     }
-    schedule.workgroupSize = rocm ? 256 : nvidia ? 128 : 1;
+    // APPLE-NTBI-2 slice 11 (2026-11-26): apple7 rows of at least
+    // kAppleSimdgroupNormColumns columns take one 32-lane simdgroup per row
+    // (`simdgroup_32`, workgroup 32 = the threads one row owns); shorter rows
+    // keep one thread per row. The cut is a performance key (Decision #21a)
+    // set from paired, interleaved command-buffer GPU intervals on the M1 Max
+    // (benchmarks/baselines/apple7_norm_row_schedules.json): simdgroup_32 won
+    // every measured shape from 16 columns up, at 1..32768 rows, and lost
+    // tall short rows (32768 x 8) to the serial kernel.
+    constexpr int64_t kAppleSimdgroupNormColumns = 16;
+    bool appleSimdgroup = appleNorm && schedule.columns >= kAppleSimdgroupNormColumns;
+    schedule.workgroupSize = rocm ? 256 : nvidia ? 128 : appleSimdgroup ? 32 : 1;
     // The native Schedule owns this shape decision. Exact SM120 A/B evidence
     // covers the coalesced CTA row schedule; short feature rows retain serial.
     // An explicit schedule remains authoritative for tuning and comparison.
     schedule.reductionSchedule =
-        nvidia && schedule.columns >= 256 ? "cooperative_128" : "serial";
+        nvidia && schedule.columns >= 256 ? "cooperative_128" :
+        appleSimdgroup ? "simdgroup_32" : "serial";
     if (auto mode = op->getAttrOfType<StringAttr>("schedule"))
       schedule.reductionSchedule = mode.getValue();
     if (schedule.reductionSchedule != "serial" &&
-        (!nvidia || schedule.reductionSchedule != "cooperative_128")) return failure();
+        !(nvidia && schedule.reductionSchedule == "cooperative_128") &&
+        !(appleSimdgroup && schedule.reductionSchedule == "simdgroup_32")) return failure();
     // The synthesized Apple row kernel computes exactly the eps/axis contract;
     // any other keyword (a schedule request included) selects nothing it does.
     if (appleNorm)
@@ -6925,7 +6937,7 @@ struct ScheduleToTilePass
         // Preserve the established runtime launch symbols and serial schedule.
         std::string name = isBinary ?
             (Twine("tessera_tile_binary_add_") + selected->storage + "_" +
-             hash.getValue().take_front(10)).str() : isActivation ? (Twine("tessera_tile_activation_relu_") + selected->storage + (selected->reductionSchedule == "flat_128" ? "_flat_128_" : "_") + hash.getValue().take_front(10)).str() : isNorm ? (Twine("tessera_tile_norm_") + selected->kind + "_" + selected->storage + (scaledNorm ? (Twine("_to_") + selected->outputStorage).str() : std::string()) + (selected->reductionSchedule == "serial" ? "_" : "_cooperative_128_") + hash.getValue().take_front(10)).str() : isSoftmax ? (Twine("tessera_tile_softmax_") + selected->storage +
+             hash.getValue().take_front(10)).str() : isActivation ? (Twine("tessera_tile_activation_relu_") + selected->storage + (selected->reductionSchedule == "flat_128" ? "_flat_128_" : "_") + hash.getValue().take_front(10)).str() : isNorm ? (Twine("tessera_tile_norm_") + selected->kind + "_" + selected->storage + (scaledNorm ? (Twine("_to_") + selected->outputStorage).str() : std::string()) + (selected->reductionSchedule == "serial" ? std::string("_") : "_" + selected->reductionSchedule.str() + "_") + hash.getValue().take_front(10)).str() : isSoftmax ? (Twine("tessera_tile_softmax_") + selected->storage +
             (selected->reductionSchedule == "serial" ? "" : "_cooperative_128")).str() :
             (Twine("tessera_tile_reduce_") + selected->kind + "_" + selected->storage + "_" + selected->reductionSchedule).str();
         if (SymbolTable::lookupSymbolIn(mod, name)) {
@@ -7131,6 +7143,10 @@ struct ScheduleToTilePass
         kernelState.addAttribute("affine", builder.getBoolAttr(selected->affineOperands != 0));
         if (selected->affineOperands)
           kernelState.addAttribute("bias", builder.getBoolAttr(selected->affineOperands == 2));
+        // APPLE-NTBI-2 slice 11: only the apple7 simdgroup row schedule is
+        // named, so the serial Tile IR is unchanged.
+        if (selected->reductionSchedule == "simdgroup_32")
+          kernelState.addAttribute("schedule", builder.getStringAttr("simdgroup_32"));
       } else if (isSoftmax) {
         Value rows = builder.create<arith::ConstantIntOp>(loc, selected->rows, 64);
         Value columns =

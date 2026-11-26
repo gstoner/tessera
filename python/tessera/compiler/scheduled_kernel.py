@@ -281,6 +281,11 @@ def lower_scheduled_kernel(
         if contract[5] == "softmax":
             entry = f"tessera_tile_softmax_{contract[10]}" + ("_cooperative_128" if mode == "cooperative_128" else "")
             contract = (*contract[:2], entry, *contract[3:])
+    if contract[5] == "norm" and contract[0] == "apple_gpu":
+        # APPLE-NTBI-2 slice 11: the apple7 row schedule is the Schedule's
+        # shape decision (serial or simdgroup_32); read it, never predict it.
+        mode, workgroup = _apple_norm_decision(schedule_ir)
+        contract = (*contract[:19], workgroup, mode, *contract[21:])
     tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
     hashes = _HASH_RE.findall(tile_ir)
     if len(hashes) != 1:
@@ -329,6 +334,24 @@ def lower_scheduled_kernel(
             if len(_X86_GRAPH_CACHE) > _X86_GRAPH_CACHE_LIMIT:
                 _X86_GRAPH_CACHE.popitem(last=False)
     return artifact
+
+
+def _apple_norm_decision(schedule_ir: str) -> tuple[str, int]:
+    """``(row schedule, workgroup)`` the one apple7 ``schedule.norm`` decided.
+
+    APPLE-NTBI-2 slice 11. ``serial`` is one thread per row (workgroup 1,
+    elided by the printer); ``simdgroup_32`` is one 32-lane simdgroup per row
+    (workgroup 32). Anything else, or a workgroup that does not match, raises.
+    """
+    rows = re.findall(r"(?m)^\s*%[^=]+ = schedule\.norm[^\n]+", schedule_ir)
+    if len(rows) != 1:
+        raise RuntimeError("apple7 scheduled norm needs one Schedule decision")
+    decision = re.search(r'\bschedule = "([^"]+)"', rows[0])
+    mode = decision[1] if decision is not None else "serial"
+    workgroup = {"serial": 1, "simdgroup_32": 32}.get(mode)
+    if workgroup is None or re.search(rf"\bworkgroup_size = {workgroup} : i64", rows[0]) is None:
+        raise RuntimeError("apple7 scheduled norm Schedule policy is unsupported")
+    return mode, workgroup
 
 
 def _lower_apple_add(module: GraphIRModule) -> ScheduledKernelArtifact:
@@ -440,6 +463,7 @@ def _lower_apple_affine_norm(module: GraphIRModule) -> ScheduledKernelArtifact:
     targeted.module_attrs["tessera.arch"] = '"apple7"'
     graph_ir = targeted.to_mlir(target="apple_gpu", canonical=True)
     schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
+    mode, workgroup = _apple_norm_decision(schedule_ir)
     tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
     hashes = _HASH_RE.findall(tile_ir)
     if len(hashes) != 1:
@@ -454,8 +478,8 @@ def _lower_apple_affine_norm(module: GraphIRModule) -> ScheduledKernelArtifact:
         input_name=args[0], output_name=op.result.removeprefix("%"), input_shape=output_shape,
         output_shape=output_shape, dtype=dtype, storage="bf16" if dtype == "bf16" else "f16",
         accum="f32", axis=-1, keepdims=False, rows=rows, columns=columns, outer=1,
-        axis_extent=1, inner=1, workgroup_size=1, schedule_digest=hashes[0],
-        schedule="serial", epsilon=epsilon, input_names=tuple(args),
+        axis_extent=1, inner=1, workgroup_size=workgroup, schedule_digest=hashes[0],
+        schedule=mode, epsilon=epsilon, input_names=tuple(args),
     )
     artifact.validate()
     return artifact

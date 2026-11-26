@@ -1251,6 +1251,10 @@ def package_scheduled_kernel(
         )
     if artifact.family == "binary":
         return _package_scheduled_add(artifact, pipeline_name=pipeline_name)
+    if artifact.family == "norm" and len(artifact.input_names) > 1:
+        # Slice 10: the weighted norm verifies its own (x, gamma[, beta])
+        # projection; the unary projection would refuse its signature.
+        return _package_scheduled_norm(artifact, pipeline_name=pipeline_name)
     _verify_kernel_schedule_ancestry(artifact)
     if artifact.family == "reduce":
         return _package_scheduled_reduce(artifact, pipeline_name=pipeline_name)
@@ -1382,6 +1386,14 @@ APPLE_SYNTH_NORM_BF16_ABI = "tessera.apple.synth.norm.x_o_rows_columns.bf16.v1"
 APPLE_SYNTH_NORM_ABIS = {"f16": APPLE_SYNTH_NORM_F16_ABI, "bf16": APPLE_SYNTH_NORM_BF16_ABI}
 #: The source-carrying row ABI: buffers (x, O, rows, cols), one thread per row.
 APPLE_SYNTH_ROWS_SYMBOL = "tessera_apple_gpu_synth_rows_f16"
+#: APPLE-NTBI-2 slice 10: (affine form, storage) -> the weighted row-norm ABI.
+#: gamma at buffer 4 and, for layer_norm, beta at buffer 5, both [columns].
+APPLE_SYNTH_AFFINE_NORM_ABIS = {
+    (affine, storage): f"tessera.apple.synth.norm.x_{affine}_o_rows_columns.{storage}.v1"
+    for affine in ("gamma", "gamma_beta") for storage in ("f16", "bf16")
+}
+#: The source-carrying weighted row ABI: (x, gamma, beta | NULL, O, rows, cols).
+APPLE_SYNTH_AFFINE_ROWS_SYMBOL = "tessera_apple_gpu_synth_affine_rows_f16"
 
 
 def _f32_bits(value: float) -> int:
@@ -1398,15 +1410,29 @@ def _tile_norm_contract(tile_ir: str) -> dict:
     """
     import re
 
-    lines = re.findall(r"(?m)^\s*tile\.norm_kernel (%[\w.]+), (%[\w.]+), (%[\w.]+), "
-                       r"(%[\w.]+), (%[\w.]+) \{([^{}]*)\} : !llvm\.ptr, !llvm\.ptr, i64, i64, f32$",
+    # (x, [gamma, [beta,]] o, rows, cols, eps): slice 10 adds the affine
+    # pointers between the source and the destination.
+    lines = re.findall(r"(?m)^\s*tile\.norm_kernel ((?:%[\w.]+, ){2,4})(%[\w.]+), "
+                       r"(%[\w.]+), (%[\w.]+) \{([^{}]*)\} : ((?:!llvm\.ptr, ){2,4})i64, i64, f32$",
                        tile_ir)
     if len(lines) != 1:
         raise ValueError("Apple synthesized norm requires one Tile norm launch")
-    *_, rows_ssa, columns_ssa, eps_ssa, attrs_text = lines[0]
+    pointer_text, rows_ssa, columns_ssa, eps_ssa, attrs_text, pointer_types = lines[0]
+    pointers = pointer_text.count("%")
+    if pointer_types.count("!llvm.ptr") != pointers:
+        raise ValueError("Apple synthesized norm Tile launch has malformed pointer operands")
     attrs = dict(re.findall(r'\b(kind|storage|accum) = "([^"]+)"', attrs_text))
+    weighted = re.search(r"(?:^|, )affine = true(?:,|$)", attrs_text) is not None
+    bias = re.search(r"(?:^|, )bias = true(?:,|$)", attrs_text) is not None
+    if weighted and (bias or re.search(r"(?:^|, )bias = false(?:,|$)", attrs_text)) is None:
+        raise ValueError("Apple synthesized weighted norm Tile launch lacks its bias flag")
+    affine = ("gamma_beta" if bias else "gamma") if weighted else "none"
     if (set(attrs) != {"kind", "storage", "accum"}
-            or re.search(r"(?:^|, )affine = false(?:,|$)", attrs_text) is None
+            or pointers != {"none": 2, "gamma": 3, "gamma_beta": 4}[affine]
+            or (weighted and bias != (attrs.get("kind") == "layernorm"))
+            or (not weighted and (re.search(r"(?:^|, )affine = false(?:,|$)", attrs_text) is None
+                                  or "bias = " in attrs_text))
+            or (bias and attrs.get("kind") != "layernorm")
             or re.search(r"(?:^|, )axis = -1 : i64(?:,|$)", attrs_text) is None
             or re.search(r"(?:^|, )tessera\.workgroup_size = 1 : i64(?:,|$)", attrs_text) is None
             or "schedule = " in attrs_text or "output_storage" in attrs_text):
@@ -1423,15 +1449,69 @@ def _tile_norm_contract(tile_ir: str) -> dict:
         rows, columns = int(constant(rows_ssa, "i64")), int(constant(columns_ssa, "i64"))
     except (TypeError, ValueError) as exc:
         raise ValueError("Apple synthesized norm Tile launch constants are malformed") from exc
-    return {**attrs, "epsilon_bits": _f32_bits(epsilon), "rows": rows, "columns": columns}
+    return {**attrs, "epsilon_bits": _f32_bits(epsilon), "rows": rows, "columns": columns,
+            "affine": affine}
 
 
-def synthesized_norm_source(kind: str, storage: str, epsilon_bits: int) -> tuple[str, str]:
+def synthesized_norm_source(kind: str, storage: str, epsilon_bits: int,
+                            affine: str = "none") -> tuple[str, str]:
     """``(msl, entry)`` for one Tile norm contract, deterministically."""
     from .emit.apple_msl import norm_entry, synthesize_norm_msl
 
-    return (synthesize_norm_msl(kind, storage, epsilon_bits=epsilon_bits),
-            norm_entry(kind, storage))
+    return (synthesize_norm_msl(kind, storage, epsilon_bits=epsilon_bits, affine=affine),
+            norm_entry(kind, storage, affine))
+
+
+def _verify_apple_affine_norm_projection(artifact: ScheduledKernelArtifact) -> str:
+    """Replay the Schedule and read the weighted-norm contract from native IR.
+
+    APPLE-NTBI-2 slice 10. The parent function must be
+    ``(x, gamma[, beta]) -> o`` over one static f16/bf16 type with
+    ``[columns]`` affine vectors, and its ``schedule.norm`` decision the
+    apple7 serial norm whose ``affine``/``bias`` flags match the operands.
+    Returns the affine form (``gamma`` or ``gamma_beta``).
+    """
+    import re
+
+    parent = _verify_schedule_ancestry(artifact)
+    matrix = r"tensor<(\d+)x(\d+)x(f16|bf16)>"
+    vector = r"tensor<(\d+)x(f16|bf16)>"
+    signature = re.findall(
+        rf"func\.func @([\w]+)\(%[\w]+: {matrix}((?:, %[\w]+: {vector}){{1,2}})\) -> {matrix}",
+        parent)
+    if len(signature) != 1 or parent.count("func.func ") != 1:
+        raise ValueError("Apple weighted norm package requires one static (x, gamma[, beta]) -> o "
+                         "f16/bf16 function")
+    name, rows, columns, storage, params, *rest = signature[0]
+    out_rows, out_columns, out_storage = rest[-3:]
+    vectors = re.findall(vector, params)
+    shape = (int(rows), int(columns))
+    if (name != artifact.function_name or shape != artifact.input_shape
+            or shape != artifact.output_shape or (out_rows, out_columns, out_storage)
+            != (rows, columns, storage)
+            or any(v != (columns, storage) for v in vectors)):
+        raise ValueError("Apple weighted norm package shape or name disagrees with native IR")
+    affine = "gamma_beta" if len(vectors) == 2 else "gamma"
+    norms = re.findall(r" = schedule\.norm %\w+ \{([^{}]*)\}", parent)
+    if len(norms) != 1:
+        raise ValueError("Apple weighted norm package requires one native norm schedule")
+    attrs = dict(re.findall(r'\b(\w+) = "([^"]+)"', norms[0]))
+    expected = {"arch": "apple7", "kind": artifact.kind, "storage": storage, "accum": "f32"}
+    if (any(attrs.get(key) != value for key, value in expected.items())
+            # The printer elides the default serial schedule.
+            or attrs.get("schedule", "serial") != "serial"
+            or "workgroup_size = 1 : i64" not in norms[0]
+            or re.search(r"(?:^|, )affine = true(?:,|$)", norms[0]) is None
+            or re.search(rf"(?:^|, )bias = {'true' if affine == 'gamma_beta' else 'false'}(?:,|$)",
+                         norms[0]) is None
+            or affine != ("gamma_beta" if artifact.kind == "layernorm" else "gamma")
+            or (artifact.storage, artifact.dtype) != (storage, _SYNTH_DTYPES[storage])
+            or len(artifact.input_names) != 1 + len(vectors)
+            or artifact.input_names[0] != artifact.input_name
+            or len({*artifact.input_names, artifact.output_name}) != len(artifact.input_names) + 1
+            or not all(n.isidentifier() for n in (*artifact.input_names, artifact.output_name))):
+        raise ValueError("Apple weighted norm package contract disagrees with native IR")
+    return affine
 
 
 def _package_scheduled_norm(
@@ -1447,10 +1527,16 @@ def _package_scheduled_norm(
     f32 bits), its source digest recorded in the Target IR and re-verified at
     submission. A failed dispatch raises; there is no reference path.
     """
-    _verify_kernel_schedule_ancestry(artifact)
+    if len(artifact.input_names) > 1:
+        projected_affine = _verify_apple_affine_norm_projection(artifact)
+    else:
+        _verify_kernel_schedule_ancestry(artifact)
+        projected_affine = "none"
     contract = _tile_norm_contract(artifact.tile_ir)
     storage = contract["storage"]
+    affine = contract["affine"]
     if (storage not in APPLE_SYNTH_NORM_ABIS or contract["accum"] != "f32"
+            or affine != projected_affine
             or contract["kind"] != artifact.kind or artifact.storage != storage
             or artifact.dtype != _SYNTH_DTYPES[storage] or len(artifact.input_shape) != 2
             or artifact.input_shape != artifact.output_shape
@@ -1460,7 +1546,8 @@ def _package_scheduled_norm(
     rows, columns = artifact.input_shape
     if rows * columns > 2**31 - 1:
         raise ValueError("Apple GPU scheduled norm takes int32 extents")
-    source, entry = synthesized_norm_source(contract["kind"], storage, contract["epsilon_bits"])
+    source, entry = synthesized_norm_source(contract["kind"], storage, contract["epsilon_bits"],
+                                            affine)
     source_digest = hashlib.sha256(source.encode()).hexdigest()
     library = _runtime_library_path()
     if library is None:
@@ -1469,12 +1556,18 @@ def _package_scheduled_norm(
             "Apple GPU runtime dylib"
         )
     dtype = _SYNTH_DTYPES[storage]
-    symbol, abi = APPLE_SYNTH_ROWS_SYMBOL, APPLE_SYNTH_NORM_ABIS[storage]
+    if affine == "none":
+        symbol, abi = APPLE_SYNTH_ROWS_SYMBOL, APPLE_SYNTH_NORM_ABIS[storage]
+        affine_field = ""
+    else:
+        symbol = APPLE_SYNTH_AFFINE_ROWS_SYMBOL
+        abi = APPLE_SYNTH_AFFINE_NORM_ABIS[(affine, storage)]
+        affine_field = f'affine = "{affine}", '
     epsilon_hex = f"0x{contract['epsilon_bits']:08x}"
     target_ir = (
         f'tessera_apple.gpu.msl_kernel @{symbol} '
         f'{{abi = "{abi}", kind = "{contract["kind"]}", storage = "{storage}", '
-        f'accumulation = "f32", epsilon_bits = "{epsilon_hex}", entry = "{entry}", '
+        f'accumulation = "f32", {affine_field}epsilon_bits = "{epsilon_hex}", entry = "{entry}", '
         f'source_sha256 = "{source_digest}", schedule_hash = "{artifact.schedule_digest}", '
         f'status = "executable"}}\n// ---- synthesized MSL ----\n{source}'
     )
@@ -1489,17 +1582,19 @@ def _package_scheduled_norm(
         entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
     )
     x, out = artifact.input_name, artifact.output_name
+    params = artifact.input_names[1:]
+    buffers: tuple[BufferBinding, ...] = (BufferBinding(0, x, "input", dtype, 2, "row_major", 2),)
+    buffers += tuple(BufferBinding(1 + i, name, "input", dtype, 1, "row_major", 2)
+                     for i, name in enumerate(params))
+    buffers += (BufferBinding(1 + len(params), out, "output", dtype, 2, "row_major", 2),)
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
-        buffers=(
-            BufferBinding(0, x, "input", dtype, 2, "row_major", 2),
-            BufferBinding(1, out, "output", dtype, 2, "row_major", 2),
-        ),
+        buffers=buffers,
         shape_guards=tuple(
             ShapeGuard(name, axis, "eq", extent)
             for name in (x, out)
             for axis, extent in enumerate(artifact.input_shape)
-        ),
+        ) + tuple(ShapeGuard(name, 0, "eq", columns) for name in params),
         geometry=LaunchGeometry(policy="apple_msl_synth_rows"),
         ordering=OrderingSemantics(
             ordered_submission=True, residency="none", synchronization=("return",),
@@ -1514,6 +1609,7 @@ def _package_scheduled_norm(
             "entry": entry,
             "source_sha256": source_digest,
             "epsilon_bits": contract["epsilon_bits"],
+            "affine": affine,
             "accumulation": "f32",
             "shape": list(artifact.input_shape),
             "storage": dtype,

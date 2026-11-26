@@ -605,6 +605,8 @@ APPLE_ABI: dict[str, tuple[tuple, object]] = {
     "tessera_apple_gpu_synth_pointwise_f16": ((ctypes.c_char_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_int32), ctypes.c_int32, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
     # APPLE-NTBI-2 slice 9: (msl, entry, x, out, rows, cols), 16-bit elements.
     "tessera_apple_gpu_synth_rows_f16": ((ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
+    # APPLE-NTBI-2 slice 10: (source, entry, x, gamma, beta | NULL, out, rows, cols).
+    "tessera_apple_gpu_synth_affine_rows_f16": ((ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
     # APPLE-NTBI-2 slice 3: the native tensor program frame owner (one command buffer).
     "tessera_apple_gpu_tensor_frame_execute": ((ctypes.POINTER(ctypes.c_int64), ctypes.POINTER(ctypes.c_void_p), ctypes.c_int32, ctypes.POINTER(ctypes.c_int64), ctypes.POINTER(ctypes.c_char_p), ctypes.POINTER(ctypes.c_char_p), ctypes.c_int32, ctypes.POINTER(ctypes.c_int64)), ctypes.c_int32),
     "tessera_apple_gpu_dispatch_telemetry_set_enabled": ((ctypes.c_int32,), None),

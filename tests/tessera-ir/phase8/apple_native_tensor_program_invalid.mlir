@@ -125,13 +125,14 @@ module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
 
 // -----
 
-// APPLE-NTBI-2 slice 9: the synthesized row kernel is the unweighted norm.
-// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: an Apple norm member is the unweighted row norm
+// APPLE-NTBI-2 slice 10: a weighted norm is an Apple member (see
+// apple_native_tensor_program.mlir); a weighted f32 norm still has no kernel.
+// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: no apple7 scheduled kernel for this producer
 module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
                    tessera.native.apple_tensor_program_request} {
-  func.func @weighted_norm(%x: tensor<64x32xf16>, %g: tensor<32xf16>, %w: tensor<32x48xf16>) -> tensor<64x48xf32> {
-    %n = tessera.rmsnorm %x, %g : (tensor<64x32xf16>, tensor<32xf16>) -> tensor<64x32xf16>
-    %o = tessera.matmul %n, %w {output_dtype = "fp32"} : (tensor<64x32xf16>, tensor<32x48xf16>) -> tensor<64x48xf32>
+  func.func @weighted_f32_norm(%x: tensor<64x32xf32>, %g: tensor<32xf32>, %w: tensor<32x48xf32>) -> tensor<64x48xf32> {
+    %n = tessera.rmsnorm %x, %g : (tensor<64x32xf32>, tensor<32xf32>) -> tensor<64x32xf32>
+    %o = tessera.matmul %n, %w : (tensor<64x32xf32>, tensor<32x48xf32>) -> tensor<64x48xf32>
     return %o : tensor<64x48xf32>
   }
 }
@@ -145,6 +146,20 @@ module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
   func.func @f32_norm(%x: tensor<64x32xf32>, %w: tensor<32x48xf32>) -> tensor<64x48xf32> {
     %n = tessera.rmsnorm %x : (tensor<64x32xf32>) -> tensor<64x32xf32>
     %o = tessera.matmul %n, %w : (tensor<64x32xf32>, tensor<32x48xf32>) -> tensor<64x48xf32>
+    return %o : tensor<64x48xf32>
+  }
+}
+
+// -----
+
+// A two-operand layer_norm does not say whether its vector is gamma or beta
+// (the tracer drops keyword names), so it is not an Apple weighted member.
+// CHECK: APPLE_TENSOR_PROGRAM_{{UNSUPPORTED}}: an Apple weighted norm member is rmsnorm(x, gamma) or layer_norm(x, gamma, beta)
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
+                   tessera.native.apple_tensor_program_request} {
+  func.func @two_operand_layer_norm(%x: tensor<64x32xf16>, %v: tensor<32xf16>, %w: tensor<32x48xf16>) -> tensor<64x48xf32> {
+    %n = tessera.layer_norm %x, %v : (tensor<64x32xf16>, tensor<32xf16>) -> tensor<64x32xf16>
+    %o = tessera.matmul %n, %w {output_dtype = "fp32"} : (tensor<64x32xf16>, tensor<32x48xf16>) -> tensor<64x48xf32>
     return %o : tensor<64x48xf32>
   }
 }

@@ -199,6 +199,13 @@ def lower_scheduled_kernel(
         if schedule is not None or architecture is not None:
             raise ValueError("the apple7 add takes no schedule or architecture override")
         return _lower_apple_add(module)
+    if (target == "apple_gpu" and len(module.functions) == 1
+            and len(module.functions[0].body) == 1
+            and module.functions[0].body[0].op_name in {"tessera.rmsnorm", "tessera.layer_norm"}
+            and len(module.functions[0].body[0].operands) > 1):
+        if schedule is not None or architecture is not None:
+            raise ValueError("the apple7 weighted norm takes no schedule or architecture override")
+        return _lower_apple_affine_norm(module)
     if schedule is not None:
         module = copy.deepcopy(module)
         if (module.functions and module.functions[0].body
@@ -374,6 +381,81 @@ def _lower_apple_add(module: GraphIRModule) -> ScheduledKernelArtifact:
         axis=-1, keepdims=False, rows=rows, columns=columns, outer=1,
         axis_extent=1, inner=1, workgroup_size=1, schedule_digest=hashes[0],
         schedule="serial", input_names=tuple(args),
+    )
+    artifact.validate()
+    return artifact
+
+
+def _lower_apple_affine_norm(module: GraphIRModule) -> ScheduledKernelArtifact:
+    """Lower the isolated apple7 weighted row norm (APPLE-NTBI-2 slice 10).
+
+    ``rmsnorm(x, gamma)`` or ``layer_norm(x, gamma, beta)`` over the
+    function's arguments, in order, whose result is returned: ``x`` static
+    rank two, gamma/beta the ``[columns]`` vector, all one f16 or bf16
+    storage, no keyword beyond ``eps``/``axis = -1``. Every field is read
+    back from the native Schedule and Tile by the Apple packager.
+    """
+    function = module.functions[0]
+    op = function.body[0]
+    operands = [value.removeprefix("%") for value in op.operands]
+    args = [arg.name for arg in function.args]
+    # Only positionally decodable lists: rmsnorm(x, gamma), layer_norm(x,
+    # gamma, beta). A two-operand layer_norm may be (x, beta=b) -- the tracer
+    # drops keyword names -- so it is refused rather than read as gamma.
+    required = 3 if op.op_name == "tessera.layer_norm" else 2
+    if (len(args) != required or operands != args or len(function.result_types) != 1
+            or set(op.kwargs) - {"eps", "epsilon", "axis"} or not op.result
+            or len(function.return_values) != 1
+            or function.return_values[0].removeprefix("%") != op.result.removeprefix("%")):
+        raise ValueError("scheduled apple7 weighted norm requires rmsnorm(x, gamma) or "
+                         "layer_norm(x, gamma, beta) over its arguments, returned, with only "
+                         "eps/axis")
+    try:
+        shapes = [tuple(int(d) for d in arg.ir_type.shape) for arg in function.args]
+        output_shape = tuple(int(d) for d in function.result_types[0].shape)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("scheduled apple7 weighted norm requires static shapes") from exc
+    dtypes = {arg.ir_type.dtype for arg in function.args} | {function.result_types[0].dtype}
+    axis = op.kwargs.get("axis", -1)
+    if (dtypes not in ({"fp16"}, {"bf16"}) or len(output_shape) != 2 or shapes[0] != output_shape
+            or any(shape != (output_shape[1],) for shape in shapes[1:])
+            or any(d <= 0 for d in output_shape) or math.prod(output_shape) > 2**31 - 1
+            or type(axis) is not int or axis not in {-1, 1}):
+        raise ValueError("scheduled apple7 weighted norm requires a static rank-two f16 or bf16 "
+                         "input with [columns] gamma/beta in its storage")
+    raw = op.kwargs.get("eps", op.kwargs.get("epsilon", 1e-5))
+    if not isinstance(raw, (int, float)) or isinstance(raw, bool):
+        raise ValueError("normalization epsilon must be a number")
+    try:
+        epsilon = struct.unpack("f", struct.pack("f", float(raw)))[0]
+    except OverflowError as exc:
+        raise ValueError("normalization epsilon must fit f32") from exc
+    if not math.isfinite(epsilon) or epsilon <= 0.0:
+        raise ValueError("normalization epsilon must be positive finite f32")
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("scheduled apple7 weighted norm lowering requires production tessera-opt")
+    targeted = copy.deepcopy(module)
+    targeted.module_attrs["tessera.target"] = '"apple_gpu"'
+    targeted.module_attrs["tessera.arch"] = '"apple7"'
+    graph_ir = targeted.to_mlir(target="apple_gpu", canonical=True)
+    schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
+    tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
+    hashes = _HASH_RE.findall(tile_ir)
+    if len(hashes) != 1:
+        raise RuntimeError("scheduled apple7 weighted norm lowering did not preserve one "
+                           "schedule digest")
+    rows, columns = output_shape
+    dtype = "bf16" if dtypes == {"bf16"} else "fp16"
+    artifact = ScheduledKernelArtifact(
+        graph_ir=graph_ir, schedule_ir=schedule_ir, tile_ir=tile_ir,
+        target="apple_gpu", architecture="apple7", function_name=function.name,
+        family="norm", kind="layernorm" if op.op_name == "tessera.layer_norm" else "rmsnorm",
+        input_name=args[0], output_name=op.result.removeprefix("%"), input_shape=output_shape,
+        output_shape=output_shape, dtype=dtype, storage="bf16" if dtype == "bf16" else "f16",
+        accum="f32", axis=-1, keepdims=False, rows=rows, columns=columns, outer=1,
+        axis_extent=1, inner=1, workgroup_size=1, schedule_digest=hashes[0],
+        schedule="serial", epsilon=epsilon, input_names=tuple(args),
     )
     artifact.validate()
     return artifact

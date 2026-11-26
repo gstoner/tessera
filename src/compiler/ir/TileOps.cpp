@@ -2381,10 +2381,28 @@ LogicalResult NormKernelOp::verify() {
         !arch || arch.getValue() != "sm_120" || getOperation()->hasAttr("shape_policy"))
       return emitOpError("scaled norm output requires sm_120 fp8_e4m3|fp8_e5m2 with a per_tensor_f32 scale");
   }
-  unsigned pointers = scaled ? 3 : 2;
+  // APPLE-NTBI-2 slice 10: a weighted apple7 norm adds gamma (rmsnorm) or
+  // gamma and beta (layernorm) between the source and the destination:
+  // (x, gamma[, beta], o, rows, columns, epsilon). No other target weights.
+  auto affineAttr = getOperation()->getAttrOfType<BoolAttr>("affine");
+  auto biasAttr = getOperation()->getAttrOfType<BoolAttr>("bias");
+  bool weighted = affineAttr && affineAttr.getValue();
+  if (weighted || getOperation()->hasAttr("bias")) {
+    auto module = getOperation()->getParentOfType<ModuleOp>();
+    auto arch = module ? module->getAttrOfType<StringAttr>("tessera.arch") : StringAttr();
+    auto kindAttr = getOperation()->getAttrOfType<StringAttr>("kind");
+    if (!weighted || !biasAttr || scaled || !arch || arch.getValue() != "apple7" ||
+        getOperation()->hasAttr("shape_policy") ||
+        !kindAttr || biasAttr.getValue() != (kindAttr.getValue() == "layernorm"))
+      return emitOpError("a weighted norm requires apple7 with affine = true and a bias "
+                         "flag (true exactly for layernorm)");
+  }
+  unsigned pointers = (scaled ? 3 : 2) +
+                      (weighted ? (biasAttr.getValue() ? 2 : 1) : 0);
   if (getInputs().size() != pointers + 3)
     return emitOpError(scaled ? "expects source, scale, destination, rows, columns, and epsilon"
-                              : "expects source, destination, rows, columns, and epsilon");
+                       : weighted ? "expects source, gamma[, beta], destination, rows, columns, and epsilon"
+                                  : "expects source, destination, rows, columns, and epsilon");
   for (unsigned i = 0; i < pointers; ++i)
     if (!isa<LLVM::LLVMPointerType>(getInputs()[i].getType()))
       return emitOpError("requires pointer data operands followed by i64, i64, f32");
@@ -2404,7 +2422,7 @@ LogicalResult NormKernelOp::verify() {
        storage.getValue() != "f32") ||
       !accum || accum.getValue() != "f32")
     return emitOpError("requires f16, bf16, or f32 storage and f32 accumulation");
-  if (!axis || axis.getInt() != -1 || !affine || affine.getValue())
+  if (!axis || axis.getInt() != -1 || !affine)
     return emitOpError("requires axis=-1 and affine=false");
   if (getOperation()->hasAttr("schedule") &&
       !getOperation()->getAttrOfType<StringAttr>("schedule"))

@@ -343,7 +343,8 @@ def run_members_sequentially(program: AppleTensorProgram, inputs: Mapping[str, A
 #: Frame-owner stage kinds (``_frame_stage`` selects one per member from its
 #: package ABI): 1 softmax, 2 simdgroup GEMM, 3 tanh GELU, 4 synthesized
 #: elementwise (an activation, or the two-input add), 5 synthesized row
-#: kernel (the f16/bf16 norm, one thread per row).
+#: kernel (the f16/bf16 norm, one thread per row), 6 synthesized weighted row
+#: kernel (gamma, and beta in the bm slot or -1).
 _FRAME_ERRORS = {
     -1: "the runtime refused the frame contract",
     -2: "no Metal device",
@@ -358,8 +359,9 @@ def _frame_stage(stage: AppleTensorStage, record: dict, frame: dict):
     from .apple_native import (
         APPLE_GELU_F16_ABI, APPLE_SIMDGROUP_GEMM_VARIANTS,
         APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR, APPLE_SOFTMAX_F16_ABI,
-        APPLE_SYNTH_ACTIVATION_ABIS, APPLE_SYNTH_BINARY_ABIS, APPLE_SYNTH_NORM_ABIS,
-        synthesized_activation_source, synthesized_binary_source, synthesized_norm_source)
+        APPLE_SYNTH_ACTIVATION_ABIS, APPLE_SYNTH_AFFINE_NORM_ABIS, APPLE_SYNTH_BINARY_ABIS,
+        APPLE_SYNTH_NORM_ABIS, synthesized_activation_source, synthesized_binary_source,
+        synthesized_norm_source)
 
     descriptor = stage.package.descriptor
     buffers = frame["buffers"]
@@ -372,19 +374,34 @@ def _frame_stage(stage: AppleTensorStage, record: dict, frame: dict):
     if stage.carrier == "tile.norm_kernel":
         # The compiler-synthesized row norm (APPLE-NTBI-2 slice 9): the source
         # re-derived from the package's contract and digest-checked.
+        # Slice 10: the weighted norm adds gamma (and beta) as member inputs.
         provenance = descriptor.provenance
-        storages = {abi: storage for storage, abi in APPLE_SYNTH_NORM_ABIS.items()}
-        if descriptor.abi_id not in storages:
+        norm_forms = {abi: ("none", storage) for storage, abi in APPLE_SYNTH_NORM_ABIS.items()}
+        norm_forms.update({abi: key for key, abi in APPLE_SYNTH_AFFINE_NORM_ABIS.items()})
+        if descriptor.abi_id not in norm_forms:
             raise AppleTensorProgramError(
                 f"Apple member {stage.index} has no frame encoder for {descriptor.abi_id}")
+        affine, storage = norm_forms[descriptor.abi_id]
+        inputs = record["inputs"]
+        if (provenance.get("affine", "none") != affine
+                or len(inputs) != {"none": 1, "gamma": 2, "gamma_beta": 3}[affine]):
+            raise AppleTensorProgramError(
+                f"Apple member {stage.index} norm inputs disagree with its package")
         source, entry = synthesized_norm_source(
-            provenance["kind"], storages[descriptor.abi_id], provenance["epsilon_bits"])
+            provenance["kind"], storage, provenance["epsilon_bits"], affine)
         if (hashlib.sha256(source.encode()).hexdigest() != provenance["source_sha256"]
                 or entry != provenance["entry"]):
             raise AppleTensorProgramError(
                 f"Apple member {stage.index} synthesized kernel differs from its package")
-        rows, columns = buffers[record["inputs"][0]]["shape"]
-        return [5, record["inputs"][0], -1, record["output"], rows, 1, columns, 0, 0, 0], source, entry
+        rows, columns = buffers[inputs[0]]["shape"]
+        if affine == "none":
+            return [5, inputs[0], -1, record["output"], rows, 1, columns, 0, 0, 0], source, entry
+        if any(tuple(buffers[i]["shape"]) != (columns,) for i in inputs[1:]):
+            raise AppleTensorProgramError(
+                f"Apple member {stage.index} gamma/beta is not the [columns] vector")
+        beta = inputs[2] if affine == "gamma_beta" else -1
+        return ([6, inputs[0], inputs[1], record["output"], rows, 1, columns, beta, 0, 0],
+                source, entry)
     if stage.carrier == "tile.elementwise_kernel":
         # The compiler-synthesized add (APPLE-NTBI-2 slice 7): two inputs,
         # the source re-derived from the package's contract and digest-checked.

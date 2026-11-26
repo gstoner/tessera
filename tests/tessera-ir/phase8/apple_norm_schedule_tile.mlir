@@ -83,3 +83,84 @@ module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
 // SCHEDULE-NOT: schedule.norm
 // SCHEDULE: return
 
+// -----
+
+// APPLE-NTBI-2 slice 10: a weighted f16 rmsnorm passes gamma between the
+// source and the destination; the Schedule hashes the affine form.
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
+  func.func @apple_rmsnorm_gamma_f16(%x: tensor<5x11xf16>, %g: tensor<11xf16>) -> tensor<5x11xf16> {
+    %0 = tessera.rmsnorm %x, %g {eps = 1.0e-06 : f64} : (tensor<5x11xf16>, tensor<11xf16>) -> tensor<5x11xf16>
+    return %0 : tensor<5x11xf16>
+  }
+}
+
+// SCHEDULE-LABEL: func.func @apple_rmsnorm_gamma_f16
+// SCHEDULE: schedule.norm
+// SCHEDULE-SAME: affine = true
+// SCHEDULE-SAME: arch = "apple7"
+// SCHEDULE-SAME: bias = false
+// SCHEDULE-SAME: kind = "rmsnorm"
+
+// TILE-LABEL: func.func @apple_rmsnorm_gamma_f16
+// TILE-NOT: schedule.
+// TILE: %[[X:.*]] = llvm.inttoptr
+// TILE: %[[O:.*]] = llvm.inttoptr
+// TILE: %[[G:.*]] = llvm.inttoptr
+// TILE: tile.norm_kernel %[[X]], %[[G]], %[[O]], %{{.*}}, %{{.*}}, %{{.*}} {
+// TILE-SAME: affine = true
+// TILE-SAME: bias = false
+// TILE-SAME: kind = "rmsnorm"
+// TILE-SAME: !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, f32
+
+// -----
+
+// layer_norm with gamma and beta: both vectors, in operand order.
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
+  func.func @apple_layer_norm_gamma_beta_bf16(%x: tensor<5x11xbf16>, %g: tensor<11xbf16>, %b: tensor<11xbf16>) -> tensor<5x11xbf16> {
+    %0 = tessera.layer_norm %x, %g, %b : (tensor<5x11xbf16>, tensor<11xbf16>, tensor<11xbf16>) -> tensor<5x11xbf16>
+    return %0 : tensor<5x11xbf16>
+  }
+}
+
+// SCHEDULE-LABEL: func.func @apple_layer_norm_gamma_beta_bf16
+// SCHEDULE: schedule.norm
+// SCHEDULE-SAME: affine = true
+// SCHEDULE-SAME: bias = true
+// SCHEDULE-SAME: kind = "layernorm"
+
+// TILE-LABEL: func.func @apple_layer_norm_gamma_beta_bf16
+// TILE: %[[X:.*]] = llvm.inttoptr
+// TILE: %[[O:.*]] = llvm.inttoptr
+// TILE: %[[G:.*]] = llvm.inttoptr
+// TILE: %[[B:.*]] = llvm.inttoptr
+// TILE: tile.norm_kernel %[[X]], %[[G]], %[[B]], %[[O]], %{{.*}}, %{{.*}}, %{{.*}} {
+// TILE-SAME: affine = true
+// TILE-SAME: bias = true
+// TILE-SAME: !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, f32
+
+// -----
+
+// A weighted norm chain is not the isolated request: nothing is claimed.
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
+  func.func @apple_weighted_norm_chain(%x: tensor<5x11xf16>, %g: tensor<11xf16>) -> tensor<5x11xf16> {
+    %0 = tessera.rmsnorm %x, %g : (tensor<5x11xf16>, tensor<11xf16>) -> tensor<5x11xf16>
+    %1 = tessera.rmsnorm %0, %g : (tensor<5x11xf16>, tensor<11xf16>) -> tensor<5x11xf16>
+    return %1 : tensor<5x11xf16>
+  }
+}
+
+// SCHEDULE-LABEL: func.func @apple_weighted_norm_chain
+// SCHEDULE-NOT: schedule.norm
+
+// -----
+
+// A two-operand layer_norm may be layer_norm(x, beta=b): it is not claimed.
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
+  func.func @apple_two_operand_layer_norm(%x: tensor<5x11xf16>, %v: tensor<11xf16>) -> tensor<5x11xf16> {
+    %0 = tessera.layer_norm %x, %v : (tensor<5x11xf16>, tensor<11xf16>) -> tensor<5x11xf16>
+    return %0 : tensor<5x11xf16>
+  }
+}
+
+// SCHEDULE-LABEL: func.func @apple_two_operand_layer_norm
+// SCHEDULE-NOT: schedule.norm

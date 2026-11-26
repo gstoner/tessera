@@ -154,3 +154,31 @@ module @norm_requested attributes {tessera.target = "apple_gpu", tessera.arch = 
     return %o : tensor<64x48xf32>
   }
 }
+
+// -----
+
+// APPLE-NTBI-2 slice 10: a weighted bf16 layer_norm (gamma and beta, the
+// rank-one [columns] program inputs) is an Apple member whose Tile launch
+// carries both vectors between the source and the destination.
+// CHECK-LABEL: module @weighted_norm_requested
+// CHECK-SAME: tessera.native.tensor_program = 1
+// CHECK: %[[N:.*]] = memref.alloc() : memref<64x32xbf16>
+// CHECK: tile.program_invoke %arg0, %arg1, %arg2, %[[N]] {callee = @tensor_stage_0::@source, carrier = "tile.norm_kernel"
+// CHECK-SAME: input_count = 3 : i64
+// CHECK: tile.program_invoke %[[N]], %arg3, %{{.*}} {callee = @tensor_stage_1::@source, carrier = "tile.matmul_kernel"
+// CHECK: module @tensor_stage_0
+// CHECK: tile.norm_kernel %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}} {
+// CHECK-SAME: affine = true
+// CHECK-SAME: bias = true
+// CHECK-SAME: kind = "layernorm"
+// CHECK-SAME: storage = "bf16"
+// CHECK-SAME: !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, f32
+module @weighted_norm_requested attributes {tessera.target = "apple_gpu", tessera.arch = "apple7",
+                                            tessera.native.apple_tensor_program_request} {
+  func.func @weighted_norm_product(%x: tensor<64x32xbf16>, %g: tensor<32xbf16>, %b: tensor<32xbf16>,
+                                   %w: tensor<32x48xbf16>) -> tensor<64x48xf32> {
+    %n = tessera.layer_norm %x, %g, %b {eps = 1.0e-05 : f64} : (tensor<64x32xbf16>, tensor<32xbf16>, tensor<32xbf16>) -> tensor<64x32xbf16>
+    %o = tessera.matmul %n, %w {output_dtype = "fp32"} : (tensor<64x32xbf16>, tensor<32x48xbf16>) -> tensor<64x48xf32>
+    return %o : tensor<64x48xf32>
+  }
+}

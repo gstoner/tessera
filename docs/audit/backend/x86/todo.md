@@ -12755,3 +12755,5 @@ The plugin's x86 branch was refactored with the Apple consumer; the identity val
 ## `APPLE-NTBI-2-bf16-2026-11-25`: sibling outcome — not applicable — apple7-gated bf16 admission; the x86 bf16 matmul contract is unchanged.
 
 ## `APPLE-NTBI-2-norms-2026-11-25`: sibling outcome — not applicable — apple7-gated norm admission; the Zen 5 f32 unweighted norm contract is unchanged.
+
+## `APPLE-NTBI-2-affine-norms-2026-11-25`: sibling outcome — not applicable — apple7-gated weighted-norm admission; the Zen 5 f32 unweighted norm contract is unchanged (its Tile consumer requires f32 storage, which no weighted apple7 norm carries).

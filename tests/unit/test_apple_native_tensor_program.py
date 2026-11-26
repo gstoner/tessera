@@ -1671,3 +1671,35 @@ def test_public_jit_runs_the_simdgroup_and_serial_norm_schedules():
         roots = [arg.name for arg in compiled.graph.functions[0].args]
         sequential, _ = atp.run_members_sequentially(compiled, dict(zip(roots, (x, w))))
         assert output.tobytes() == sequential.tobytes()
+
+
+@pytest.mark.parametrize("record", ["apple7_norm_row_schedules.json",
+                                    "apple7_norm_row_schedules_bf16.json"])
+def test_the_row_schedule_cut_matches_the_committed_device_evidence(record):
+    """The Schedule's 16-column cut is a measured performance key (slice 11).
+
+    From 16 columns up the simdgroup schedule's median must beat serial at
+    every shape and it must win at least two thirds of the paired
+    device-clock samples (single pairs near the ~5 us launch floor can go
+    either way), and the next width below the cut must lose somewhere -- or
+    the cut is wrong or lower than the evidence allows.
+    """
+    import json
+    import pathlib
+
+    path = pathlib.Path(__file__).parents[2] / "benchmarks" / "baselines" / record
+    data = json.loads(path.read_text())
+    assert data["schema"] == "tessera.apple.norm_row_schedules.v1"
+    assert "GPUStartTime/GPUEndTime" in data["clock"] and data["rounds"] >= 15
+    rows = data["rows"]
+    above = [r for r in rows if r["columns"] >= 16]
+    below = [r for r in rows if r["columns"] < 16]
+    forms = {(r["kind"], r["affine"]) for r in rows}
+    assert forms == {("rmsnorm", "none"), ("layernorm", "none"),
+                     ("rmsnorm", "gamma"), ("layernorm", "gamma_beta")}
+    assert above and below and {r["columns"] for r in above} >= {16, 4096}
+    for r in above:
+        assert r["pairs"] >= 15 and r["speedup_median"] > 1.2, r
+        assert 3 * r["simdgroup_wins_pairs"] >= 2 * r["pairs"], r
+    # The next measured width down (8) loses on tall tensors.
+    assert any(r["columns"] == 8 and r["speedup_median"] < 1.0 for r in below)

@@ -2525,9 +2525,13 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     // (`simdgroup_32`, workgroup 32 = the threads one row owns); shorter rows
     // keep one thread per row. The cut is a performance key (Decision #21a)
     // set from paired, interleaved command-buffer GPU intervals on the M1 Max
-    // (benchmarks/baselines/apple7_norm_row_schedules.json): simdgroup_32 won
-    // every measured shape from 16 columns up, at 1..32768 rows, and lost
-    // tall short rows (32768 x 8) to the serial kernel.
+    // (benchmarks/baselines/apple7_norm_row_schedules{,_bf16}.json, checked by
+    // test_the_row_schedule_cut_matches_the_committed_device_evidence):
+    // from 16 columns up simdgroup_32's median beat serial at every measured
+    // shape (1..32768 rows; lowest 1.29x) and it won at least 11 of 15 pairs
+    // at each, the lost pairs all at shapes where it runs in about 7 us, near
+    // the launch floor; at 8 columns it lost tall tensors (32768 x 8,
+    // 0.50-0.73x).
     constexpr int64_t kAppleSimdgroupNormColumns = 16;
     bool appleSimdgroup = appleNorm && schedule.columns >= kAppleSimdgroupNormColumns;
     schedule.workgroupSize = rocm ? 256 : nvidia ? 128 : appleSimdgroup ? 32 : 1;

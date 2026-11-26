@@ -69,3 +69,23 @@ module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
     return
   }
 }
+
+// -----
+
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
+  func.func @tile_simdgroup_without_workgroup(%x: !llvm.ptr, %o: !llvm.ptr, %r: i64, %c: i64, %e: f32) {
+    // expected-error @+1 {{and a workgroup of 32}}
+    tile.norm_kernel %x, %o, %r, %c, %e {accum = "f32", affine = false, axis = -1 : i64, kind = "rmsnorm", schedule = "simdgroup_32", storage = "f16"} : !llvm.ptr, !llvm.ptr, i64, i64, f32
+    return
+  }
+}
+
+// -----
+
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
+  func.func @tile_serial_with_simdgroup_workgroup(%x: !llvm.ptr, %o: !llvm.ptr, %r: i64, %c: i64, %e: f32) {
+    // expected-error @+1 {{an apple7 norm with a workgroup of 32 requires schedule simdgroup_32}}
+    tile.norm_kernel %x, %o, %r, %c, %e {accum = "f32", affine = false, axis = -1 : i64, kind = "rmsnorm", storage = "f16", tessera.workgroup_size = 32 : i64} : !llvm.ptr, !llvm.ptr, i64, i64, f32
+    return
+  }
+}

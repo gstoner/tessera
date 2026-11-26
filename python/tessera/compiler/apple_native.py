@@ -1564,6 +1564,8 @@ def _package_scheduled_norm(
     if (storage not in APPLE_SYNTH_NORM_ABIS or contract["accum"] != "f32"
             or affine != projected_affine
             or (projected_schedule is not None and schedule != projected_schedule)
+            or artifact.schedule != schedule
+            or artifact.workgroup_size != (32 if schedule == "simdgroup_32" else 1)
             or contract["kind"] != artifact.kind or artifact.storage != storage
             or artifact.dtype != _SYNTH_DTYPES[storage] or len(artifact.input_shape) != 2
             or artifact.input_shape != artifact.output_shape

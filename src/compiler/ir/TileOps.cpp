@@ -2446,11 +2446,20 @@ LogicalResult NormKernelOp::verify() {
       auto workgroup = getOperation()->getAttrOfType<IntegerAttr>("tessera.workgroup_size");
       if (!arch || arch.getValue() != "apple7" || scaled ||
           getOperation()->hasAttr("shape_policy") || storage.getValue() == "f32" ||
-          (getOperation()->hasAttr("tessera.workgroup_size") &&
-           (!workgroup || workgroup.getInt() != 32)))
+          !workgroup || workgroup.getInt() != 32)
         return emitOpError("simdgroup_32 norm requires module tessera.arch=apple7 with f16 or "
                            "bf16 storage and a workgroup of 32");
     }
+  }
+  // On apple7 the workgroup is the threads one row owns: 32 exactly for the
+  // simdgroup_32 schedule (checked above) and never for the serial one.
+  if (auto module = getOperation()->getParentOfType<ModuleOp>()) {
+    auto arch = module->getAttrOfType<StringAttr>("tessera.arch");
+    auto schedule = getOperation()->getAttrOfType<StringAttr>("schedule");
+    auto workgroup = getOperation()->getAttrOfType<IntegerAttr>("tessera.workgroup_size");
+    if (arch && arch.getValue() == "apple7" && workgroup && workgroup.getInt() == 32 &&
+        (!schedule || schedule.getValue() != "simdgroup_32"))
+      return emitOpError("an apple7 norm with a workgroup of 32 requires schedule simdgroup_32");
   }
   return success();
 }

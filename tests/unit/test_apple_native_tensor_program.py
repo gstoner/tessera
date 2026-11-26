@@ -1703,3 +1703,19 @@ def test_the_row_schedule_cut_matches_the_committed_device_evidence(record):
         assert 3 * r["simdgroup_wins_pairs"] >= 2 * r["pairs"], r
     # The next measured width down (8) loses on tall tensors.
     assert any(r["columns"] == 8 and r["speedup_median"] < 1.0 for r in below)
+
+
+def test_a_weighted_norm_package_refuses_artifact_schedule_metadata_its_ir_does_not_carry():
+    from tessera.compiler.scheduled_kernel import lower_scheduled_kernel
+
+    x, g = _half(4, 64), _half(64)
+    module = to_graph_ir_module(
+        trace(lambda x, g: ts.ops.rmsnorm(x, g), x, g, arg_names=("x", "g")),
+        name="s", target="apple_gpu")
+    kernel = lower_scheduled_kernel(module, target="apple_gpu")
+    assert (kernel.schedule, kernel.workgroup_size) == ("simdgroup_32", 32)
+    apple_native.package_scheduled_kernel(kernel, pipeline_name=atp.PIPELINE)
+    for drifted in (dataclasses.replace(kernel, schedule="serial"),
+                    dataclasses.replace(kernel, workgroup_size=1)):
+        with pytest.raises(ValueError):
+            apple_native.package_scheduled_kernel(drifted, pipeline_name=atp.PIPELINE)

@@ -2533,7 +2533,11 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     // the launch floor; at 8 columns it lost tall tensors (32768 x 8,
     // 0.50-0.73x).
     constexpr int64_t kAppleSimdgroupNormColumns = 16;
-    bool appleSimdgroup = appleNorm && schedule.columns >= kAppleSimdgroupNormColumns;
+    // The simdgroup launch dispatches rows * 32 threads through the same int32
+    // runtime ABIs, so a tensor whose expanded thread count overflows int32
+    // keeps the serial launch it already fits (rows * columns <= INT32_MAX).
+    bool appleSimdgroup = appleNorm && schedule.columns >= kAppleSimdgroupNormColumns &&
+                          schedule.rows <= INT32_MAX / 32;
     schedule.workgroupSize = rocm ? 256 : nvidia ? 128 : appleSimdgroup ? 32 : 1;
     // The native Schedule owns this shape decision. Exact SM120 A/B evidence
     // covers the coalesced CTA row schedule; short feature rows retain serial.

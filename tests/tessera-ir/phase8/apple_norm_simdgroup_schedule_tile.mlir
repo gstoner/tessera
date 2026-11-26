@@ -70,3 +70,25 @@ module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
 // TILE-SAME: schedule = "simdgroup_32"
 // TILE-SAME: tessera.workgroup_size = 32 : i64
 
+
+// -----
+
+// A tall tensor whose rows * 32 overflows int32 keeps the serial launch it
+// fits (rows * columns <= INT32_MAX), rather than a simdgroup launch the
+// int32 runtime ABIs cannot dispatch.
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
+  func.func @apple_rmsnorm_tall_rows(%x: tensor<67108864x16xf16>) -> tensor<67108864x16xf16> {
+    %0 = tessera.rmsnorm %x : (tensor<67108864x16xf16>) -> tensor<67108864x16xf16>
+    return %0 : tensor<67108864x16xf16>
+  }
+}
+
+// SCHEDULE-LABEL: func.func @apple_rmsnorm_tall_rows
+// SCHEDULE: schedule.norm
+// SCHEDULE-NOT: simdgroup_32
+// SCHEDULE-SAME: workgroup_size = 1 : i64
+
+// TILE-LABEL: func.func @apple_rmsnorm_tall_rows
+// TILE: tile.norm_kernel
+// TILE-NOT: schedule =
+// TILE-SAME: tessera.workgroup_size = 1 : i64
